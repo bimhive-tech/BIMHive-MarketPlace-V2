@@ -1,13 +1,25 @@
 .hero {
-  background: linear-gradient(180deg, var(--surface-0) 0%, var(--gold-100) 100%);
+  position: relative;
+  /* Full-bleed brand image: gold monogram over the architectural wireframe, with
+     empty space on the left reserved for the headline (design/README). */
+  background-color: var(--gold-100);
+  background-image: linear-gradient(
+      100deg,
+      var(--surface-0) 0%,
+      rgba(255, 255, 255, 0.85) 34%,
+      rgba(255, 255, 255, 0) 62%
+    ),
+    url("/brand/hero-background.png");
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, right center;
+  background-size: cover, cover;
   overflow: hidden;
 }
 
 .inner {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   align-items: center;
-  gap: var(--space-6);
+  min-height: 460px;
   padding-block: var(--space-9);
 }
 
@@ -15,6 +27,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  max-width: 48%;
   animation: rise var(--dur-slow) var(--ease-out) both;
 }
 
@@ -32,27 +45,14 @@
 
 .sub {
   font-size: var(--fs-md);
-  color: var(--ink-600);
-  max-width: 40ch;
+  color: var(--ink-700);
+  max-width: 42ch;
 }
 
 .actions {
   display: flex;
   gap: var(--space-4);
   flex-wrap: wrap;
-}
-
-.art {
-  justify-self: end;
-  animation: fade var(--dur-slow) var(--ease-out) both;
-  animation-delay: 120ms;
-}
-
-.artImage {
-  width: 100%;
-  max-width: 760px;
-  height: auto;
-  object-fit: contain;
 }
 
 @keyframes rise {
@@ -66,30 +66,28 @@
   }
 }
 
-@keyframes fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
+/* Tablet/phone: image recedes to a soft backdrop; text gets a stronger scrim. */
 @media (max-width: 900px) {
-  .inner {
-    grid-template-columns: 1fr;
-    padding-block: var(--space-7);
+  .hero {
+    background-image: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.92) 0%,
+        rgba(255, 255, 255, 0.7) 55%,
+        rgba(247, 241, 233, 0.6) 100%
+      ),
+      url("/brand/hero-background.png");
+    background-position: center, center;
   }
-  .art {
-    justify-self: center;
-    order: -1;
-    max-width: 480px;
+  .inner {
+    min-height: 380px;
+  }
+  .copy {
+    max-width: 100%;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .copy,
-  .art {
+  .copy {
     animation: none;
   }
 }

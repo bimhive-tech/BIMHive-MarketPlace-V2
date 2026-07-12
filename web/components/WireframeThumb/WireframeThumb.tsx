@@ -1,7 +1,8 @@
 /**
- * Brand signature: a light architectural wireframe with a single gold hex accent
- * (style.md §9 "line art + one gold accent"). Used as the on-brand product visual
- * until real artwork is uploaded to R2. Pure SVG — no external assets.
+ * Brand signature visual: a light architectural wireframe with a single gold hex
+ * accent (style.md §9 "line art + one gold accent"). This is the intentional
+ * on-brand preview shown until a seller uploads real product artwork to R2 — not a
+ * greyed-out placeholder. Pure SVG, deterministic per product so scenes vary.
  */
 import styles from "./WireframeThumb.module.css";
 
@@ -11,7 +12,6 @@ interface WireframeThumbProps {
   className?: string;
 }
 
-/** Small deterministic hash so each product gets a stable, slightly different scene. */
 function hash(seed: string): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0xffff;
@@ -20,30 +20,35 @@ function hash(seed: string): number {
 
 export function WireframeThumb({ seed = "bimhive", label, className }: WireframeThumbProps) {
   const h = hash(seed);
-  const rot = (h % 8) - 4; // subtle -4..3deg tilt variation
-  const cols = 3 + (h % 3);
+  const variant = h % 3;
 
   return (
     <div className={`${styles.wrap} ${className ?? ""}`} role="img" aria-label={label || "Product preview"}>
-      <svg viewBox="0 0 400 300" className={styles.svg} style={{ ["--rot" as string]: `${rot}deg` }}>
-        {/* isometric floor grid */}
-        <g className={styles.lines}>
-          {Array.from({ length: cols }).map((_, i) => (
-            <line key={`v${i}`} x1={60 + i * 70} y1={70} x2={20 + i * 70} y2={250} />
+      <svg viewBox="0 0 400 300" className={styles.svg} preserveAspectRatio="xMidYMid slice">
+        {/* isometric ground grid */}
+        <g className={styles.grid}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <line key={`a${i}`} x1={-40 + i * 80} y1={300} x2={120 + i * 80} y2={40} />
           ))}
-          {Array.from({ length: 4 }).map((_, i) => (
-            <line key={`h${i}`} x1={30} y1={110 + i * 40} x2={370} y2={90 + i * 40} />
+          {Array.from({ length: 7 }).map((_, i) => (
+            <line key={`b${i}`} x1={440 + i * -80} y1={300} x2={280 + i * -80} y2={40} />
           ))}
-          {/* extruded volumes */}
-          <path d="M120 200 V120 L180 95 V175 Z" />
-          <path d="M180 175 V95 L240 120 V200 Z" />
-          <path d="M120 120 L180 95 L240 120 L180 145 Z" />
-          <path d="M250 210 V150 L295 132 V192 Z" />
         </g>
-        {/* single gold hex accent */}
-        <g className={styles.hex}>
-          <path d="M300 70 l26 15 v30 l-26 15 -26-15 v-30 z" />
-          <path d="M300 70 v60 M274 85 l26 15 26-15" className={styles.hexInner} />
+
+        {/* extruded building cluster (varies per product) */}
+        <g className={styles.build} transform={`translate(${20 + variant * 12} 0)`}>
+          <path d="M120 210 V120 L180 92 V182 Z" />
+          <path d="M180 182 V92 L244 122 V212 Z" />
+          <path d="M120 120 L180 92 L244 122 L184 150 Z" />
+          <path d="M244 212 V150 L292 130 V192 Z" />
+          <path d="M244 150 L292 130 L292 130" />
+          <path d="M96 224 V168 L120 158 V214 Z" />
+        </g>
+
+        {/* single gold hex accent (echoes the brand monogram) */}
+        <g className={styles.hex} transform="translate(296 78)">
+          <path d="M0 0 l30 17 v34 l-30 17 -30 -17 v-34 z" />
+          <path d="M0 0 v68 M-30 17 l30 17 30 -17" className={styles.hexInner} />
         </g>
       </svg>
     </div>

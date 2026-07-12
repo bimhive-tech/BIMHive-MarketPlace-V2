@@ -3,38 +3,43 @@
   height: 100%;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--surface-0) 0%, var(--gold-100) 120%);
+  background: radial-gradient(120% 120% at 70% 20%, var(--surface-0) 0%, var(--gold-100) 100%);
   overflow: hidden;
 }
 
 .svg {
   width: 100%;
   height: 100%;
-  transform: rotate(var(--rot, 0deg)) scale(1.05);
   transition: transform var(--dur-slow) var(--ease-out);
 }
 
-.lines line,
-.lines path {
+.grid line {
   fill: none;
   stroke: var(--ink-500);
-  stroke-width: 0.8;
-  opacity: 0.4;
+  stroke-width: 0.6;
+  opacity: 0.22;
+}
+
+.build path {
+  fill: none;
+  stroke: var(--ink-600);
+  stroke-width: 1.2;
+  opacity: 0.65;
 }
 
 .hex path {
   fill: none;
   stroke: var(--gold-500);
-  stroke-width: 2;
+  stroke-width: 2.4;
 }
 
 .hexInner {
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
-/* gentle parallax lift on card hover (see ProductCard) */
+/* subtle parallax lift when used inside a hoverable card */
 :global(.cardHoverTarget):hover .svg {
-  transform: rotate(var(--rot, 0deg)) scale(1.12);
+  transform: scale(1.06);
 }
 
 @media (prefers-reduced-motion: reduce) {
