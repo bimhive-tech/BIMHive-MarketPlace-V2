@@ -62,10 +62,30 @@ groups: Django core, `DATABASE_URL`, Cloudflare R2, licensing (`LICENSE_PEPPER`)
 
 ```
 /web      Next.js frontend (routes, components, features, styles/tokens, lib/api)
-/api      Django backend (catalog, licensing, orders, accounts, reviews, support, content)
+/api      Django backend (catalog, licensing, accounts, reviews)
 /infra    docker-compose (Postgres + MinIO), deploy config
 design/   brand assets + UI mockups (design source of truth)
 ```
+
+## Routes (built so far)
+
+**Storefront**: `/` (home), `/catalog` (browse + category filter), `/products/<slug>` (detail).
+**Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
+**Account** (auth-gated): `/account`, `/account/licenses`, `/account/orders`, `/account/downloads`.
+**Admin portal** (staff-gated): `/admin-portal` (dashboard), `/admin-portal/products` (list),
+`/admin-portal/products/new` (create). Separate from Django's `/admin`.
+
+## API endpoints
+
+- Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
+- Auth: `GET /api/auth/csrf`, `GET /api/auth/me`, `POST /api/auth/{register,login,logout}`
+- Admin (staff): `GET /api/admin/{stats,options}`, `GET|POST /api/admin/products`
+- **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
+
+## Admin / test access
+
+A staff user is seeded for local admin access: `admin@bimhive.ai` / `BimHiveAdmin!2026`
+(create/rotate with `python manage.py shell`). Sign in, then open `/admin-portal`.
 
 ---
 

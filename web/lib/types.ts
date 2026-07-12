@@ -1,5 +1,22 @@
 /** Shapes returned by the Django storefront API (see api/catalog/serializers.py). */
 
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  is_staff: boolean;
+  profile: {
+    company: string;
+    job_title: string;
+    bio: string;
+    avatar_url: string;
+    account_type: string;
+  } | null;
+}
+
 export interface Category {
   id: number;
   name: string;

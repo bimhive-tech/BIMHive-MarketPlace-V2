@@ -127,6 +127,11 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticatedOrReadOnly",
     ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        # Blunts credential stuffing / signup abuse on the auth endpoints.
+        "auth": "10/min",
+    },
 }
 
 # CORS — only needed in dev when Next.js (:3000) calls Django (:8000) directly.

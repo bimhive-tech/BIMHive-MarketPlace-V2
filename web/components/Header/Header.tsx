@@ -1,9 +1,9 @@
 import Link from "next/link";
 
-import { Button } from "@/components/Button/Button";
 import { Icon } from "@/components/Icon/Icon";
 import { Logo } from "@/components/Logo/Logo";
 import { NAV_LINKS } from "@/config/site";
+import { AuthNav } from "@/features/auth/AuthNav/AuthNav";
 
 import styles from "./Header.module.css";
 
@@ -36,12 +36,7 @@ export function Header() {
           <Link href="/cart" className={styles.cart} aria-label="Cart">
             <Icon name="cart" size={22} />
           </Link>
-          <Link href="/login" className={styles.login}>
-            Log in
-          </Link>
-          <Button href="/signup" size="md">
-            Sign up
-          </Button>
+          <AuthNav />
         </div>
       </div>
     </header>

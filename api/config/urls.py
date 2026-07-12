@@ -16,6 +16,10 @@ urlpatterns = [
     # ── License activation contract (byte-compatible; DO NOT add trailing slash) ──
     path("api/license/products", license_products_api, name="license-products-api"),
     path("api/license/activate", license_activate_api, name="license-activate-api"),
+    # ── Auth API (session-based) ──
+    path("api/auth/", include("accounts.urls")),
+    # ── Admin portal API (staff-only) ──
+    path("api/admin/", include("catalog.admin_urls")),
     # ── Storefront/catalog API ──
     path("api/", include("catalog.urls")),
 ]

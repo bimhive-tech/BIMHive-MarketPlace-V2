@@ -1,25 +1,29 @@
 .hero {
   position: relative;
-  /* Full-bleed brand image: gold monogram over the architectural wireframe, with
-     empty space on the left reserved for the headline (design/README). */
-  background-color: var(--gold-100);
-  background-image: linear-gradient(
-      100deg,
-      var(--surface-0) 0%,
-      rgba(255, 255, 255, 0.85) 34%,
-      rgba(255, 255, 255, 0) 62%
-    ),
-    url("/brand/hero-background.png");
-  background-repeat: no-repeat, no-repeat;
-  background-position: center, right center;
-  background-size: cover, cover;
+  /* White blends seamlessly with the image's light left edge (no visible seam). */
+  background: var(--surface-0);
   overflow: hidden;
 }
 
+/* The image fills the section height and is shown in full (contain), pinned right,
+   so the monogram + wireframe sit on the right and the headline sits on the left. */
+.bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.bgImage {
+  object-fit: contain;
+  object-position: right center;
+}
+
 .inner {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  min-height: 460px;
+  min-height: 520px;
   padding-block: var(--space-9);
 }
 
@@ -27,7 +31,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: 48%;
+  max-width: 46%;
   animation: rise var(--dur-slow) var(--ease-out) both;
 }
 
@@ -66,20 +70,19 @@
   }
 }
 
-/* Tablet/phone: image recedes to a soft backdrop; text gets a stronger scrim. */
+/* Tablet/phone: image becomes a top band, text sits below it (never overlapped). */
 @media (max-width: 900px) {
-  .hero {
-    background-image: linear-gradient(
-        180deg,
-        rgba(255, 255, 255, 0.92) 0%,
-        rgba(255, 255, 255, 0.7) 55%,
-        rgba(247, 241, 233, 0.6) 100%
-      ),
-      url("/brand/hero-background.png");
-    background-position: center, center;
+  .bg {
+    height: 260px;
+    inset: 0 0 auto 0;
+  }
+  .bgImage {
+    object-position: center;
   }
   .inner {
-    min-height: 380px;
+    min-height: 0;
+    padding-top: calc(260px + var(--space-6));
+    align-items: flex-start;
   }
   .copy {
     max-width: 100%;

@@ -2,7 +2,7 @@
  * Server-side API client. Runs in React Server Components, so it talks to Django
  * directly via API_INTERNAL_URL (not the browser proxy). See ARCHITECTURE §3.
  */
-import type { HomeData, ProductCard, ProductDetail } from "@/lib/types";
+import type { Category, HomeData, ProductCard, ProductDetail } from "@/lib/types";
 
 const API_BASE = process.env.API_INTERNAL_URL || "http://127.0.0.1:8000";
 
@@ -22,8 +22,15 @@ export function getHome() {
 }
 
 export function getProducts(params?: { category?: string; type?: string }) {
-  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  const clean = Object.fromEntries(
+    Object.entries(params ?? {}).filter(([, v]) => v),
+  ) as Record<string, string>;
+  const qs = new URLSearchParams(clean).toString();
   return getJSON<ProductCard[]>(`/api/products/${qs ? `?${qs}` : ""}`);
+}
+
+export function getCategories() {
+  return getJSON<Category[]>("/api/categories/");
 }
 
 export async function getProduct(slug: string): Promise<ProductDetail | null> {

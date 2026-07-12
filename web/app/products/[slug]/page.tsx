@@ -34,9 +34,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 const COMPAT_ICON: Record<string, IconName> = {
   Revit: "revit",
+  Dynamo: "workflow",
   Platform: "windows",
   Language: "globe",
 };
+
+/** Compact pill label: "Windows"/"English" drop the label; others read "Label value". */
+function compatLabel(label: string, value: string): string {
+  if (!value) return label;
+  if (["Platform", "Language", "OS"].includes(label)) return value;
+  return `${label} ${value}`;
+}
 
 function jsonLd(product: ProductDetail) {
   return {
@@ -106,8 +114,8 @@ export default async function ProductPage({ params }: PageProps) {
             <div className={styles.chips}>
               {product.compatibility.slice(0, 3).map((row) => (
                 <span key={row.id} className={styles.chip}>
-                  <Icon name={COMPAT_ICON[row.label] ?? "check"} size={16} />
-                  {row.value ? `${row.label} ${row.value}` : row.label}
+                  <Icon name={COMPAT_ICON[row.label] ?? "check"} size={14} />
+                  {compatLabel(row.label, row.value)}
                 </span>
               ))}
             </div>
