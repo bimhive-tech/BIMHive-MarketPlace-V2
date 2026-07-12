@@ -1,0 +1,24 @@
+"""
+Root URL configuration.
+
+License endpoints keep their exact v1 paths (no trailing slash) — installed plugins
+depend on them byte-for-byte. See licensing/api_views.py and ARCHITECTURE §5.
+"""
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
+
+from licensing.api_views import license_activate_api, license_products_api
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    # ── License activation contract (byte-compatible; DO NOT add trailing slash) ──
+    path("api/license/products", license_products_api, name="license-products-api"),
+    path("api/license/activate", license_activate_api, name="license-activate-api"),
+    # ── Storefront/catalog API ──
+    path("api/", include("catalog.urls")),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

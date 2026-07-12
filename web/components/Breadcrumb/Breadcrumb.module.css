@@ -1,0 +1,31 @@
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.link {
+  color: var(--color-muted);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.link:hover {
+  color: var(--gold-700);
+}
+
+.current {
+  color: var(--gold-700);
+  font-weight: var(--fw-semibold);
+}
+
+.sep {
+  color: var(--line-300);
+}

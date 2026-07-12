@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────
+# Secrets — NEVER commit. Only .env.example (placeholders) is tracked.
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python / Django (/api) ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+*.sqlite3
+/api/media/
+/api/staticfiles/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Node / Next.js (/web) ──
+node_modules/
+.next/
+out/
+build/
+dist/
+next-env.d.ts
+*.tsbuildinfo
+.turbo/
+
+# ── Editors / OS ──
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Local infra volumes ──
+/infra/data/

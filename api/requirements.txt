@@ -1,0 +1,27 @@
+# ── Core ──
+Django==5.1.5
+djangorestframework==3.15.2
+django-environ==0.11.2
+psycopg[binary]==3.2.3
+dj-database-url==2.3.0
+
+# ── Storage (Cloudflare R2 / MinIO, S3-compatible) ──
+django-storages==1.14.4
+boto3==1.35.71
+
+# ── CORS (dev: Next.js on :3000 → Django on :8000) ──
+django-cors-headers==4.6.0
+
+# ── Images ──
+Pillow==11.0.0
+
+# ── Server (prod) ──
+gunicorn==23.0.0
+whitenoise==6.8.2
+
+# ── Payments ──
+stripe==11.3.0
+
+# ── Dev / test ──
+pytest==8.3.4
+pytest-django==4.9.0

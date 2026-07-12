@@ -1,0 +1,66 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.heading {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-700);
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+
+.item:hover {
+  background: var(--surface-50);
+  color: var(--gold-700);
+}
+
+.active {
+  background: var(--gold-100);
+  color: var(--gold-700);
+  font-weight: var(--fw-semibold);
+}
+
+.sellCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-0);
+}
+
+.sellTitle {
+  font-size: var(--fs-md);
+  color: var(--gold-700);
+}
+
+.sellText {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  margin-bottom: var(--space-2);
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    display: none;
+  }
+}

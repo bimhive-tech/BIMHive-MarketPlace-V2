@@ -1,0 +1,37 @@
+.wrap {
+  margin-top: var(--space-6);
+}
+
+.heading {
+  font-size: var(--fs-lg);
+  margin-bottom: var(--space-5);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.item {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.icon {
+  color: var(--gold-600);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--color-heading);
+  margin-bottom: var(--space-1);
+}
+
+.desc {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  line-height: var(--lh-normal);
+}

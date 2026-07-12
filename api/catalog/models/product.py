@@ -1,0 +1,221 @@
+"""
+The one sellable entity: Product.
+
+A Product may be a Revit plugin, Dynamo script, template, BIM library, or service —
+differentiated by `type`, NOT by a separate model. Its licensing/activation records
+(per Revit-year build, keyed by product code) live in the `licensing` app and link
+back here; that keeps the shipped-plugin activation contract intact without a parallel
+"Plugin" model. See ARCHITECTURE §4–5.
+"""
+from decimal import Decimal
+
+from django.db import models
+from django.utils import timezone
+from django.utils.text import slugify
+
+from catalog.models.taxonomy import Category, Partner, Tag, TimeStamped
+
+
+class ProductType(models.TextChoices):
+    PLUGIN = "plugin", "Revit Plugin"
+    SCRIPT = "script", "Dynamo Script"
+    TEMPLATE = "template", "Template"
+    LIBRARY = "library", "BIM Library"
+    SERVICE = "service", "Service"
+    OTHER = "other", "Other"
+
+
+class ProductStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    PENDING = "pending", "Pending Review"
+    PUBLISHED = "published", "Published"
+    REJECTED = "rejected", "Rejected"
+
+
+class ProductVisibility(models.TextChoices):
+    PUBLIC = "public", "Public"
+    HIDDEN = "hidden", "Hidden"
+
+
+class PublishedProductQuerySet(models.QuerySet):
+    def published(self):
+        return self.filter(
+            status=ProductStatus.PUBLISHED, visibility=ProductVisibility.PUBLIC
+        )
+
+    def featured(self):
+        return self.published().filter(is_featured=True)
+
+
+class Product(TimeStamped):
+    # ── Identity ──
+    name = models.CharField(max_length=180)
+    slug = models.SlugField(max_length=200, unique=True, blank=True)
+    type = models.CharField(max_length=20, choices=ProductType.choices, default=ProductType.PLUGIN)
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="products")
+    partner = models.ForeignKey(
+        Partner, on_delete=models.PROTECT, related_name="products", null=True, blank=True
+    )
+    tags = models.ManyToManyField(Tag, related_name="products", blank=True)
+
+    # ── Copy ──
+    short_description = models.CharField(max_length=220)
+    description = models.TextField()
+
+    # ── Pricing ──
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    team_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    team_seats = models.PositiveIntegerField(default=5)
+    currency = models.CharField(max_length=8, default="USD")
+
+    # ── Licensing config (activation records live in licensing.LicensedProduct) ──
+    default_trial_days = models.PositiveIntegerField(default=30)
+
+    # ── Media / meta ──
+    cover_image_url = models.URLField(blank=True)
+    version = models.CharField(max_length=30, default="1.0.0")
+    released_at = models.DateField(null=True, blank=True)
+
+    # ── Ratings (denormalised aggregate, kept fresh by the reviews app) ──
+    rating_average = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.00"))
+    rating_count = models.PositiveIntegerField(default=0)
+    # Count of ratings per star level, keyed "1".."5". Aggregate source of truth
+    # for the ratings-breakdown bars, independent of how many reviews are shown.
+    rating_distribution = models.JSONField(default=dict, blank=True)
+    download_count = models.PositiveIntegerField(default=0)
+
+    # ── Publishing ──
+    status = models.CharField(max_length=20, choices=ProductStatus.choices, default=ProductStatus.DRAFT)
+    visibility = models.CharField(
+        max_length=20, choices=ProductVisibility.choices, default=ProductVisibility.PUBLIC
+    )
+    is_featured = models.BooleanField(default=False)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    # ── SEO ──
+    seo_title = models.CharField(max_length=180, blank=True)
+    seo_description = models.CharField(max_length=300, blank=True)
+
+    objects = PublishedProductQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-is_featured", "-published_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["status", "visibility"]),
+            models.Index(fields=["category"]),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        if self.status == ProductStatus.PUBLISHED and self.published_at is None:
+            self.published_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_free(self):
+        return self.price <= 0
+
+    @property
+    def price_label(self):
+        return "Free" if self.is_free else f"${self.price:.2f}"
+
+
+class ProductMedia(TimeStamped):
+    """Gallery items (screenshots / video) for the product detail media gallery."""
+
+    class MediaType(models.TextChoices):
+        IMAGE = "image", "Image"
+        VIDEO = "video", "Video"
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="media")
+    media_type = models.CharField(max_length=12, choices=MediaType.choices, default=MediaType.IMAGE)
+    url = models.URLField()
+    caption = models.CharField(max_length=180, blank=True)
+    is_cover = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.product.name} media {self.sort_order}"
+
+
+class KeyFeature(TimeStamped):
+    """Repeatable "Key Features" pairs shown on the product page (title + blurb)."""
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="features")
+    title = models.CharField(max_length=140)
+    description = models.CharField(max_length=300, blank=True)
+    icon = models.CharField(max_length=40, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.product.name}: {self.title}"
+
+
+class ChangelogEntry(TimeStamped):
+    """"What's New" release history."""
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="changelog")
+    version = models.CharField(max_length=30)
+    released_at = models.DateField(null=True, blank=True)
+    notes = models.TextField(help_text="One bullet per line.")
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "-released_at", "-id"]
+        verbose_name_plural = "changelog entries"
+
+    def __str__(self):
+        return f"{self.product.name} v{self.version}"
+
+
+class CompatibilityEntry(TimeStamped):
+    """A supported environment row for the Compatibility tab (e.g. Revit 2024, Windows)."""
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="compatibility")
+    label = models.CharField(max_length=80, help_text="e.g. 'Revit 2024', 'Windows 10+'")
+    value = models.CharField(max_length=120, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name_plural = "compatibility entries"
+
+    def __str__(self):
+        return f"{self.product.name}: {self.label}"
+
+
+class ProductFile(TimeStamped):
+    """
+    A downloadable build — multi-variant, keyed by Revit version (2024, 2025, ...).
+    The download endpoint serves the right file per requested version. Stored in R2;
+    `storage_key` is the object key, served via short-lived signed URLs.
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="files")
+    revit_version = models.CharField(max_length=16, help_text="e.g. '2024'. Blank = version-agnostic.")
+    version_label = models.CharField(max_length=30, help_text="Build version, e.g. '2.1.0'.")
+    storage_key = models.CharField(max_length=400, help_text="R2 object key.")
+    file_size_bytes = models.PositiveBigIntegerField(default=0)
+    is_current = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-is_current", "revit_version", "-version_label"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "revit_version", "version_label"],
+                name="unique_product_file_variant",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.product.name} [{self.revit_version or 'any'}] {self.version_label}"

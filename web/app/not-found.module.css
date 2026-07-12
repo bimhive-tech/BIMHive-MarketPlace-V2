@@ -1,0 +1,23 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding-block: var(--space-10);
+}
+
+.code {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-bold);
+  color: var(--gold-500);
+}
+
+.title {
+  font-size: var(--fs-xl);
+}
+
+.text {
+  color: var(--ink-600);
+  margin-bottom: var(--space-2);
+}

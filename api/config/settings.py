@@ -1,0 +1,190 @@
+"""
+Django settings for BIM Hive Marketplace V2.
+
+Environment-driven (see repo-root .env / .env.example). Security defaults are safe:
+DEBUG is False unless explicitly enabled, and HSTS + secure cookies are enforced in code
+when DEBUG is off so a stray env var can't weaken them in production.
+"""
+from pathlib import Path
+
+import dj_database_url
+import environ
+
+# BASE_DIR = /api ; REPO_ROOT = repo root (holds .env, /web, /infra)
+BASE_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BASE_DIR.parent
+
+env = environ.Env()
+environ.Env.read_env(REPO_ROOT / ".env")
+
+# ─────────────────────────────────────────────────────────────
+# Core
+# ─────────────────────────────────────────────────────────────
+SECRET_KEY = env("DJANGO_SECRET_KEY", default="insecure-dev-key")
+DEBUG = env.bool("DJANGO_DEBUG", default=False)
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+CSRF_TRUSTED_ORIGINS = env.list(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+)
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    # Third-party
+    "rest_framework",
+    "corsheaders",
+    # Local
+    "accounts",
+    "catalog",
+    "reviews",
+    "licensing",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+# ─────────────────────────────────────────────────────────────
+# Database
+# ─────────────────────────────────────────────────────────────
+DATABASES = {
+    "default": dj_database_url.parse(
+        env("DATABASE_URL", default="postgres://bimhive:bimhive@localhost:5432/bimhive"),
+        conn_max_age=600,
+    )
+}
+
+AUTH_USER_MODEL = "accounts.User"
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# ─────────────────────────────────────────────────────────────
+# i18n / tz
+# ─────────────────────────────────────────────────────────────
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = True
+USE_TZ = True
+
+# ─────────────────────────────────────────────────────────────
+# Static / media
+# ─────────────────────────────────────────────────────────────
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ─────────────────────────────────────────────────────────────
+# DRF — same-origin session auth (see ARCHITECTURE §7)
+# ─────────────────────────────────────────────────────────────
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+    ],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+}
+
+# CORS — only needed in dev when Next.js (:3000) calls Django (:8000) directly.
+CORS_ALLOWED_ORIGINS = env.list(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+)
+CORS_ALLOW_CREDENTIALS = True
+
+# ─────────────────────────────────────────────────────────────
+# Licensing (see licensing/ and ARCHITECTURE §5)
+# ─────────────────────────────────────────────────────────────
+LICENSE_PEPPER = env("LICENSE_PEPPER", default="")
+LEGACY_LICENSE_DATABASE_URL = env("LEGACY_LICENSE_DATABASE_URL", default="")
+
+# ─────────────────────────────────────────────────────────────
+# Object storage (Cloudflare R2 / MinIO). Wired in a later task.
+# ─────────────────────────────────────────────────────────────
+R2_BUCKET_NAME = env("R2_BUCKET_NAME", default="")
+R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
+R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
+R2_ENDPOINT_URL = env("R2_ENDPOINT_URL", default="")
+R2_PUBLIC_BASE_URL = env("R2_PUBLIC_BASE_URL", default="")
+R2_REGION = env("R2_REGION", default="auto")
+R2_SIGNED_URL_TTL = env.int("R2_SIGNED_URL_TTL", default=300)
+
+# ─────────────────────────────────────────────────────────────
+# Payments
+# ─────────────────────────────────────────────────────────────
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
+STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+
+# ─────────────────────────────────────────────────────────────
+# Cache — used by the license rate limiter (fail-open). Local-memory by default.
+# ─────────────────────────────────────────────────────────────
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "bimhive-cache",
+    }
+}
+
+# ─────────────────────────────────────────────────────────────
+# Transport security — enforced in code when not in DEBUG so it can't be
+# weakened by env. Local dev stays http-friendly.
+# ─────────────────────────────────────────────────────────────
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

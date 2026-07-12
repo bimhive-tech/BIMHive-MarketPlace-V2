@@ -1,0 +1,117 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: var(--header-height);
+}
+
+.search {
+  position: relative;
+  flex: 1;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  right: var(--space-4);
+  color: var(--color-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: var(--space-3) var(--space-9) var(--space-3) var(--space-4);
+  background: var(--surface-50);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+.searchInput::placeholder {
+  color: var(--color-muted);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--gold-400);
+  background: var(--surface-0);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink-800);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.navLink:hover {
+  color: var(--gold-700);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.cart {
+  color: var(--ink-800);
+  display: inline-flex;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.cart:hover {
+  color: var(--gold-700);
+}
+
+.login {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink-800);
+}
+.login:hover {
+  color: var(--gold-700);
+}
+
+/* Tablet: drop the mega-nav + search to keep the bar clean. */
+@media (max-width: 1024px) {
+  .nav {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .search {
+    display: none;
+  }
+  .inner {
+    gap: var(--space-3);
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .login {
+    display: none;
+  }
+}

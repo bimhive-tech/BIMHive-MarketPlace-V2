@@ -1,0 +1,61 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-weight: var(--fw-semibold);
+  border-radius: var(--radius-md);
+  border: 1.5px solid transparent;
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+  white-space: nowrap;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.md {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--fs-sm);
+}
+
+.lg {
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--fs-base);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+/* Primary: solid gold fill, white text (gold-600 passes AA for bold labels). */
+.primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.primary:hover {
+  background: var(--color-primary-hover);
+}
+
+/* Secondary: white fill, gold border + gold text. */
+.secondary {
+  background: var(--surface-0);
+  border-color: var(--color-primary);
+  color: var(--color-link);
+}
+.secondary:hover {
+  background: var(--gold-100);
+}
+
+/* Tertiary/text: gold text only. */
+.text {
+  background: none;
+  color: var(--color-link);
+  padding-inline: var(--space-2);
+}
+.text:hover {
+  color: var(--gold-800);
+}
