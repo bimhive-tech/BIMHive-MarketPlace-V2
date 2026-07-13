@@ -2,11 +2,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* Fills the grid row's stretched height (see page.module.css .mediaInfoRow),
+     so the media grows to match the info column instead of leaving dead space
+     below a fixed-aspect-ratio image. */
+  height: 100%;
 }
 
 .stage {
   position: relative;
-  aspect-ratio: 4 / 3;
+  flex: 1 1 0;
+  min-height: 280px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;

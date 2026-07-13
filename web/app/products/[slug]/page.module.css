@@ -6,44 +6,48 @@
 }
 
 /*
- * The buy-box is usually taller than the gallery/info content (price, tiers,
- * buttons, assurances). Letting it span both the content row AND the tabs row
- * (instead of sharing one row with align-items:start) means the tabs start
- * right under the gallery/info, not after the buy-box — no dead gap above them.
+ * Two independent columns: the left column (media + info + tabs) is a normal
+ * top-to-bottom flow, so the tabs sit immediately under the media with no gap,
+ * however tall the buy-box column happens to be. The buy-box column is a plain
+ * sibling — not sticky, not row-spanning — so it simply scrolls with the page.
  */
 .top {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) 330px;
-  grid-template-areas:
-    "gallery info buy"
-    "tabs    tabs buy";
+  grid-template-columns: minmax(0, 1fr) 330px;
   column-gap: var(--space-6);
-  row-gap: var(--space-6);
   align-items: start;
 }
 
+.leftCol {
+  display: flex;
+  flex-direction: column;
+  /* Tight on purpose: the info column (title/description/chips) is usually
+     taller than the compact gallery, so the tabs already sit close to the
+     media without extra spacing stacked on top of that natural difference. */
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.mediaInfoRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: var(--space-6);
+}
+
 .galleryCol {
-  grid-area: gallery;
   min-width: 0;
 }
 
 .infoCol {
-  grid-area: info;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
 .buyCol {
-  grid-area: buy;
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-}
-
-.tabsArea {
-  grid-area: tabs;
-  min-width: 0;
 }
 
 .eyebrow {
@@ -113,28 +117,20 @@
   color: var(--gold-600);
 }
 
-/* Tablet: gallery + info share a row, buy-box drops full width, tabs last. */
+/* Tablet: buy-box drops below the left column, capped width. */
 @media (max-width: 1024px) {
   .top {
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "gallery info"
-      "buy     buy"
-      "tabs    tabs";
+    grid-template-columns: 1fr;
   }
   .buyCol {
     max-width: 420px;
   }
 }
 
+/* Phone: media + info stack too. */
 @media (max-width: 768px) {
-  .top {
+  .mediaInfoRow {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "gallery"
-      "info"
-      "buy"
-      "tabs";
   }
   .buyCol {
     max-width: none;

@@ -92,44 +92,46 @@ export default async function ProductPage({ params }: PageProps) {
       />
 
       <div className={styles.top}>
-        <div className={styles.galleryCol}>
-          <ProductGallery media={product.media} name={product.name} slug={product.slug} />
-        </div>
+        <div className={styles.leftCol}>
+          <div className={styles.mediaInfoRow}>
+            <div className={styles.galleryCol}>
+              <ProductGallery media={product.media} name={product.name} slug={product.slug} />
+            </div>
 
-        <div className={styles.infoCol}>
-          <p className={styles.eyebrow}>{product.partner?.name ?? SITE.name}</p>
-          <h1 className={styles.title}>{product.name}</h1>
-          <p className={styles.tagline}>{product.short_description}</p>
+            <div className={styles.infoCol}>
+              <p className={styles.eyebrow}>{product.partner?.name ?? SITE.name}</p>
+              <h1 className={styles.title}>{product.name}</h1>
+              <p className={styles.tagline}>{product.short_description}</p>
 
-          <div className={styles.stats}>
-            <StarRating value={Number(product.rating_average)} count={product.rating_count} />
-            <span className={styles.dot} aria-hidden="true">•</span>
-            <span className={styles.downloads}>
-              {product.download_count.toLocaleString()}+ downloads
-            </span>
+              <div className={styles.stats}>
+                <StarRating value={Number(product.rating_average)} count={product.rating_count} />
+                <span className={styles.dot} aria-hidden="true">•</span>
+                <span className={styles.downloads}>
+                  {product.download_count.toLocaleString()}+ downloads
+                </span>
+              </div>
+
+              <p className={styles.desc}>{product.description}</p>
+
+              {product.compatibility.length > 0 && (
+                <div className={styles.chips}>
+                  {product.compatibility.slice(0, 3).map((row) => (
+                    <span key={row.id} className={styles.chip}>
+                      <Icon name={COMPAT_ICON[row.label] ?? "check"} size={14} />
+                      {compatLabel(row.label, row.value)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <p className={styles.desc}>{product.description}</p>
-
-          {product.compatibility.length > 0 && (
-            <div className={styles.chips}>
-              {product.compatibility.slice(0, 3).map((row) => (
-                <span key={row.id} className={styles.chip}>
-                  <Icon name={COMPAT_ICON[row.label] ?? "check"} size={14} />
-                  {compatLabel(row.label, row.value)}
-                </span>
-              ))}
-            </div>
-          )}
+          <ProductTabs product={product} />
         </div>
 
         <div className={styles.buyCol}>
           <BuyBox product={product} />
           <PublisherCard product={product} />
-        </div>
-
-        <div className={styles.tabsArea}>
-          <ProductTabs product={product} />
         </div>
       </div>
     </div>
