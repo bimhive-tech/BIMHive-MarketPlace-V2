@@ -27,7 +27,7 @@ export function AdminUserMenu({ user }: { user: User }) {
         <span className={styles.userRole}>Administrator</span>
       </span>
       <button className={styles.logout} onClick={onLogout} aria-label="Sign out">
-        <Icon name="arrow-right" size={16} />
+        <Icon name="logout" size={16} />
       </button>
     </div>
   );

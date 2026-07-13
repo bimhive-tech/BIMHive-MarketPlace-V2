@@ -5,7 +5,7 @@ Security: passwords go through Django's hashers + validators; login is throttled
 blunt credential stuffing; CSRF is enforced on the state-changing endpoints (the
 client fetches a token from /api/auth/csrf first). See ARCHITECTURE §7.
 """
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
@@ -14,7 +14,12 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from accounts.serializers import RegisterSerializer, UserSerializer
+from accounts.serializers import (
+    ChangePasswordSerializer,
+    MeUpdateSerializer,
+    RegisterSerializer,
+    UserSerializer,
+)
 
 
 @method_decorator(ensure_csrf_cookie, name="get")
@@ -71,3 +76,32 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = MeUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(request.user).data)
+
+    def delete(self, request):
+        # Self-service account deletion (mockup's "Delete Account" danger zone).
+        # Real and irreversible by design, matching the UI copy — the client is
+        # responsible for a confirmation step before calling this.
+        user = request.user
+        logout(request)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save()
+        update_session_auth_hash(request, request.user)  # keep the session valid
+        return Response({"detail": "Password updated."})

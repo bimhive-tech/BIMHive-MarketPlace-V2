@@ -1,0 +1,39 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface-0);
+  border: 1px solid var(--error-fg);
+  border-radius: var(--radius-lg);
+}
+
+.title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+}
+
+.text {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+}
+
+.deleteBtn {
+  align-self: flex-start;
+  padding: var(--space-3) var(--space-5);
+  border: 1.5px solid var(--error-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--error-fg);
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.deleteBtn:hover {
+  background: var(--error-fg);
+  color: #fff;
+}
+.deleteBtn:disabled {
+  opacity: 0.6;
+}

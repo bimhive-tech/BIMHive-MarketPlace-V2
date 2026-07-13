@@ -8,6 +8,7 @@ export interface User {
   last_name: string;
   full_name: string;
   is_staff: boolean;
+  date_joined: string;
   profile: {
     company: string;
     job_title: string;

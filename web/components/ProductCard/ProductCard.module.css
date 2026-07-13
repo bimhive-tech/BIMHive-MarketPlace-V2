@@ -69,21 +69,3 @@
 .rating {
   margin-top: var(--space-1);
 }
-
-.cartBtn {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--gold-400);
-  color: var(--gold-700);
-  transition: background-color var(--dur-fast) var(--ease-standard),
-    color var(--dur-fast) var(--ease-standard);
-}
-
-.cartBtn:hover {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #fff;
-}

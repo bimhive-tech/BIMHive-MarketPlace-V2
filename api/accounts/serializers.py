@@ -20,10 +20,63 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "full_name", "is_staff", "profile"]
+        fields = [
+            "id", "username", "email", "first_name", "last_name", "full_name",
+            "is_staff", "date_joined", "profile",
+        ]
 
     def get_full_name(self, obj):
         return obj.get_full_name() or obj.username
+
+
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    """Partial update of the editable Profile Information fields (see mockup)."""
+
+    class Meta:
+        model = Profile
+        fields = ["company", "job_title", "bio"]
+
+
+class MeUpdateSerializer(serializers.ModelSerializer):
+    """PATCH /api/auth/me — updates name/email and the nested profile fields together."""
+
+    profile = ProfileUpdateSerializer(required=False)
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "email", "profile"]
+
+    def validate_email(self, value):
+        value = value.lower().strip()
+        if User.objects.exclude(pk=self.instance.pk).filter(email__iexact=value).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop("profile", None)
+        if "email" in validated_data:
+            # username == email is this app's login identity (see RegisterSerializer).
+            instance.username = validated_data["email"]
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if profile_data:
+            profile, _ = Profile.objects.get_or_create(user=instance)
+            for attr, value in profile_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+        return instance
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+
+    def validate_current_password(self, value):
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):

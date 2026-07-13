@@ -4,6 +4,7 @@ import { Footer } from "@/components/Footer/Footer";
 import { Header } from "@/components/Header/Header";
 import { SiteChrome } from "@/components/SiteChrome/SiteChrome";
 import { SITE } from "@/config/site";
+import { CartProvider } from "@/lib/cart";
 
 import "@/styles/globals.css";
 
@@ -27,9 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <SiteChrome header={<Header />} footer={<Footer />}>
-          {children}
-        </SiteChrome>
+        <CartProvider>
+          <SiteChrome header={<Header />} footer={<Footer />}>
+            {children}
+          </SiteChrome>
+        </CartProvider>
       </body>
     </html>
   );

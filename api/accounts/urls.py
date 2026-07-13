@@ -1,7 +1,14 @@
 """Auth API routes (mounted under /api/auth/ in config/urls.py)."""
 from django.urls import path
 
-from accounts.api import CsrfView, LoginView, LogoutView, MeView, RegisterView
+from accounts.api import (
+    ChangePasswordView,
+    CsrfView,
+    LoginView,
+    LogoutView,
+    MeView,
+    RegisterView,
+)
 
 urlpatterns = [
     path("csrf", CsrfView.as_view(), name="auth-csrf"),
@@ -9,4 +16,5 @@ urlpatterns = [
     path("login", LoginView.as_view(), name="auth-login"),
     path("logout", LogoutView.as_view(), name="auth-logout"),
     path("me", MeView.as_view(), name="auth-me"),
+    path("change-password", ChangePasswordView.as_view(), name="auth-change-password"),
 ]

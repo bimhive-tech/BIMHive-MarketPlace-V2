@@ -75,15 +75,6 @@
   gap: var(--space-4);
 }
 
-.cart {
-  color: var(--ink-800);
-  display: inline-flex;
-  transition: color var(--dur-fast) var(--ease-standard);
-}
-.cart:hover {
-  color: var(--gold-700);
-}
-
 .login {
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);

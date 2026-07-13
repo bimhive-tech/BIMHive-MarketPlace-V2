@@ -5,7 +5,6 @@ import { useState } from "react";
 import { Button } from "@/components/Button/Button";
 import { Icon } from "@/components/Icon/Icon";
 import { KeyFeatures } from "@/features/product/KeyFeatures/KeyFeatures";
-import { PublisherCard } from "@/features/product/PublisherCard/PublisherCard";
 import { RatingsSummary } from "@/features/product/RatingsSummary/RatingsSummary";
 import { WhatsNew } from "@/features/product/WhatsNew/WhatsNew";
 import { StarRating } from "@/components/StarRating/StarRating";
@@ -69,9 +68,6 @@ function OverviewPanel({ product }: { product: ProductDetail }) {
           count={product.rating_count}
           breakdown={product.rating_breakdown}
         />
-      </div>
-      <div className={styles.overviewSide}>
-        <PublisherCard product={product} />
       </div>
     </div>
   );

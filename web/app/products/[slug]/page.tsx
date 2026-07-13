@@ -8,6 +8,7 @@ import { SITE } from "@/config/site";
 import { BuyBox } from "@/features/product/BuyBox/BuyBox";
 import { ProductGallery } from "@/features/product/ProductGallery/ProductGallery";
 import { ProductTabs } from "@/features/product/ProductTabs/ProductTabs";
+import { PublisherCard } from "@/features/product/PublisherCard/PublisherCard";
 import { getProduct } from "@/lib/api";
 import type { ProductDetail } from "@/lib/types";
 
@@ -124,6 +125,7 @@ export default async function ProductPage({ params }: PageProps) {
 
         <div className={styles.buyCol}>
           <BuyBox product={product} />
+          <PublisherCard product={product} />
         </div>
 
         <div className={styles.tabsArea}>

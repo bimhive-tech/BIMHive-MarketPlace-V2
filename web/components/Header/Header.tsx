@@ -4,6 +4,7 @@ import { Icon } from "@/components/Icon/Icon";
 import { Logo } from "@/components/Logo/Logo";
 import { NAV_LINKS } from "@/config/site";
 import { AuthNav } from "@/features/auth/AuthNav/AuthNav";
+import { CartLink } from "@/features/cart/CartLink/CartLink";
 
 import styles from "./Header.module.css";
 
@@ -33,9 +34,7 @@ export function Header() {
         </nav>
 
         <div className={styles.actions}>
-          <Link href="/cart" className={styles.cart} aria-label="Cart">
-            <Icon name="cart" size={22} />
-          </Link>
+          <CartLink />
           <AuthNav />
         </div>
       </div>

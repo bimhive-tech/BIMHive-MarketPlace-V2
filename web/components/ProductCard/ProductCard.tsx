@@ -1,9 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { Icon } from "@/components/Icon/Icon";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { WireframeThumb } from "@/components/WireframeThumb/WireframeThumb";
+import { QuickAddButton } from "@/features/cart/QuickAddButton/QuickAddButton";
 import type { ProductCard as ProductCardType } from "@/lib/types";
 
 import styles from "./ProductCard.module.css";
@@ -38,9 +38,13 @@ export function ProductCard({ product }: { product: ProductCardType }) {
               <StarRating value={Number(product.rating_average)} count={product.rating_count} />
             </div>
           </div>
-          <button className={styles.cartBtn} aria-label={`Add ${product.name} to cart`}>
-            <Icon name="cart" size={18} />
-          </button>
+          <QuickAddButton
+            productId={product.id}
+            slug={product.slug}
+            name={product.name}
+            price={Number(product.price)}
+            currency={product.currency}
+          />
         </div>
       </div>
     </article>

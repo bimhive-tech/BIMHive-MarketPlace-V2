@@ -70,15 +70,19 @@ design/   brand assets + UI mockups (design source of truth)
 ## Routes (built so far)
 
 **Storefront**: `/` (home), `/catalog` (browse + category filter), `/products/<slug>` (detail).
+**Cart**: `/cart` (real, localStorage-backed), `/checkout` (honest "coming soon" stub — no fake
+payment flow until Stripe/PayPal are wired).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
-**Account** (auth-gated): `/account`, `/account/licenses`, `/account/orders`, `/account/downloads`.
+**Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses`,
+`/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
+job title/bio, change email, change password, delete account).
 **Admin portal** (staff-gated): `/admin-portal` (dashboard), `/admin-portal/products` (list),
 `/admin-portal/products/new` (create). Separate from Django's `/admin`.
 
 ## API endpoints
 
 - Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
-- Auth: `GET /api/auth/csrf`, `GET /api/auth/me`, `POST /api/auth/{register,login,logout}`
+- Auth: `GET /api/auth/csrf`, `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,change-password}`
 - Admin (staff): `GET /api/admin/{stats,options}`, `GET|POST /api/admin/products`
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
 

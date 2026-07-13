@@ -11,7 +11,8 @@ export type IconName =
   | "grid" | "puzzle" | "bolt" | "workflow" | "library" | "template"
   | "graduation-cap" | "plug" | "wrench" | "broom" | "eye" | "document"
   | "database" | "chart" | "share" | "hash" | "layers" | "refresh"
-  | "windows" | "globe" | "revit" | "facebook" | "linkedin" | "twitter";
+  | "windows" | "globe" | "revit" | "facebook" | "linkedin" | "twitter"
+  | "logout" | "trash" | "camera" | "plus";
 
 /** Each entry is the inner markup of a 24x24 viewBox, stroked. */
 const PATHS: Record<IconName, string> = {
@@ -57,6 +58,10 @@ const PATHS: Record<IconName, string> = {
   facebook: '<path d="M14 8h2V5h-2a3 3 0 0 0-3 3v2H9v3h2v6h3v-6h2l1-3h-3V8.5A.5.5 0 0 1 14 8z"/>',
   linkedin: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 11v6M8 8v.01M12 17v-4a2 2 0 0 1 4 0v4"/>',
   twitter: '<path d="M21 6.5c-.7.3-1.4.5-2.2.6a3.8 3.8 0 0 0 1.7-2.1c-.8.5-1.6.8-2.5 1a3.8 3.8 0 0 0-6.5 3.5A10.8 10.8 0 0 1 4 5.3a3.8 3.8 0 0 0 1.2 5.1c-.6 0-1.2-.2-1.7-.5a3.8 3.8 0 0 0 3 3.8c-.5.1-1 .2-1.6.1a3.8 3.8 0 0 0 3.6 2.6A7.6 7.6 0 0 1 3 18.5 10.7 10.7 0 0 0 20 9.5c.8-.6 1.4-1.3 1.9-2z"/>',
+  logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h12"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
+  camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
 };
 
 interface IconProps {

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button/Button";
@@ -16,24 +15,20 @@ const QUICK_LINKS: { icon: IconName; title: string; text: string; href: string }
   { icon: "download", title: "Downloads", text: "Access your purchased files", href: "/account/downloads" },
   { icon: "library", title: "Licenses", text: "View and manage license keys", href: "/account/licenses" },
   { icon: "document", title: "Orders & Invoices", text: "Purchase history and receipts", href: "/account/orders" },
-  { icon: "help", title: "Support", text: "Open or track a ticket", href: "/support" },
+  { icon: "users", title: "Profile", text: "Update your personal details", href: "/account/profile" },
 ];
 
-export default function AccountPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<User | null | undefined>(undefined);
+export default function AccountOverviewPage() {
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    me().then((u) => {
-      if (!u) router.replace("/login");
-      else setUser(u);
-    });
-  }, [router]);
+    me().then(setUser);
+  }, []);
 
-  if (!user) return <div className={`container ${styles.loading}`}>Loading your account…</div>;
+  if (!user) return <div className={styles.loading}>Loading your account…</div>;
 
   return (
-    <div className={`container ${styles.page}`}>
+    <div className={styles.page}>
       <header className={styles.head}>
         <div>
           <h1 className={styles.title}>Welcome back, {user.first_name || user.full_name}</h1>
