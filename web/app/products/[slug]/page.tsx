@@ -125,9 +125,11 @@ export default async function ProductPage({ params }: PageProps) {
         <div className={styles.buyCol}>
           <BuyBox product={product} />
         </div>
-      </div>
 
-      <ProductTabs product={product} />
+        <div className={styles.tabsArea}>
+          <ProductTabs product={product} />
+        </div>
+      </div>
     </div>
   );
 }

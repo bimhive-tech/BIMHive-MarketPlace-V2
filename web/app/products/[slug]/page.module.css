@@ -5,21 +5,42 @@
   gap: var(--space-5);
 }
 
+/*
+ * The buy-box is usually taller than the gallery/info content (price, tiers,
+ * buttons, assurances). Letting it span both the content row AND the tabs row
+ * (instead of sharing one row with align-items:start) means the tabs start
+ * right under the gallery/info, not after the buy-box — no dead gap above them.
+ */
 .top {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) 330px;
-  gap: var(--space-6);
+  grid-template-areas:
+    "gallery info buy"
+    "tabs    tabs buy";
+  column-gap: var(--space-6);
+  row-gap: var(--space-6);
   align-items: start;
 }
 
 .galleryCol {
+  grid-area: gallery;
   min-width: 0;
 }
 
 .infoCol {
+  grid-area: info;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.buyCol {
+  grid-area: buy;
+}
+
+.tabsArea {
+  grid-area: tabs;
+  min-width: 0;
 }
 
 .eyebrow {
@@ -89,13 +110,16 @@
   color: var(--gold-600);
 }
 
-/* Tablet: gallery + info stack, buy-box drops full width. */
+/* Tablet: gallery + info share a row, buy-box drops full width, tabs last. */
 @media (max-width: 1024px) {
   .top {
     grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "gallery info"
+      "buy     buy"
+      "tabs    tabs";
   }
   .buyCol {
-    grid-column: 1 / -1;
     max-width: 420px;
   }
 }
@@ -103,6 +127,11 @@
 @media (max-width: 768px) {
   .top {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "gallery"
+      "info"
+      "buy"
+      "tabs";
   }
   .buyCol {
     max-width: none;
