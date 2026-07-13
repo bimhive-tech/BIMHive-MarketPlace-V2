@@ -112,5 +112,25 @@ cd api && pytest          # includes golden-master tests for the license API con
 
 ## Deployment (Railway)
 
-Two services only: **Postgres** and **one combined web service** running Django (gunicorn) +
-Next.js (`next start`) in a single container. See [`ARCHITECTURE.md`](ARCHITECTURE.md) §3.
+Two services only: **Postgres** and **one combined web service** built from the root
+[`Dockerfile`](Dockerfile). See [`ARCHITECTURE.md`](ARCHITECTURE.md) §3.
+
+The image is a 3-stage build: compile the Next.js frontend to a standalone bundle, install
+Python dependencies, then a slim runtime with both Node and Python. [`scripts/start.sh`](scripts/start.sh)
+runs migrations + `collectstatic`, then starts gunicorn privately on `127.0.0.1:8000` and Next.js
+publicly on Railway's `$PORT` — Next proxies `/api`, `/admin`, and `/static` to Django internally
+(see `web/next.config.mjs`), so only one port is ever exposed.
+
+**Setup:**
+1. Create a Railway project, add a **Postgres** database, and a second service pointing at this
+   repo (Railway auto-detects the root `Dockerfile` and `railway.json`).
+2. Set the web service's environment variables (ask Claude for the current list, or see
+   `.env.example` — every var there except the local-dev-only defaults is required in prod).
+3. Deploy. `healthcheckPath` in `railway.json` is `/`, so Railway won't cut traffic over until
+   both Next.js and Django (via SSR calling the API) are actually serving.
+
+**Local Docker test** (optional, needs Docker Desktop running):
+```bash
+docker build -t bimhive .
+docker run -p 3000:3000 --env-file .env -e PORT=3000 bimhive
+```

@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.git
+.claude
+infra/data
+api/.venv
+api/staticfiles
+api/media
+api/__pycache__
+api/**/__pycache__
+api/**/*.pyc
+web/node_modules
+web/.next
+**/.DS_Store

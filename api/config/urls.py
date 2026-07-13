@@ -18,6 +18,8 @@ urlpatterns = [
     path("api/license/activate", license_activate_api, name="license-activate-api"),
     # ── Auth API (session-based) ──
     path("api/auth/", include("accounts.urls")),
+    # ── Customer account API (my orders / licenses / downloads) ──
+    path("api/account/", include("licensing.account_urls")),
     # ── Admin portal API (staff-only) ──
     path("api/admin/", include("catalog.admin_urls")),
     path("api/admin/", include("licensing.admin_urls")),

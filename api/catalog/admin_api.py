@@ -82,11 +82,14 @@ class ProductFileSerializer(serializers.ModelSerializer):
         read_only_fields = ["storage_key", "file_size_bytes"]
 
     def get_download_url(self, obj):
-        from django.conf import settings
+        from django.core.files.storage import default_storage
 
         if not obj.storage_key:
             return ""
-        return f"{settings.MEDIA_URL}{obj.storage_key}"
+        # In prod this is a short-lived presigned R2 URL (see STORAGES in
+        # settings.py); in local dev without R2/MinIO configured it falls back to
+        # a plain /media/ path served by Django in DEBUG.
+        return default_storage.url(obj.storage_key)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -241,30 +244,32 @@ class AdminProductFileListCreateView(generics.ListCreateAPIView):
         return ProductFile.objects.filter(product_id=self.kwargs["product_id"])
 
     def perform_create(self, serializer):
-        import os
-
-        from django.conf import settings
+        from django.core.files.storage import default_storage
 
         product = Product.objects.get(pk=self.kwargs["product_id"])
         uploaded = self.request.FILES.get("file")
         if not uploaded:
             raise ValidationError({"file": "A file is required."})
 
-        upload_dir = os.path.join(settings.MEDIA_ROOT, "product_files", str(product.id))
-        os.makedirs(upload_dir, exist_ok=True)
-        dest_path = os.path.join(upload_dir, uploaded.name)
-        with open(dest_path, "wb+") as dest:
-            for chunk in uploaded.chunks():
-                dest.write(chunk)
-
-        storage_key = f"product_files/{product.id}/{uploaded.name}"
-        serializer.save(product=product, storage_key=storage_key, file_size_bytes=uploaded.size)
+        # default_storage routes to R2/MinIO in any environment where they're
+        # configured (see STORAGES in settings.py) and only touches local disk as a
+        # bare-bones fallback — the actual key it lands on (with any dedupe suffix
+        # the backend applies) is what we record, not the name we asked for.
+        key = default_storage.save(f"product_files/{product.id}/{uploaded.name}", uploaded)
+        serializer.save(product=product, storage_key=key, file_size_bytes=uploaded.size)
 
 
 class AdminProductFileDetailView(generics.DestroyAPIView):
     permission_classes = [IsAdminUser]
     serializer_class = ProductFileSerializer
     queryset = ProductFile.objects.all()
+
+    def perform_destroy(self, instance):
+        from django.core.files.storage import default_storage
+
+        if instance.storage_key and default_storage.exists(instance.storage_key):
+            default_storage.delete(instance.storage_key)
+        instance.delete()
 
 
 class AdminOptionsView(APIView):

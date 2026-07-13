@@ -108,10 +108,6 @@ USE_TZ = True
 # ─────────────────────────────────────────────────────────────
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
-}
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -157,6 +153,41 @@ R2_ENDPOINT_URL = env("R2_ENDPOINT_URL", default="")
 R2_PUBLIC_BASE_URL = env("R2_PUBLIC_BASE_URL", default="")
 R2_REGION = env("R2_REGION", default="auto")
 R2_SIGNED_URL_TTL = env.int("R2_SIGNED_URL_TTL", default=300)
+
+# Default file storage: R2 (prod) or the MinIO instance docker-compose starts for
+# local dev — both are S3-compatible, so the same backend covers either one. Files
+# only ever land on local disk if neither is configured at all. This matters beyond
+# local dev convenience: Railway's filesystem is ephemeral, so ProductFile uploads
+# (the actual plugin installers customers download) must live in object storage or
+# they vanish on the next deploy.
+if R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME:
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "bucket_name": R2_BUCKET_NAME,
+                "region_name": R2_REGION,
+                "endpoint_url": R2_ENDPOINT_URL,
+                "access_key": R2_ACCESS_KEY_ID,
+                "secret_key": R2_SECRET_ACCESS_KEY,
+                "signature_version": "s3v4",
+                "addressing_style": "path",
+                "default_acl": None,
+                "file_overwrite": False,
+                # Every download link is presigned + short-lived; nothing is public
+                # by default, since entitlement is checked in the account API, not
+                # by hiding the bucket.
+                "querystring_auth": True,
+                "querystring_expire": R2_SIGNED_URL_TTL,
+            },
+        },
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
+else:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
 
 # ─────────────────────────────────────────────────────────────
 # Payments
