@@ -4,6 +4,11 @@
   gap: var(--space-6);
   border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
+  /* Without this, the CSS spec forces overflow-y to also compute as "auto"
+     (since overflow-x isn't "visible"), so the tab underline's absolutely
+     positioned ::after — which sits slightly below the tab's own box on
+     purpose — creates a stray 1-2px vertical scrollbar. */
+  overflow-y: hidden;
 }
 
 .tab {

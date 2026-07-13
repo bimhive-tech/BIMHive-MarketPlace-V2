@@ -66,6 +66,34 @@ h4 {
   outline-offset: 2px;
 }
 
+/* ── Themed scrollbars (brand gold, thin, rounded) — applies to the page
+   scrollbar and every scrollable container (tab strips, admin tables, the
+   admin sidebar) so nothing shows a default OS scrollbar. ── */
+* {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--gold-400) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--gold-400);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--gold-600);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

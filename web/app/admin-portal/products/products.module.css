@@ -43,6 +43,7 @@
   gap: var(--space-5);
   border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
+  overflow-y: hidden; /* see ProductTabs.module.css .tabStrip for why this matters */
 }
 
 .tab {
@@ -78,6 +79,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .table {
