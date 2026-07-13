@@ -51,6 +51,11 @@ class Product(TimeStamped):
     # ── Identity ──
     name = models.CharField(max_length=180)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
+    # The activation SKU code sent by the desktop plugin (licensing.LicensedProduct.code
+    # is kept in sync with this — see catalog/signals.py). Immutable once the product has
+    # gone live (enforced in AdminProductWriteSerializer): changing it would break
+    # activation for every copy already installed in the field.
+    product_code = models.CharField(max_length=120, unique=True, blank=True)
     type = models.CharField(max_length=20, choices=ProductType.choices, default=ProductType.PLUGIN)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="products")
     partner = models.ForeignKey(
@@ -110,10 +115,22 @@ class Product(TimeStamped):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            self.slug = self._unique_value("slug", slugify(self.name))
+        if not self.product_code:
+            self.product_code = self._unique_value("product_code", slugify(self.name) or self.slug)
         if self.status == ProductStatus.PUBLISHED and self.published_at is None:
             self.published_at = timezone.now()
         super().save(*args, **kwargs)
+
+    def _unique_value(self, field, base):
+        """Append -2, -3, ... until `base` doesn't collide with another row's `field`."""
+        value = base
+        counter = 2
+        qs = type(self).objects.exclude(pk=self.pk) if self.pk else type(self).objects.all()
+        while qs.filter(**{field: value}).exists():
+            value = f"{base}-{counter}"
+            counter += 1
+        return value
 
     @property
     def is_free(self):

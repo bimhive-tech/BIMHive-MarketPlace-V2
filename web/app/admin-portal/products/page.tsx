@@ -79,6 +79,7 @@ export default function AdminProductsPage() {
               <th>Downloads</th>
               <th>Rating</th>
               <th>Updated</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -90,7 +91,7 @@ export default function AdminProductsPage() {
                       <WireframeThumb seed={row.slug} />
                     </span>
                     <span className={styles.productText}>
-                      <Link href={`/products/${row.slug}`} className={styles.productName}>
+                      <Link href={`/admin-portal/products/${row.id}/edit`} className={styles.productName}>
                         {row.name}
                       </Link>
                       <span className={styles.productDesc}>{row.short_description}</span>
@@ -119,6 +120,15 @@ export default function AdminProductsPage() {
                   )}
                 </td>
                 <td className={styles.muted}>{formatDate(row.updated_at)}</td>
+                <td>
+                  <Link
+                    href={`/admin-portal/products/${row.id}/edit`}
+                    className={styles.editLink}
+                    aria-label={`Edit ${row.name}`}
+                  >
+                    <Icon name="edit" size={16} />
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>

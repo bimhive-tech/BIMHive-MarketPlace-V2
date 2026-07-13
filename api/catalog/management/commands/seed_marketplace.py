@@ -25,7 +25,6 @@ from catalog.models import (
     Tag,
 )
 from catalog.models.product import ProductStatus, ProductType
-from licensing.models import LicensedProduct
 from reviews.models import Review, refresh_product_rating
 
 CATEGORIES = [
@@ -55,7 +54,7 @@ COLLECTIONS = [
 ]
 
 # Each product: name, type, category, partner, price, team_price, short, desc, version,
-# released, rating_avg, rating_count, downloads, revit_years, tags, features, changelog,
+# released, rating_avg, rating_count, downloads, tags, features, changelog,
 # compatibility, collection names.
 PRODUCTS = [
     {
@@ -77,7 +76,6 @@ PRODUCTS = [
         "rating_count": 120,
         "downloads": 1250,
         "featured": True,
-        "revit_years": ["2020", "2021", "2022", "2023", "2024", "2025"],
         "tags": ["Productivity", "Automation", "Documentation", "Model Management"],
         "features": [
             ("Model Cleanup", "Remove unused items, purge, and audit your model to keep it light and efficient.", "broom"),
@@ -118,7 +116,6 @@ PRODUCTS = [
         "rating_count": 85,
         "downloads": 890,
         "featured": True,
-        "revit_years": ["2022", "2023", "2024", "2025"],
         "tags": ["Automation", "Documentation", "Sheets"],
         "features": [
             ("Batch Sheet Creation", "Create hundreds of sheets from a spreadsheet in one step.", "layers"),
@@ -150,7 +147,6 @@ PRODUCTS = [
         "rating_count": 210,
         "downloads": 2100,
         "featured": True,
-        "revit_years": ["2022", "2023", "2024", "2025"],
         "tags": ["Automation", "Dynamo", "Productivity"],
         "features": [
             ("Geometry Nodes", "Robust helpers for complex geometry operations.", "workflow"),
@@ -182,7 +178,6 @@ PRODUCTS = [
         "rating_count": 67,
         "downloads": 320,
         "featured": True,
-        "revit_years": ["2023", "2024", "2025"],
         "tags": ["Analytics", "Data", "Reporting"],
         "features": [
             ("Live Metrics", "Real-time quantity and completeness tracking.", "chart"),
@@ -214,7 +209,6 @@ PRODUCTS = [
         "rating_count": 54,
         "downloads": 640,
         "featured": False,
-        "revit_years": ["2022", "2023", "2024", "2025"],
         "tags": ["Productivity", "Automation"],
         "features": [
             ("Rule-based Numbering", "Define numbering rules per category.", "hash"),
@@ -243,7 +237,6 @@ PRODUCTS = [
         "rating_count": 41,
         "downloads": 560,
         "featured": False,
-        "revit_years": ["2022", "2023", "2024", "2025"],
         "tags": ["Content", "Productivity", "Library"],
         "features": [
             ("Batch Load", "Load whole folders of families at once.", "layers"),
@@ -342,7 +335,8 @@ class Command(BaseCommand):
             self._seed_doc(product, spec["doc"])
 
         self._seed_reviews(product, spec["rating"], spec["rating_count"])
-        self._seed_license_skus(product, spec["revit_years"])
+        # Activation SKU (licensing.LicensedProduct) syncs automatically on save
+        # via catalog/signals.py — no separate seeding step needed here.
 
     def _seed_doc(self, product, doc):
         documentation, _ = Documentation.objects.update_or_create(
@@ -371,23 +365,6 @@ class Command(BaseCommand):
         product.rating_count = count
         product.rating_distribution = distribution
         product.save(update_fields=["rating_average", "rating_count", "rating_distribution"])
-
-    def _seed_license_skus(self, product, revit_years):
-        """One activation SKU per Revit year, code compatible with the field convention."""
-        for year in revit_years:
-            code = f"{product.slug}-{year}-online"
-            LicensedProduct.objects.update_or_create(
-                code=code,
-                defaults={
-                    "product": product,
-                    "name": f"{product.name} ({year})",
-                    "revit_year": year,
-                    "default_trial_days": product.default_trial_days,
-                    "is_active": True,
-                    "price": product.price,
-                    "currency": product.currency,
-                },
-            )
 
     @staticmethod
     def _slug(name):

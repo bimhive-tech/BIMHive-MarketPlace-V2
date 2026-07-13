@@ -64,10 +64,6 @@ class Collection(TimeStamped):
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
 
-    @property
-    def product_count(self):
-        return self.products.count()
-
 
 class Tag(TimeStamped):
     name = models.CharField(max_length=60, unique=True)

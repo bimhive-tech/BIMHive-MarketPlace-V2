@@ -3,12 +3,13 @@ Storefront read API. All endpoints are public (read-only) and only ever expose
 published + public products. Write/admin flows live in the Django admin (and later,
 authenticated admin API endpoints).
 """
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from catalog.models import Category, Collection, Product
+from catalog.models.product import ProductStatus, ProductVisibility
 from catalog.serializers import (
     CategorySerializer,
     CollectionSerializer,
@@ -20,6 +21,24 @@ from reviews.models import Review
 
 def _published_products():
     return Product.objects.published().select_related("category", "partner")
+
+
+def _categories_with_counts(qs=None):
+    # One query for the whole list instead of one COUNT per category (see
+    # CategorySerializer.get_product_count).
+    return (qs if qs is not None else Category.objects).annotate(
+        product_count=Count(
+            "products",
+            filter=Q(products__status=ProductStatus.PUBLISHED, products__visibility=ProductVisibility.PUBLIC),
+            distinct=True,
+        )
+    )
+
+
+def _collections_with_counts(qs=None):
+    return (qs if qs is not None else Collection.objects).annotate(
+        product_count=Count("products", distinct=True)
+    )
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
@@ -52,13 +71,13 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Category.objects.filter(parent__isnull=True)
+    queryset = _categories_with_counts(Category.objects.filter(parent__isnull=True))
     serializer_class = CategorySerializer
     lookup_field = "slug"
 
 
 class CollectionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Collection.objects.all()
+    queryset = _collections_with_counts(Collection.objects.all())
     serializer_class = CollectionSerializer
     lookup_field = "slug"
 
@@ -72,11 +91,11 @@ def home_api(request):
     return Response(
         {
             "categories": CategorySerializer(
-                Category.objects.filter(parent__isnull=True), many=True
+                _categories_with_counts(Category.objects.filter(parent__isnull=True)), many=True
             ).data,
             "featured_products": ProductCardSerializer(featured, many=True).data,
             "collections": CollectionSerializer(
-                Collection.objects.filter(is_featured=True)[:8], many=True
+                _collections_with_counts(Collection.objects.filter(is_featured=True))[:8], many=True
             ).data,
         }
     )

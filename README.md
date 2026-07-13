@@ -76,14 +76,23 @@ payment flow until Stripe/PayPal are wired).
 **Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses`,
 `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
 job title/bio, change email, change password, delete account).
-**Admin portal** (staff-gated): `/admin-portal` (dashboard), `/admin-portal/products` (list),
-`/admin-portal/products/new` (create). Separate from Django's `/admin`.
+**Admin portal** (staff-gated, separate from Django's `/admin`): `/admin-portal` (dashboard),
+`/admin-portal/products` (list/create/edit, full form incl. media/features/changelog/compatibility/
+files), `/admin-portal/{orders,customers,reviews,licenses}`, `/admin-portal/{categories,tags,
+partners,collections}` (taxonomy CRUD), `/admin-portal/settings` (live system status),
+`/admin-portal/settings/{users,roles}` (role-based staff access).
 
 ## API endpoints
 
 - Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
 - Auth: `GET /api/auth/csrf`, `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,change-password}`
-- Admin (staff): `GET /api/admin/{stats,options}`, `GET|POST /api/admin/products`
+- Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
+  `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
+  CRUD at `/api/admin/{categories,tags,partners,collections,roles}`; `GET /api/admin/{licenses,orders,
+  users,customers,reviews}` plus their action routes (revoke/restore/extend a license, set an order's
+  status, update a user's role). A product's `product_code` auto-syncs to its licensing SKU on save
+  (see `catalog/signals.py`) — creating/editing/publishing a product is immediately reflected in what
+  the activation API will authorize.
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
 
 ## Admin / test access

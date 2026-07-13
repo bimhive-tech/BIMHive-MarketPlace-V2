@@ -26,19 +26,20 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/admin-portal", icon: "grid", ready: true },
       { label: "Analytics", href: "/admin-portal/analytics", icon: "chart" },
-      { label: "Orders", href: "/admin-portal/orders", icon: "document" },
-      { label: "Customers", href: "/admin-portal/customers", icon: "users" },
-      { label: "Reviews", href: "/admin-portal/reviews", icon: "star" },
+      { label: "Orders", href: "/admin-portal/orders", icon: "document", ready: true },
+      { label: "Customers", href: "/admin-portal/customers", icon: "users", ready: true },
+      { label: "Reviews", href: "/admin-portal/reviews", icon: "star", ready: true },
+      { label: "Licenses", href: "/admin-portal/licenses", icon: "lock", ready: true },
     ],
   },
   {
     heading: "Products & Content",
     items: [
       { label: "Products", href: "/admin-portal/products", icon: "puzzle", ready: true },
-      { label: "Collections", href: "/admin-portal/collections", icon: "layers" },
-      { label: "Categories", href: "/admin-portal/categories", icon: "grid" },
-      { label: "Tags", href: "/admin-portal/tags", icon: "hash" },
-      { label: "Partners", href: "/admin-portal/partners", icon: "library" },
+      { label: "Collections", href: "/admin-portal/collections", icon: "layers", ready: true },
+      { label: "Categories", href: "/admin-portal/categories", icon: "grid", ready: true },
+      { label: "Tags", href: "/admin-portal/tags", icon: "hash", ready: true },
+      { label: "Partners", href: "/admin-portal/partners", icon: "library", ready: true },
     ],
   },
   {
@@ -51,10 +52,10 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Settings",
     items: [
-      { label: "General", href: "/admin-portal/settings", icon: "wrench" },
-      { label: "Payments", href: "/admin-portal/settings/payments", icon: "shield" },
-      { label: "Users", href: "/admin-portal/settings/users", icon: "users" },
-      { label: "Roles & Permissions", href: "/admin-portal/settings/roles", icon: "lock" },
+      { label: "General", href: "/admin-portal/settings", icon: "wrench", ready: true },
+      { label: "Payments", href: "/admin-portal/settings", icon: "shield", ready: true },
+      { label: "Users", href: "/admin-portal/settings/users", icon: "users", ready: true },
+      { label: "Roles & Permissions", href: "/admin-portal/settings/roles", icon: "lock", ready: true },
     ],
   },
 ];

@@ -6,6 +6,10 @@ const API_INTERNAL_URL = process.env.API_INTERNAL_URL || "http://127.0.0.1:8000"
 
 const nextConfig = {
   reactStrictMode: true,
+  // DRF router URLs (categories/, tags/, etc.) require a trailing slash. Without
+  // this, Next's own trailing-slash redirect fires before the rewrite below can
+  // forward the request, stripping the slash and breaking those endpoints.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${API_INTERNAL_URL}/api/:path*` },

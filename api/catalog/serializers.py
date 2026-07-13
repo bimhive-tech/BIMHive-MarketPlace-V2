@@ -29,15 +29,24 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "slug", "icon", "description", "product_count"]
 
     def get_product_count(self, obj):
-        return obj.products.published().count()
+        # Queryset call sites annotate `product_count` (see catalog/views.py) so this
+        # is a single query for the whole list rather than one COUNT per category.
+        # Fall back to a live count only when an unannotated instance slips through
+        # (e.g. the single nested category on a product detail page).
+        count = getattr(obj, "product_count", None)
+        return count if count is not None else obj.products.published().count()
 
 
 class CollectionSerializer(serializers.ModelSerializer):
-    product_count = serializers.IntegerField(read_only=True)
+    product_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
         fields = ["id", "name", "slug", "icon", "description", "product_count", "is_featured"]
+
+    def get_product_count(self, obj):
+        count = getattr(obj, "product_count", None)
+        return count if count is not None else obj.products.count()
 
 
 class TagSerializer(serializers.ModelSerializer):

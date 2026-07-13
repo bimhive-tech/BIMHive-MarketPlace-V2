@@ -79,7 +79,7 @@ class ProductPurchase(models.Model):
     )
     product = models.ForeignKey(LicensedProduct, on_delete=models.CASCADE, related_name="purchases")
     payment_status = models.CharField(
-        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
+        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING, db_index=True
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=8, default="USD")
@@ -165,7 +165,7 @@ class MachineLicense(models.Model):
     )
     machine_fingerprint_hash = models.TextField()
     fingerprint_version = models.TextField(default="HWFP-2")
-    status = models.TextField(default="active")
+    status = models.TextField(default="active", db_index=True)
     started_at = models.DateTimeField()
     expires_at = models.DateTimeField()
     first_seen_at = models.DateTimeField(default=timezone.now)

@@ -85,6 +85,10 @@ class CollectionAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ("products",)
 
+    @admin.display(description="Products")
+    def product_count(self, obj):
+        return obj.products.count()
+
 
 admin.site.register(Tag)
 admin.site.register(Partner)

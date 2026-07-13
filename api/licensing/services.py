@@ -7,7 +7,34 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from licensing.models import LicenseEvent, ProductPurchase
+from licensing.models import LicenseEvent, LicensedProduct, ProductPurchase
+
+
+def sync_license_sku(product):
+    """
+    Create or update the activation SKU (licensing.LicensedProduct) for a
+    storefront Product, keyed by `product.product_code`. Called automatically
+    on every Product save (see catalog/signals.py) so a product added or edited
+    anywhere — admin portal, Django admin, shell, seed script — is immediately
+    activatable by the desktop plugin. A product without a code yet (shouldn't
+    happen since Product.save() always assigns one) is skipped.
+    """
+    from catalog.models.product import ProductStatus
+
+    if not product.product_code:
+        return None
+    licensed_product, _ = LicensedProduct.objects.update_or_create(
+        code=product.product_code,
+        defaults={
+            "product": product,
+            "name": product.name,
+            "default_trial_days": product.default_trial_days,
+            "price": product.price,
+            "currency": product.currency,
+            "is_active": product.status == ProductStatus.PUBLISHED,
+        },
+    )
+    return licensed_product
 
 
 def log_license_event(product, machine_license, event_type, payload=None, event_time=None):

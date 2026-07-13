@@ -6,10 +6,30 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
+class Role(models.Model):
+    """A named permission grant (Admin settings > Roles & Permissions)."""
+
+    name = models.CharField(max_length=60, unique=True)
+    description = models.CharField(max_length=200, blank=True)
+    grants_staff_access = models.BooleanField(
+        default=False, help_text="Users with this role can sign in to the admin portal."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class User(AbstractUser):
     """Email is the primary contact; username stays for admin compatibility."""
 
     email = models.EmailField(unique=True)
+    role = models.ForeignKey(
+        Role, on_delete=models.SET_NULL, null=True, blank=True, related_name="users"
+    )
 
     def __str__(self):
         return self.get_full_name() or self.username

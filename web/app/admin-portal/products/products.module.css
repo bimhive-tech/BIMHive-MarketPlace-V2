@@ -120,6 +120,21 @@
   gap: var(--space-3);
 }
 
+.editLink {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.editLink:hover {
+  background: var(--gold-100);
+  color: var(--gold-700);
+}
+
 .thumb {
   width: 48px;
   height: 40px;
