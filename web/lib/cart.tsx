@@ -14,6 +14,9 @@ export interface CartItem {
   productId: number;
   slug: string;
   name: string;
+  // Optional so carts persisted before this field existed still parse fine —
+  // the cart page falls back to the wireframe art when it's missing.
+  coverImageUrl?: string;
   unitPrice: number;
   currency: string;
   qty: number;

@@ -12,12 +12,13 @@ interface QuickAddButtonProps {
   productId: number;
   slug: string;
   name: string;
+  coverImageUrl: string;
   price: number;
   currency: string;
 }
 
 /** Circular "add to cart" button used on product cards — becomes a qty stepper once the product is in the cart. */
-export function QuickAddButton({ productId, slug, name, price, currency }: QuickAddButtonProps) {
+export function QuickAddButton({ productId, slug, name, coverImageUrl, price, currency }: QuickAddButtonProps) {
   const { items, addItem, setQty } = useCart();
   const [added, setAdded] = useState(false);
   const cartItem = items.find((i) => i.productId === productId);
@@ -29,6 +30,7 @@ export function QuickAddButton({ productId, slug, name, price, currency }: Quick
       productId,
       slug,
       name,
+      coverImageUrl,
       unitPrice: price,
       currency,
     });

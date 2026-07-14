@@ -28,7 +28,12 @@ export function MediaTab({ media, setMedia, productId, ensureSaved }: MediaTabPr
     setMedia((list) => {
       const next = [...list];
       const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
+      // Removing `from` shifts every later index down by one, so dropping on a
+      // row further down the list needs to land just *before* that row's
+      // original slot, not at it — otherwise the item ends up one row past
+      // wherever it was dropped.
+      const insertAt = from < to ? to - 1 : to;
+      next.splice(insertAt, 0, moved);
       return next;
     });
   }

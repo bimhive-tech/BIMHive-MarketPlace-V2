@@ -42,6 +42,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
             productId={product.id}
             slug={product.slug}
             name={product.name}
+            coverImageUrl={product.cover_image_url}
             price={Number(product.price)}
             currency={product.currency}
           />

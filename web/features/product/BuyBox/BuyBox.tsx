@@ -102,6 +102,7 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
       productId: product.id,
       slug: product.slug,
       name: product.name,
+      coverImageUrl: product.cover_image_url,
       unitPrice: Number(product.price),
       currency: product.currency,
     });

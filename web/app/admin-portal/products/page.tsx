@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -88,7 +89,11 @@ export default function AdminProductsPage() {
                 <td>
                   <div className={styles.product}>
                     <span className={styles.thumb}>
-                      <WireframeThumb seed={row.slug} />
+                      {row.cover_image_url ? (
+                        <Image src={row.cover_image_url} alt="" fill sizes="48px" className={styles.thumbImg} />
+                      ) : (
+                        <WireframeThumb seed={row.slug} />
+                      )}
                     </span>
                     <span className={styles.productText}>
                       <Link href={`/admin-portal/products/${row.id}/edit`} className={styles.productName}>

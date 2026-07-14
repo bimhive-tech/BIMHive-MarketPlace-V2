@@ -106,6 +106,7 @@ export interface AdminProductRow {
   rating_average: string;
   rating_count: number;
   updated_at: string;
+  cover_image_url: string;
 }
 
 export interface AdminProductFeature {

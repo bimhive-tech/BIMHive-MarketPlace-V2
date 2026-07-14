@@ -41,7 +41,7 @@ class AdminProductRowSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "slug", "product_code", "type", "short_description", "category",
             "partner", "partner_verified", "price", "status", "download_count",
-            "rating_average", "rating_count", "updated_at",
+            "rating_average", "rating_count", "updated_at", "cover_image_url",
         ]
 
 
@@ -167,6 +167,15 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             items = validated_data.pop("media")
             product.media.all().delete()
             ProductMedia.objects.bulk_create(self._ordered(ProductMedia, product, items))
+            # cover_image_url is what ProductCard / the admin product list actually
+            # render (see catalog/serializers.py) — it isn't a separate field the
+            # admin fills in, it's derived from whichever gallery item is marked
+            # "cover" here, so the two can never drift apart.
+            cover = next(
+                (item["url"] for item in items if item.get("is_cover") and item.get("media_type") == "image"), ""
+            )
+            product.cover_image_url = cover
+            product.save(update_fields=["cover_image_url"])
         if "changelog" in validated_data:
             items = validated_data.pop("changelog")
             product.changelog.all().delete()

@@ -75,7 +75,10 @@ class Product(TimeStamped):
     default_trial_days = models.PositiveIntegerField(default=30)
 
     # ── Media / meta ──
-    cover_image_url = models.URLField(blank=True)
+    # Synced from whichever ProductMedia item is marked "cover" (see
+    # AdminProductDetailSerializer._sync_nested) — same 1000-char ceiling as
+    # ProductMedia.url, for the same reason: presigned R2 URLs run long.
+    cover_image_url = models.URLField(max_length=1000, blank=True)
     version = models.CharField(max_length=30, default="1.0.0")
     released_at = models.DateField(null=True, blank=True)
 

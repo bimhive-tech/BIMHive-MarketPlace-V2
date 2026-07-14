@@ -157,6 +157,35 @@ def test_media_accepts_a_long_presigned_url(category, partner):
     assert updated.media.first().url == long_url
 
 
+def test_saving_media_syncs_cover_image_url(category, partner):
+    # cover_image_url drives ProductCard / the admin product list thumbnail —
+    # it isn't admin-editable directly, it's derived from whichever gallery
+    # item is marked "cover" so the two can never disagree.
+    product = Product.objects.create(
+        name="Cover Sync", short_description="s", description="d", category=category, partner=partner,
+    )
+    serializer = AdminProductDetailSerializer(
+        product,
+        data={
+            "media": [
+                {"media_type": "video", "url": "https://example.com/clip.mp4", "caption": "", "is_cover": False, "sort_order": 0},
+                {"media_type": "image", "url": "https://example.com/cover.png", "caption": "", "is_cover": True, "sort_order": 1},
+            ]
+        },
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    updated = serializer.save()
+    assert updated.cover_image_url == "https://example.com/cover.png"
+
+    # Removing the cover item on a later save clears it rather than leaving a
+    # stale URL pointing at media that's no longer attached to the product.
+    serializer2 = AdminProductDetailSerializer(product, data={"media": []}, partial=True)
+    serializer2.is_valid(raise_exception=True)
+    updated2 = serializer2.save()
+    assert updated2.cover_image_url == ""
+
+
 def test_nested_lists_replace_all_on_update(category, partner):
     product = Product.objects.create(
         name="Nested", short_description="s", description="d", category=category, partner=partner,

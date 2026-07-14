@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 
 import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
@@ -34,7 +35,11 @@ export default function CartPage() {
             {items.map((item) => (
               <li key={item.key} className={styles.item}>
                 <Link href={`/products/${item.slug}`} className={styles.thumb}>
-                  <WireframeThumb seed={item.slug} />
+                  {item.coverImageUrl ? (
+                    <Image src={item.coverImageUrl} alt="" fill sizes="80px" className={styles.thumbImg} />
+                  ) : (
+                    <WireframeThumb seed={item.slug} />
+                  )}
                 </Link>
 
                 <div className={styles.itemInfo}>
