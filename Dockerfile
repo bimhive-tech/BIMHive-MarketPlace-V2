@@ -15,6 +15,14 @@ COPY web/ ./
 # at runtime; it's not read during the build.
 ARG NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+# next.config.mjs reads these to allow-list R2 as an image host for next/image.
+# Standalone output freezes the resolved config at build time — Railway setting
+# these as runtime Variables doesn't reach this isolated build stage on its own,
+# they have to be threaded through explicitly, same as NEXT_PUBLIC_SITE_URL above.
+ARG R2_ENDPOINT_URL
+ARG R2_PUBLIC_BASE_URL
+ENV R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+ENV R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL}
 RUN npm run build
 
 # ── Stage 2: install Python deps ──
