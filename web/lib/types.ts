@@ -139,6 +139,7 @@ export interface RatingBreakdownRow {
 
 export interface ProductDetail extends Omit<ProductCard, "category"> {
   description: string;
+  is_free: boolean;
   team_price: string | null;
   team_seats: number;
   default_trial_days: number;

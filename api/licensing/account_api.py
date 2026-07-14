@@ -4,9 +4,12 @@ Customer-facing account API — "my orders / my licenses / my downloads"
 the read side of the same ProductPurchase/MachineLicense data the admin API manages.
 """
 from rest_framework import generics, serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from licensing.models import MachineLicense, ProductPurchase
+from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
 
 
 class AccountOrderSerializer(serializers.ModelSerializer):
@@ -126,3 +129,45 @@ class AccountDownloadListView(generics.ListAPIView):
             .prefetch_related("product__product__files")
             .order_by("-paid_at")
         )
+
+
+class ClaimFreeProductView(APIView):
+    """
+    The only way to acquire a product today without real checkout (which isn't
+    built yet — see /checkout). Free products (price <= 0) can be claimed
+    directly: this creates a real, PAID ProductPurchase at $0, so the exact same
+    entitlement path (Licenses/Downloads, and eventually plugin activation) a
+    paid checkout would produce is exercised end to end, not a special-cased
+    shortcut.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from catalog.models import Product
+
+        slug = request.data.get("slug")
+        if not slug:
+            raise ValidationError({"slug": "Required."})
+
+        product = Product.objects.published().filter(slug=slug).first()
+        if not product:
+            raise ValidationError({"slug": "No published product with that slug."})
+        if not product.is_free:
+            raise ValidationError({"slug": "This product isn't free — checkout isn't available yet."})
+
+        sku = LicensedProduct.objects.filter(product=product).first()
+        if not sku:
+            raise ValidationError({"slug": "This product isn't ready to claim yet — try again shortly."})
+
+        purchase, created = ProductPurchase.objects.get_or_create(
+            user=request.user,
+            product=sku,
+            defaults={
+                "payment_status": ProductPurchase.PaymentStatus.PAID,
+                "amount": product.price,
+                "currency": product.currency,
+            },
+        )
+        status_code = 201 if created else 200
+        return Response(AccountOrderSerializer(purchase).data, status=status_code)

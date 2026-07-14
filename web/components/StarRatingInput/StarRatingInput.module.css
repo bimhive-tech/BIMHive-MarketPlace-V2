@@ -1,0 +1,22 @@
+.stars {
+  display: inline-flex;
+  gap: var(--space-1);
+  color: var(--gold-500);
+}
+
+.star {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.star:hover {
+  transform: scale(1.12);
+}
+
+.star:focus-visible {
+  outline: 2px solid var(--gold-600);
+  outline-offset: 2px;
+}

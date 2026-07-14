@@ -26,16 +26,16 @@ export function getProducts(params?: { category?: string; type?: string }) {
     Object.entries(params ?? {}).filter(([, v]) => v),
   ) as Record<string, string>;
   const qs = new URLSearchParams(clean).toString();
-  return getJSON<ProductCard[]>(`/api/products/${qs ? `?${qs}` : ""}`);
+  return getJSON<ProductCard[]>(`/api/products${qs ? `?${qs}` : ""}`);
 }
 
 export function getCategories() {
-  return getJSON<Category[]>("/api/categories/");
+  return getJSON<Category[]>("/api/categories");
 }
 
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
   try {
-    return await getJSON<ProductDetail>(`/api/products/${slug}/`);
+    return await getJSON<ProductDetail>(`/api/products/${slug}`);
   } catch {
     return null;
   }

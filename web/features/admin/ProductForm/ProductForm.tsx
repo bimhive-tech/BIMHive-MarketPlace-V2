@@ -37,6 +37,13 @@ const TABS: { id: TabId; label: string }[] = [
 const MAX_SHORT = 150;
 const MAX_DESC = 5000;
 
+const SAVE_ACTION_LABEL: Record<string, string> = {
+  draft: "Save Draft",
+  pending: "Submit for Review",
+  published: "Publish",
+  rejected: "Save",
+};
+
 const EMPTY_FORM = {
   name: "",
   short_description: "",
@@ -222,8 +229,12 @@ export function ProductForm({ productId }: { productId?: number }) {
           <button className={styles.secondaryBtn} disabled={saving} onClick={() => submit("draft")}>
             Save as Draft
           </button>
-          <button className={styles.primaryBtn} disabled={saving} onClick={() => submit("pending")}>
-            {saving ? "Saving…" : "Submit for Review"}
+          {/* Respects whatever's picked in the Status dropdown (Publishing panel) —
+              previously this always forced "pending" regardless of that selection,
+              so choosing "Published" there had no effect and products could never
+              actually go live from this form. */}
+          <button className={styles.primaryBtn} disabled={saving} onClick={() => submit(form.status)}>
+            {saving ? "Saving…" : SAVE_ACTION_LABEL[form.status] ?? "Save"}
           </button>
         </div>
       </header>

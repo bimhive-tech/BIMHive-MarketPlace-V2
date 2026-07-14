@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon/Icon";
 import { KeyFeatures } from "@/features/product/KeyFeatures/KeyFeatures";
 import { RatingsSummary } from "@/features/product/RatingsSummary/RatingsSummary";
 import { WhatsNew } from "@/features/product/WhatsNew/WhatsNew";
+import { WriteReviewForm } from "@/features/product/WriteReviewForm/WriteReviewForm";
 import { StarRating } from "@/components/StarRating/StarRating";
 import type { ProductDetail } from "@/lib/types";
 
@@ -74,6 +75,12 @@ function OverviewPanel({ product }: { product: ProductDetail }) {
 }
 
 function ReviewsPanel({ product }: { product: ProductDetail }) {
+  // Seeded from the server-rendered product, then a just-posted review is
+  // prepended locally — product.reviews comes from a 60s-cached fetch, so
+  // waiting on that to catch up would leave a fresh review invisible for up
+  // to a minute even though it saved successfully.
+  const [reviews, setReviews] = useState(product.reviews);
+
   return (
     <div className={styles.reviews}>
       <RatingsSummary
@@ -81,8 +88,9 @@ function ReviewsPanel({ product }: { product: ProductDetail }) {
         count={product.rating_count}
         breakdown={product.rating_breakdown}
       />
+      <WriteReviewForm productSlug={product.slug} onPosted={(review) => setReviews((r) => [review, ...r])} />
       <ul className={styles.reviewList}>
-        {product.reviews.map((review) => (
+        {reviews.map((review) => (
           <li key={review.id} className={styles.review}>
             <div className={styles.reviewHead}>
               <span className={styles.reviewAuthor}>{review.author_name || "Verified user"}</span>

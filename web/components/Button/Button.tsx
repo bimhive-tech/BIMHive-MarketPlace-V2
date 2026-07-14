@@ -18,6 +18,7 @@ interface ButtonAsButton extends BaseProps {
   href?: undefined;
   onClick?: () => void;
   type?: "button" | "submit";
+  disabled?: boolean;
 }
 
 interface ButtonAsLink extends BaseProps {
@@ -49,9 +50,9 @@ export function Button(props: ButtonProps) {
       </Link>
     );
   }
-  const { onClick, type = "button" } = props as ButtonAsButton;
+  const { onClick, type = "button", disabled } = props as ButtonAsButton;
   return (
-    <button className={cls} onClick={onClick} type={type}>
+    <button className={cls} onClick={onClick} type={type} disabled={disabled}>
       {children}
     </button>
   );

@@ -110,6 +110,22 @@ class ReviewSerializer(serializers.ModelSerializer):
         fields = ["id", "author_name", "rating", "title", "body", "is_verified_purchase", "created_at"]
 
 
+class ReviewCreateSerializer(serializers.ModelSerializer):
+    """Customer-facing write shape — only what a reviewer actually types. product,
+    author, author_name, and is_verified_purchase are all set server-side in the
+    view, never trusted from the client."""
+
+    class Meta:
+        model = Review
+        fields = ["id", "rating", "title", "body", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_rating(self, value):
+        if not 1 <= value <= 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+
+
 class ProductCardSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="category.name", read_only=True)
     category_slug = serializers.CharField(source="category.slug", read_only=True)
@@ -135,13 +151,14 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     documentation = DocumentationSerializer(read_only=True)
     reviews = ReviewSerializer(many=True, read_only=True)
     price_label = serializers.CharField(read_only=True)
+    is_free = serializers.BooleanField(read_only=True)
     rating_breakdown = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             "id", "name", "slug", "type", "short_description", "description",
-            "price", "team_price", "team_seats", "currency", "price_label",
+            "price", "team_price", "team_seats", "currency", "price_label", "is_free",
             "default_trial_days", "cover_image_url", "version", "released_at",
             "rating_average", "rating_count", "download_count", "rating_breakdown",
             "seo_title", "seo_description",

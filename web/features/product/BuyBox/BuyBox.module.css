@@ -91,6 +91,24 @@
   gap: var(--space-3);
 }
 
+.claimedNote {
+  padding: var(--space-3) var(--space-4);
+  background: var(--success-bg);
+  color: var(--success-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  text-align: center;
+}
+
+.claimError {
+  padding: var(--space-3) var(--space-4);
+  background: var(--error-bg);
+  color: var(--error-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+}
+
 .assurances {
   display: flex;
   flex-direction: column;

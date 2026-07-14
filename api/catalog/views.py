@@ -5,7 +5,8 @@ authenticated admin API endpoints).
 """
 from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import action, api_view
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from catalog.models import Category, Collection, Product
@@ -15,6 +16,8 @@ from catalog.serializers import (
     CollectionSerializer,
     ProductCardSerializer,
     ProductDetailSerializer,
+    ReviewCreateSerializer,
+    ReviewSerializer,
 )
 from reviews.models import Review
 
@@ -42,7 +45,7 @@ def _collections_with_counts(qs=None):
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    """`/api/products/` (list) and `/api/products/<slug>/` (detail)."""
+    """`/api/products` (list) and `/api/products/<slug>` (detail)."""
 
     lookup_field = "slug"
 
@@ -67,7 +70,33 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     def get_serializer_class(self):
+        if self.action == "reviews":
+            return ReviewCreateSerializer
         return ProductDetailSerializer if self.action == "retrieve" else ProductCardSerializer
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def reviews(self, request, slug=None):
+        from licensing.models import ProductPurchase
+
+        product = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        is_verified = ProductPurchase.objects.filter(
+            user=request.user,
+            product__product=product,
+            payment_status=ProductPurchase.PaymentStatus.PAID,
+        ).exists()
+        review = serializer.save(
+            product=product,
+            author=request.user,
+            author_name=request.user.get_full_name() or request.user.username,
+            is_verified_purchase=is_verified,
+        )
+        # Full shape (not the stripped-down input serializer) so the client can
+        # render this review immediately without waiting on the product detail
+        # page's fetch cache to revalidate.
+        return Response(ReviewSerializer(review).data, status=201)
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):

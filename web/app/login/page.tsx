@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { AuthShell } from "@/features/auth/AuthShell/AuthShell";
 import { SignInForm } from "@/features/auth/AuthForm/SignInForm";
@@ -17,7 +18,11 @@ export default function LoginPage() {
         </>
       }
     >
-      <SignInForm />
+      {/* SignInForm reads ?next= via useSearchParams, which requires a Suspense
+          boundary or Next can't statically prerender this page at build time. */}
+      <Suspense fallback={null}>
+        <SignInForm />
+      </Suspense>
     </AuthShell>
   );
 }
