@@ -37,7 +37,7 @@ export function LicensesList() {
       <EmptyState
         icon="library"
         title="No licenses yet"
-        text="Your license keys, seats, and renewal dates will appear here after your first purchase."
+        text="Your license keys and renewal dates will appear here after your first purchase."
         actionLabel="Browse the marketplace"
         actionHref="/catalog"
       />
@@ -59,9 +59,6 @@ export function LicensesList() {
           <div className={styles.meta}>
             <span>
               <Icon name="lock" size={14} /> {license.license_key || "No key issued"}
-            </span>
-            <span>
-              <Icon name="users" size={14} /> {license.seats} seat{license.seats === 1 ? "" : "s"}
             </span>
             <span>Purchased {formatDate(license.paid_at ?? license.requested_at)}</span>
           </div>

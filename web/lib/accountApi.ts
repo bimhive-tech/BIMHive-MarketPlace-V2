@@ -66,7 +66,6 @@ export interface AccountLicense {
   product_code: string;
   payment_status: string;
   license_key: string;
-  seats: number;
   requested_at: string;
   paid_at: string | null;
   machines: AccountMachine[];

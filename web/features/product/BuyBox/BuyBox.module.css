@@ -15,74 +15,57 @@
   color: var(--color-price);
 }
 
-.tierLabel {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--color-heading);
-}
-
-.tiers {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-/* Selectable bordered rows (style.md forms pattern). */
-.tier {
+/* Replaces the "Add to Cart" button once the product is already in the cart. */
+.qtyStepper {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: space-between;
   width: 100%;
-  padding: var(--space-4);
-  border: 1.5px solid var(--color-border);
+  padding: var(--space-2);
+  border: 1.5px solid var(--color-primary);
   border-radius: var(--radius-md);
-  text-align: left;
-  transition: border-color var(--dur-fast) var(--ease-standard),
-    background-color var(--dur-fast) var(--ease-standard);
-}
-
-.tier:hover {
-  border-color: var(--gold-400);
-}
-
-.tierActive {
-  border-color: var(--gold-600);
   background: var(--gold-100);
+  animation: qtyIn var(--dur-base) var(--ease-out);
 }
 
-.radio {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-pill);
-  border: 2px solid var(--line-300);
-  flex-shrink: 0;
-  position: relative;
-  transition: border-color var(--dur-fast) var(--ease-standard);
+@keyframes qtyIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-.tierActive .radio {
-  border-color: var(--gold-600);
+@media (prefers-reduced-motion: reduce) {
+  .qtyStepper {
+    animation: none;
+  }
 }
 
-.tierActive .radio::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--gold-600);
-}
-
-.tierName {
-  flex: 1;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-heading);
-}
-
-.tierPrice {
-  font-size: var(--fs-sm);
+.qtyBtn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-lg);
   font-weight: var(--fw-semibold);
+  color: var(--gold-700);
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.qtyBtn:hover {
+  background: var(--surface-0);
+}
+
+.qtyValue {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
   color: var(--color-heading);
+  min-width: 2ch;
+  text-align: center;
 }
 
 .actions {

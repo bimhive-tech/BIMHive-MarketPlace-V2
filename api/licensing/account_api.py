@@ -53,14 +53,13 @@ class AccountMachineSerializer(serializers.ModelSerializer):
 class AccountLicenseSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
     product_code = serializers.CharField(source="product.code", read_only=True)
-    seats = serializers.IntegerField(source="product.product.team_seats", read_only=True, default=1)
     machines = AccountMachineSerializer(source="machine_licenses", many=True, read_only=True)
 
     class Meta:
         model = ProductPurchase
         fields = [
             "id", "product_name", "product_code", "payment_status", "license_key",
-            "seats", "requested_at", "paid_at", "machines",
+            "requested_at", "paid_at", "machines",
         ]
 
 

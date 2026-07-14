@@ -158,7 +158,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             "id", "name", "slug", "type", "short_description", "description",
-            "price", "team_price", "team_seats", "currency", "price_label", "is_free",
+            "price", "currency", "price_label", "is_free",
             "default_trial_days", "cover_image_url", "version", "released_at",
             "rating_average", "rating_count", "download_count", "rating_breakdown",
             "seo_title", "seo_description",

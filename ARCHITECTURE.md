@@ -56,7 +56,7 @@ Django apps under `/api`:
 |---|---|
 | `catalog` | **`Product`** (the one sellable entity) + `Category`, `Collection`, `Tag`, `Partner`, `ProductMedia`, `KeyFeature`, `ChangelogEntry`, `CompatibilityEntry`, `ProductFile` (multi-variant, keyed by Revit version), `Documentation` + `DocSection`. |
 | `licensing` | `MachineLicense`, `LicenseEvent`, and the activation/products API. Points at `catalog.Product` via `product_code`. |
-| `orders` | `Order`, `OrderItem`, `Payment`, license tiers (single-user / team seats), Stripe + PayPal webhooks. Fulfillment only after confirmed payment. |
+| `orders` | `Order`, `OrderItem`, `Payment`, Stripe + PayPal webhooks. Fulfillment only after confirmed payment. |
 | `accounts` | Custom `User`, `Profile`, roles/permissions, addresses, payment methods, sessions. |
 | `reviews` | Product ratings & reviews. |
 | `support` | Support tickets. |

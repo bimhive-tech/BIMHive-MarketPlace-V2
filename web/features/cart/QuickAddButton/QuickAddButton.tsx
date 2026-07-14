@@ -15,7 +15,7 @@ interface QuickAddButtonProps {
   currency: string;
 }
 
-/** Small circular "add to cart" button used on product cards — adds the Single User tier. */
+/** Small circular "add to cart" button used on product cards. */
 export function QuickAddButton({ productId, slug, name, price, currency }: QuickAddButtonProps) {
   const { addItem } = useCart();
   const [added, setAdded] = useState(false);
@@ -27,8 +27,6 @@ export function QuickAddButton({ productId, slug, name, price, currency }: Quick
       productId,
       slug,
       name,
-      tier: "single",
-      tierLabel: "Single User",
       unitPrice: price,
       currency,
     });

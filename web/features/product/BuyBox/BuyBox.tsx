@@ -93,71 +93,53 @@ function FreeBuyBox({ product }: { product: ProductDetail }) {
 
 function PaidBuyBox({ product }: { product: ProductDetail }) {
   const router = useRouter();
-  const { addItem } = useCart();
-  const hasTeam = product.team_price != null && Number(product.team_price) > 0;
-  const [tier, setTier] = useState<"single" | "team">("single");
-  const [added, setAdded] = useState(false);
-  const activePrice = tier === "team" && hasTeam ? product.team_price! : product.price;
+  const { items, addItem, setQty } = useCart();
+  const cartItem = items.find((i) => i.productId === product.id);
 
-  function cartItem() {
-    return {
+  function handleAddToCart() {
+    addItem({
       productId: product.id,
       slug: product.slug,
       name: product.name,
-      tier,
-      tierLabel: tier === "team" ? `Team (${product.team_seats} Seats)` : "Single User",
-      unitPrice: Number(activePrice),
+      unitPrice: Number(product.price),
       currency: product.currency,
-    };
-  }
-
-  function handleAddToCart() {
-    addItem(cartItem());
-    setAdded(true);
-    window.setTimeout(() => setAdded(false), 1600);
+    });
   }
 
   function handleBuyNow() {
-    addItem(cartItem());
+    if (!cartItem) handleAddToCart();
     router.push("/cart");
   }
 
   return (
     <aside className={styles.box}>
-      <div className={styles.price}>{formatPrice(activePrice, product.currency)}</div>
-
-      <div className={styles.tierLabel}>License Type</div>
-      <div className={styles.tiers} role="radiogroup" aria-label="License type">
-        <button
-          role="radio"
-          aria-checked={tier === "single"}
-          className={`${styles.tier} ${tier === "single" ? styles.tierActive : ""}`}
-          onClick={() => setTier("single")}
-        >
-          <span className={styles.radio} aria-hidden="true" />
-          <span className={styles.tierName}>Single User</span>
-          <span className={styles.tierPrice}>{formatPrice(product.price, product.currency)}</span>
-        </button>
-
-        {hasTeam && (
-          <button
-            role="radio"
-            aria-checked={tier === "team"}
-            className={`${styles.tier} ${tier === "team" ? styles.tierActive : ""}`}
-            onClick={() => setTier("team")}
-          >
-            <span className={styles.radio} aria-hidden="true" />
-            <span className={styles.tierName}>Team ({product.team_seats} Seats)</span>
-            <span className={styles.tierPrice}>{formatPrice(product.team_price!, product.currency)}</span>
-          </button>
-        )}
-      </div>
+      <div className={styles.price}>{formatPrice(product.price, product.currency)}</div>
 
       <div className={styles.actions}>
-        <Button size="lg" fullWidth onClick={handleAddToCart}>
-          <Icon name={added ? "check" : "cart"} size={18} />
-          {added ? "Added to Cart" : "Add to Cart"}
-        </Button>
+        {cartItem ? (
+          <div className={styles.qtyStepper} role="group" aria-label={`${product.name} quantity in cart`}>
+            <button
+              className={styles.qtyBtn}
+              aria-label="Decrease quantity"
+              onClick={() => setQty(cartItem.key, cartItem.qty - 1)}
+            >
+              −
+            </button>
+            <span className={styles.qtyValue}>{cartItem.qty}</span>
+            <button
+              className={styles.qtyBtn}
+              aria-label="Increase quantity"
+              onClick={() => setQty(cartItem.key, cartItem.qty + 1)}
+            >
+              +
+            </button>
+          </div>
+        ) : (
+          <Button size="lg" fullWidth onClick={handleAddToCart}>
+            <Icon name="cart" size={18} />
+            Add to Cart
+          </Button>
+        )}
         <Button size="lg" variant="secondary" fullWidth onClick={handleBuyNow}>
           Buy Now
         </Button>

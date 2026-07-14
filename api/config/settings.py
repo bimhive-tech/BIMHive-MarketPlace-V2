@@ -200,19 +200,22 @@ R2_SIGNED_URL_TTL = env.int("R2_SIGNED_URL_TTL", default=300)
 # (the actual plugin installers customers download) must live in object storage or
 # they vanish on the next deploy.
 if R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME:
+    _r2_common_options = {
+        "bucket_name": R2_BUCKET_NAME,
+        "region_name": R2_REGION,
+        "endpoint_url": R2_ENDPOINT_URL,
+        "access_key": R2_ACCESS_KEY_ID,
+        "secret_key": R2_SECRET_ACCESS_KEY,
+        "signature_version": "s3v4",
+        "addressing_style": "path",
+        "default_acl": None,
+        "file_overwrite": False,
+    }
     STORAGES = {
         "default": {
             "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
             "OPTIONS": {
-                "bucket_name": R2_BUCKET_NAME,
-                "region_name": R2_REGION,
-                "endpoint_url": R2_ENDPOINT_URL,
-                "access_key": R2_ACCESS_KEY_ID,
-                "secret_key": R2_SECRET_ACCESS_KEY,
-                "signature_version": "s3v4",
-                "addressing_style": "path",
-                "default_acl": None,
-                "file_overwrite": False,
+                **_r2_common_options,
                 # Every download link is presigned + short-lived; nothing is public
                 # by default, since entitlement is checked in the account API, not
                 # by hiding the bucket.
@@ -220,11 +223,30 @@ if R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME:
                 "querystring_expire": R2_SIGNED_URL_TTL,
             },
         },
+        # Product gallery images/video: these render in plain <img>/<video> tags on
+        # the public storefront and need to stay loadable indefinitely, unlike the
+        # entitlement-gated ProductFile downloads above. If R2_PUBLIC_BASE_URL is
+        # set (a public bucket dev URL or custom domain from the Cloudflare R2
+        # dashboard), URLs are truly permanent. Without it, fall back to a 7-day
+        # presigned link — R2's own SigV4 ceiling — so uploads still work today;
+        # set R2_PUBLIC_BASE_URL once the bucket's public access is turned on.
+        "public_media": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                **_r2_common_options,
+                **(
+                    {"custom_domain": urlparse(R2_PUBLIC_BASE_URL).netloc, "querystring_auth": False}
+                    if R2_PUBLIC_BASE_URL
+                    else {"querystring_auth": True, "querystring_expire": 604800}
+                ),
+            },
+        },
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
     }
 else:
     STORAGES = {
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "public_media": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
     }
 

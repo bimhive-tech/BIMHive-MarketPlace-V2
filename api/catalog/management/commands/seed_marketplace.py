@@ -53,7 +53,7 @@ COLLECTIONS = [
     ("Data & Analytics", "chart", "Turn your BIM models into actionable insight."),
 ]
 
-# Each product: name, type, category, partner, price, team_price, short, desc, version,
+# Each product: name, type, category, partner, price, short, desc, version,
 # released, rating_avg, rating_count, downloads, tags, features, changelog,
 # compatibility, collection names.
 PRODUCTS = [
@@ -63,7 +63,6 @@ PRODUCTS = [
         "category": "Revit Plugins",
         "partner": "BIMHIVE",
         "price": Decimal("49.00"),
-        "team_price": Decimal("199.00"),
         "short": "Productivity plugin for Revit",
         "description": (
             "BIM OneClick streamlines your Revit workflow by automating essential tasks that "
@@ -104,7 +103,6 @@ PRODUCTS = [
         "category": "Automation Tools",
         "partner": "Arch-Tools",
         "price": Decimal("59.00"),
-        "team_price": Decimal("239.00"),
         "short": "Automate sheet creation and organization",
         "description": (
             "Sheet Manager Pro takes the tedium out of sheet set-up. Batch-create, rename, and "
@@ -135,7 +133,6 @@ PRODUCTS = [
         "category": "Dynamo Scripts",
         "partner": "DynamoLab",
         "price": Decimal("39.00"),
-        "team_price": Decimal("159.00"),
         "short": "Essential nodes for advanced automation",
         "description": (
             "A curated package of Dynamo nodes for advanced automation—geometry, data, and "
@@ -166,7 +163,6 @@ PRODUCTS = [
         "category": "Other Tools",
         "partner": "DataBuild",
         "price": Decimal("69.00"),
-        "team_price": Decimal("279.00"),
         "short": "Real-time insights from your BIM model",
         "description": (
             "Connect your Revit model to live dashboards. Track quantities, completeness, and "
@@ -197,7 +193,6 @@ PRODUCTS = [
         "category": "Revit Plugins",
         "partner": "BIMHIVE",
         "price": Decimal("29.00"),
-        "team_price": Decimal("119.00"),
         "short": "Automatic numbering for Revit elements",
         "description": (
             "Number doors, rooms, grids, and any family instances automatically, following rules "
@@ -225,7 +220,6 @@ PRODUCTS = [
         "category": "BIM Libraries",
         "partner": "BIM Solutions",
         "price": Decimal("19.00"),
-        "team_price": Decimal("79.00"),
         "short": "Batch load families into Revit projects",
         "description": (
             "Load and manage families in bulk. Point Family Loader at a folder and it places, "
@@ -298,7 +292,6 @@ class Command(BaseCommand):
                 "short_description": spec["short"],
                 "description": spec["description"],
                 "price": spec["price"],
-                "team_price": spec["team_price"],
                 "currency": "USD",
                 "version": spec["version"],
                 "released_at": spec["released"],

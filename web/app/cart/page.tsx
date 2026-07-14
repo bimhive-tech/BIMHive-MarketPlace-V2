@@ -41,7 +41,6 @@ export default function CartPage() {
                   <Link href={`/products/${item.slug}`} className={styles.itemName}>
                     {item.name}
                   </Link>
-                  <span className={styles.itemTier}>License: {item.tierLabel}</span>
                   <button className={styles.remove} onClick={() => removeItem(item.key)}>
                     <Icon name="trash" size={14} />
                     Remove

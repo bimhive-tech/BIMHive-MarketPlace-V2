@@ -59,11 +59,6 @@
   color: var(--gold-700);
 }
 
-.itemTier {
-  font-size: var(--fs-xs);
-  color: var(--color-muted);
-}
-
 .remove {
   display: inline-flex;
   align-items: center;

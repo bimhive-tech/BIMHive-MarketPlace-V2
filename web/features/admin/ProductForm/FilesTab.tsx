@@ -11,6 +11,7 @@ interface FilesTabProps {
   productId?: number;
   files: AdminProductFile[];
   setFiles: (updater: (list: AdminProductFile[]) => AdminProductFile[]) => void;
+  ensureSaved: () => Promise<number | null>;
 }
 
 function formatSize(bytes: number): string {
@@ -19,20 +20,12 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FilesTab({ productId, files, setFiles }: FilesTabProps) {
+export function FilesTab({ productId, files, setFiles, ensureSaved }: FilesTabProps) {
   const [revitVersion, setRevitVersion] = useState("2025");
   const [versionLabel, setVersionLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
-
-  if (!productId) {
-    return (
-      <div className={styles.panel}>
-        <p className={styles.hint}>Save the product first — file uploads attach to a saved product.</p>
-      </div>
-    );
-  }
 
   async function onUpload() {
     setError("");
@@ -42,12 +35,14 @@ export function FilesTab({ productId, files, setFiles }: FilesTabProps) {
     }
     setUploading(true);
     try {
+      const id = productId ?? (await ensureSaved());
+      if (!id) return;
       const form = new FormData();
       form.append("revit_version", revitVersion);
       form.append("version_label", versionLabel.trim());
       form.append("is_current", "true");
       form.append("file", file);
-      const created = await uploadProductFile(productId!, form);
+      const created = await uploadProductFile(id, form);
       setFiles((list) => [created, ...list]);
       setVersionLabel("");
       setFile(null);

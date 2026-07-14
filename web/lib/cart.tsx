@@ -10,12 +10,10 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 const STORAGE_KEY = "bimhive.cart.v1";
 
 export interface CartItem {
-  key: string; // `${productId}-${tier}`
+  key: string; // String(productId) — one line item per product
   productId: number;
   slug: string;
   name: string;
-  tier: "single" | "team";
-  tierLabel: string;
   unitPrice: number;
   currency: string;
   qty: number;
@@ -59,7 +57,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items, hydrated]);
 
   function addItem(item: Omit<CartItem, "qty" | "key">, qty = 1) {
-    const key = `${item.productId}-${item.tier}`;
+    const key = String(item.productId);
     setItems((prev) => {
       const existing = prev.find((i) => i.key === key);
       if (existing) {

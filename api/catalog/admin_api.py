@@ -109,24 +109,44 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             "id", "name", "slug", "product_code", "short_description", "description", "type",
-            "category", "partner", "tags", "price", "team_price", "team_seats",
+            "category", "partner", "tags", "price", "download_count",
             "default_trial_days", "status", "visibility", "is_featured", "cover_image_url",
             "version", "released_at", "seo_title", "seo_description", "features", "media",
             "changelog", "compatibility", "files", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "slug", "created_at", "updated_at"]
+        read_only_fields = ["id", "slug", "download_count", "created_at", "updated_at"]
 
     def validate_product_code(self, value):
         value = (value or "").strip()
         instance = self.instance
-        if instance and instance.status == ProductStatus.PUBLISHED and instance.product_code:
+        # Gated on downloads, not publish status: a published-but-never-downloaded
+        # product genuinely has no installed copies to break yet, so there's no
+        # activation risk in renaming its code.
+        if instance and instance.download_count > 0 and instance.product_code:
             if value and value != instance.product_code:
                 raise ValidationError(
-                    "Product code can't be changed once the product is live — it would break "
-                    "activation for every installed copy in the field."
+                    "Product code can't be changed once the product has real downloads — it "
+                    "would break activation for every installed copy in the field."
                 )
             return instance.product_code
         return value
+
+    def validate(self, attrs):
+        # Only when this request is actually (re)asserting Published — an unrelated
+        # partial update (e.g. just fixing a typo) on an already-published product
+        # must not get blocked by this, only an explicit attempt to publish.
+        if attrs.get("status") == ProductStatus.PUBLISHED:
+            # Files are managed on their own endpoint (see ProductFileListCreateView),
+            # not part of this payload, so what matters is what's already attached —
+            # on create() there's never anything attached yet, which is intentional:
+            # a brand-new product can't be published in the very same request that
+            # creates it, only after at least one file has actually been uploaded.
+            has_files = self.instance.files.exists() if self.instance else False
+            if not has_files:
+                raise ValidationError(
+                    {"status": "Upload at least one product file before publishing. Save as a draft first."}
+                )
+        return attrs
 
     @staticmethod
     def _ordered(model, product, items):
@@ -283,6 +303,37 @@ class AdminProductFileDetailView(generics.DestroyAPIView):
         if instance.storage_key and default_storage.exists(instance.storage_key):
             default_storage.delete(instance.storage_key)
         instance.delete()
+
+
+class AdminProductMediaUploadView(APIView):
+    """Real file upload for the Media & Previews tab — the client picks a file,
+    this stores it in R2's public-media bucket and hands back a permanent URL
+    plus the auto-detected media type, so nothing about it needs to be typed."""
+
+    permission_classes = [IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, product_id):
+        from django.core.files.storage import storages
+
+        if not Product.objects.filter(pk=product_id).exists():
+            raise ValidationError({"detail": "Product not found."})
+
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            raise ValidationError({"file": "A file is required."})
+
+        content_type = uploaded.content_type or ""
+        if content_type.startswith("video/"):
+            media_type = "video"
+        elif content_type.startswith("image/"):
+            media_type = "image"
+        else:
+            raise ValidationError({"file": "Only image or video files are supported."})
+
+        public_storage = storages["public_media"]
+        key = public_storage.save(f"product_media/{product_id}/{uploaded.name}", uploaded)
+        return Response({"url": public_storage.url(key), "media_type": media_type}, status=201)
 
 
 class AdminOptionsView(APIView):

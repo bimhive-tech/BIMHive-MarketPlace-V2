@@ -11,6 +11,7 @@ from catalog.admin_api import (
     AdminProductFileDetailView,
     AdminProductFileListCreateView,
     AdminProductListCreateView,
+    AdminProductMediaUploadView,
     AdminStatsView,
     AdminTagViewSet,
 )
@@ -42,6 +43,11 @@ urlpatterns = [
         "products/files/<int:pk>",
         AdminProductFileDetailView.as_view(),
         name="admin-product-file-detail",
+    ),
+    path(
+        "products/<int:product_id>/media-upload",
+        AdminProductMediaUploadView.as_view(),
+        name="admin-product-media-upload",
     ),
     path("", include(router.urls)),
 ]

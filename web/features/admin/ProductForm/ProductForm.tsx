@@ -53,10 +53,8 @@ const EMPTY_FORM = {
   partner: "",
   product_code: "",
   price: "0",
-  team_price: "",
-  team_seats: "5",
   default_trial_days: "30",
-  status: "draft",
+  status: "published",
   visibility: "public",
   is_featured: false,
   seo_title: "",
@@ -72,7 +70,11 @@ export function ProductForm({ productId }: { productId?: number }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(!isEdit);
-  const [wasPublished, setWasPublished] = useState(false);
+  const [downloadCount, setDownloadCount] = useState(0);
+  // Starts as the route's productId (edit page) and is filled in once an
+  // unsaved "add new" form silently auto-saves as a draft on first upload —
+  // see ensureSaved() below.
+  const [savedId, setSavedId] = useState<number | undefined>(productId);
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [tags, setTags] = useState<number[]>([]);
@@ -101,8 +103,6 @@ export function ProductForm({ productId }: { productId?: number }) {
           partner: String(p.partner),
           product_code: p.product_code,
           price: p.price,
-          team_price: p.team_price ?? "",
-          team_seats: String(p.team_seats),
           default_trial_days: String(p.default_trial_days),
           status: p.status,
           visibility: p.visibility,
@@ -116,7 +116,7 @@ export function ProductForm({ productId }: { productId?: number }) {
         setChangelog(p.changelog);
         setCompatibility(p.compatibility);
         setFiles(p.files);
-        setWasPublished(p.status === "published");
+        setDownloadCount(p.download_count);
         setLoaded(true);
       })
       .catch(() => setError("Could not load this product."));
@@ -144,8 +144,6 @@ export function ProductForm({ productId }: { productId?: number }) {
       partner: Number(form.partner),
       product_code: form.product_code.trim(),
       price: form.price || "0",
-      team_price: form.team_price ? form.team_price : null,
-      team_seats: Number(form.team_seats) || 5,
       default_trial_days: Number(form.default_trial_days) || 30,
       status,
       visibility: form.visibility,
@@ -174,8 +172,8 @@ export function ProductForm({ productId }: { productId?: number }) {
     }
     setSaving(true);
     try {
-      if (isEdit) {
-        await updateProduct(productId!, buildPayload(status));
+      if (savedId != null) {
+        await updateProduct(savedId, buildPayload(status));
       } else {
         const created = await createProduct(buildPayload(status));
         router.push(`/admin-portal/products/${created.id}/edit`);
@@ -192,13 +190,40 @@ export function ProductForm({ productId }: { productId?: number }) {
     }
   }
 
+  // Files/media uploads need a real product id to attach to. If the form
+  // hasn't been saved yet, silently create it as a draft (without navigating
+  // away, so in-progress edits and tab state survive) and reuse that id for
+  // every upload from then on.
+  async function ensureSaved(): Promise<number | null> {
+    if (savedId != null) return savedId;
+    if (!form.name.trim() || !form.short_description.trim() || !form.description.trim()) {
+      setError("Name, short description, and full description are required before uploading files.");
+      setTab("info");
+      return null;
+    }
+    if (!form.category || !form.partner) {
+      setError("Please choose a category and a partner before uploading files.");
+      setTab("info");
+      return null;
+    }
+    setError("");
+    try {
+      const created = await createProduct(buildPayload("draft"));
+      setSavedId(created.id);
+      return created.id;
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.detail : "Could not save the product.");
+      return null;
+    }
+  }
+
   async function onDelete() {
-    if (!productId) return;
+    if (!savedId) return;
     const confirmed = window.confirm(`Delete "${form.name}"? This cannot be undone.`);
     if (!confirmed) return;
     setDeleting(true);
     try {
-      await deleteProduct(productId);
+      await deleteProduct(savedId);
       router.push("/admin-portal/products");
       router.refresh();
     } catch {
@@ -221,7 +246,7 @@ export function ProductForm({ productId }: { productId?: number }) {
           </p>
         </div>
         <div className={styles.headActions}>
-          {isEdit && (
+          {savedId != null && (
             <button className={styles.deleteBtn} disabled={deleting} onClick={onDelete}>
               {deleting ? "Deleting…" : "Delete"}
             </button>
@@ -367,22 +392,24 @@ export function ProductForm({ productId }: { productId?: number }) {
             </div>
           )}
 
-          {tab === "media" && <MediaTab media={media} setMedia={setMedia} />}
+          {tab === "media" && (
+            <MediaTab media={media} setMedia={setMedia} productId={savedId} ensureSaved={ensureSaved} />
+          )}
 
           {tab === "pricing" && (
             <div className={styles.panel}>
               <label className={styles.label}>
-                Product Code {wasPublished && <Icon name="lock" size={14} />}
+                Product Code {downloadCount > 0 && <Icon name="lock" size={14} />}
                 <input
                   className={styles.input}
                   value={form.product_code}
-                  disabled={wasPublished}
+                  disabled={downloadCount > 0}
                   onChange={(e) => set("product_code", e.target.value)}
                   placeholder="Auto-generated from the name if left blank"
                 />
-                <span className={wasPublished ? styles.warnHint : styles.hint}>
-                  {wasPublished
-                    ? "Immutable — this product is live. Changing it would break activation for every installed copy in the field."
+                <span className={downloadCount > 0 ? styles.warnHint : styles.hint}>
+                  {downloadCount > 0
+                    ? "Immutable — this product has real downloads. Changing it would break activation for every installed copy in the field."
                     : "The code the desktop plugin sends to activate. Leave blank to auto-generate from the name."}
                 </span>
               </label>
@@ -398,16 +425,6 @@ export function ProductForm({ productId }: { productId?: number }) {
                   </select>
                 </label>
               </div>
-              <div className={styles.row}>
-                <label className={styles.label}>
-                  Team Price (optional)
-                  <input className={styles.input} type="number" min="0" step="0.01" value={form.team_price} onChange={(e) => set("team_price", e.target.value)} placeholder="e.g. 199.00" />
-                </label>
-                <label className={styles.label}>
-                  Team Seats
-                  <input className={styles.input} type="number" min="1" value={form.team_seats} onChange={(e) => set("team_seats", e.target.value)} />
-                </label>
-              </div>
               <label className={styles.label}>
                 Default Trial Days
                 <input className={styles.input} type="number" min="0" value={form.default_trial_days} onChange={(e) => set("default_trial_days", e.target.value)} />
@@ -417,7 +434,7 @@ export function ProductForm({ productId }: { productId?: number }) {
           )}
 
           {tab === "files" && (
-            <FilesTab productId={productId} files={files} setFiles={setFiles} />
+            <FilesTab productId={savedId} files={files} setFiles={setFiles} ensureSaved={ensureSaved} />
           )}
 
           {tab === "compatibility" && (
@@ -444,12 +461,15 @@ export function ProductForm({ productId }: { productId?: number }) {
             <label className={styles.label}>
               Status
               <select className={styles.input} value={form.status} onChange={(e) => set("status", e.target.value)}>
-                <option value="draft">Draft</option>
+                {/* Not manually selectable — only rendered so an existing draft's
+                    real status shows accurately instead of the browser silently
+                    falling back to the first option. */}
+                {form.status === "draft" && <option value="draft">Draft</option>}
                 <option value="pending">Pending Review</option>
                 <option value="published">Published</option>
                 <option value="rejected">Rejected</option>
               </select>
-              <span className={styles.hint}>Drafts are only visible to you and your team.</span>
+              <span className={styles.hint}>Use &quot;Save as Draft&quot; below to keep this private while you work.</span>
             </label>
             <p className={styles.label}>Visibility</p>
             <label className={`${styles.optionRow} ${form.visibility === "public" ? styles.optionActive : ""}`}>

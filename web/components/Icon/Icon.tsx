@@ -12,7 +12,8 @@ export type IconName =
   | "graduation-cap" | "plug" | "wrench" | "broom" | "eye" | "document"
   | "database" | "chart" | "share" | "hash" | "layers" | "refresh"
   | "windows" | "globe" | "revit" | "facebook" | "linkedin" | "twitter"
-  | "logout" | "trash" | "camera" | "plus" | "edit" | "more-horizontal" | "filter" | "x";
+  | "logout" | "trash" | "camera" | "plus" | "edit" | "more-horizontal" | "filter" | "x"
+  | "upload" | "video" | "image" | "grip-vertical";
 
 /** Each entry is the inner markup of a 24x24 viewBox, stroked. */
 const PATHS: Record<IconName, string> = {
@@ -66,6 +67,10 @@ const PATHS: Record<IconName, string> = {
   "more-horizontal": '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  upload: '<path d="M12 21V10m0 0-4 4m4-4 4 4"/><path d="M5 4h14"/>',
+  video: '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3z"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/>',
+  "grip-vertical": '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>',
 };
 
 interface IconProps {

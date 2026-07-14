@@ -139,8 +139,7 @@ export interface AdminProductDetail {
   partner: number;
   tags: number[];
   price: string;
-  team_price: string | null;
-  team_seats: number;
+  download_count: number;
   default_trial_days: number;
   status: string;
   visibility: string;
@@ -178,6 +177,16 @@ export const uploadProductFile = (productId: number, form: FormData) =>
   request<AdminProductFile>(`/api/admin/products/${productId}/files`, "POST", form, true);
 export const deleteProductFile = (fileId: number) =>
   request<void>(`/api/admin/products/files/${fileId}`, "DELETE");
+
+export interface UploadedMedia {
+  url: string;
+  media_type: "image" | "video";
+}
+export const uploadProductMedia = (productId: number, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<UploadedMedia>(`/api/admin/products/${productId}/media-upload`, "POST", form, true);
+};
 
 // ── Taxonomy: Categories / Tags / Partners / Collections ──
 export interface AdminCategory {
