@@ -25,6 +25,7 @@ const GROUPS: NavGroup[] = [
     heading: "Overview",
     items: [
       { label: "Dashboard", href: "/admin-portal", icon: "grid", ready: true },
+      { label: "Activity", href: "/admin-portal/activity", icon: "eye", ready: true },
       { label: "Analytics", href: "/admin-portal/analytics", icon: "chart" },
       { label: "Orders", href: "/admin-portal/orders", icon: "document", ready: true },
       { label: "Customers", href: "/admin-portal/customers", icon: "users", ready: true },

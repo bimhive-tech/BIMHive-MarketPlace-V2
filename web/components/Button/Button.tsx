@@ -23,6 +23,11 @@ interface ButtonAsButton extends BaseProps {
 
 interface ButtonAsLink extends BaseProps {
   href: string;
+  // Plain <a> instead of next/link — required for anything that isn't a Next
+  // page (e.g. a redirect-then-file-download endpoint): Link's client-side
+  // routing would try to soft-navigate to it as if it were a page and never
+  // let the browser follow the actual redirect/download.
+  external?: boolean;
 }
 
 type ButtonProps = ButtonAsButton | ButtonAsLink;
@@ -44,6 +49,13 @@ export function Button(props: ButtonProps) {
   const cls = classes(variant, size, fullWidth, className);
 
   if ("href" in props && props.href) {
+    if (props.external) {
+      return (
+        <a href={props.href} className={cls}>
+          {children}
+        </a>
+      );
+    }
     return (
       <Link href={props.href} className={cls}>
         {children}

@@ -9,6 +9,8 @@ from rest_framework.decorators import action, api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from activity.models import ActivityVerb
+from activity.services import log_activity
 from catalog.models import Category, Collection, Product
 from catalog.models.product import ProductStatus, ProductVisibility
 from catalog.serializers import (
@@ -93,6 +95,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             author_name=request.user.get_full_name() or request.user.username,
             is_verified_purchase=is_verified,
         )
+        log_activity(request.user, ActivityVerb.POSTED_REVIEW, target_label=product.name)
         # Full shape (not the stripped-down input serializer) so the client can
         # render this review immediately without waiting on the product detail
         # page's fetch cache to revalidate.

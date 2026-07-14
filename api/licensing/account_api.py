@@ -9,6 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from activity.models import ActivityVerb
+from activity.services import log_activity
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
 
 
@@ -97,8 +99,6 @@ class AccountDownloadSerializer(serializers.ModelSerializer):
         return catalog_product.cover_image_url if catalog_product else ""
 
     def get_files(self, obj):
-        from django.core.files.storage import default_storage
-
         catalog_product = obj.product.product
         if not catalog_product:
             return []
@@ -108,7 +108,12 @@ class AccountDownloadSerializer(serializers.ModelSerializer):
                 "revit_version": f.revit_version,
                 "version_label": f.version_label,
                 "is_current": f.is_current,
-                "download_url": default_storage.url(f.storage_key) if f.storage_key else "",
+                # Routed through our own redirect endpoint rather than a raw
+                # presigned URL: that's the only way an actual download (as
+                # opposed to just seeing the link) ever reaches Django to be
+                # logged — a link straight to R2 would never touch our backend
+                # again once the page has loaded.
+                "download_url": f"/api/account/downloads/{f.id}/get" if f.storage_key else "",
             }
             for f in catalog_product.files.all()
         ]
@@ -129,6 +134,45 @@ class AccountDownloadListView(generics.ListAPIView):
             .prefetch_related("product__product__files")
             .order_by("-paid_at")
         )
+
+
+class AccountDownloadFileView(APIView):
+    """Re-checks entitlement, logs the download, then redirects to a freshly
+    signed R2 URL. This is the only point in the download flow that Django
+    actually sees — everything after the redirect goes straight to R2."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, file_id):
+        from django.core.files.storage import default_storage
+        from django.db.models import F
+        from django.http import HttpResponseRedirect
+
+        from catalog.models import Product, ProductFile
+
+        file = ProductFile.objects.select_related("product").filter(pk=file_id).first()
+        if not file or not file.storage_key:
+            raise ValidationError({"detail": "File not found."})
+
+        owns_it = ProductPurchase.objects.filter(
+            user=request.user,
+            product__product=file.product,
+            payment_status=ProductPurchase.PaymentStatus.PAID,
+        ).exists()
+        if not owns_it:
+            raise ValidationError({"detail": "You don't have access to this file."})
+
+        log_activity(
+            request.user,
+            ActivityVerb.DOWNLOADED_FILE,
+            target_label=f"{file.product.name} — {file.version_label}",
+            metadata={"file_id": file.id, "revit_version": file.revit_version},
+        )
+        # The one real download counter in the app — every other product list/
+        # detail view already displays this field, it just never had anything
+        # incrementing it before this endpoint existed.
+        Product.objects.filter(pk=file.product_id).update(download_count=F("download_count") + 1)
+        return HttpResponseRedirect(default_storage.url(file.storage_key))
 
 
 class ClaimFreeProductView(APIView):
@@ -169,5 +213,7 @@ class ClaimFreeProductView(APIView):
                 "currency": product.currency,
             },
         )
+        if created:
+            log_activity(request.user, ActivityVerb.CLAIMED_FREE_PRODUCT, target_label=product.name)
         status_code = 201 if created else 200
         return Response(AccountOrderSerializer(purchase).data, status=status_code)

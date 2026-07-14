@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "catalog",
     "reviews",
     "licensing",
+    "activity",
 ]
 
 MIDDLEWARE = [

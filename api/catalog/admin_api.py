@@ -11,6 +11,8 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from activity.models import ActivityVerb
+from activity.services import log_activity
 from catalog.models import (
     Category,
     ChangelogEntry,
@@ -167,6 +169,11 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         if tags:
             product.tags.set(tags)
         self._sync_nested(product, nested)
+        # request is absent when this serializer is exercised directly (unit
+        # tests of the save/update logic itself) rather than through the
+        # admin view — nothing to attribute the action to in that case.
+        if request := self.context.get("request"):
+            log_activity(request.user, ActivityVerb.PRODUCT_CREATED, target_label=product.name)
         return product
 
     @transaction.atomic
@@ -178,6 +185,8 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         instance.save()
         if tags is not None:
             instance.tags.set(tags)
+        if request := self.context.get("request"):
+            log_activity(request.user, ActivityVerb.PRODUCT_UPDATED, target_label=instance.name)
         return instance
 
 
@@ -231,6 +240,10 @@ class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
         "tags", "features", "media", "changelog", "compatibility", "files"
     )
+
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, ActivityVerb.PRODUCT_DELETED, target_label=instance.name)
+        instance.delete()
 
 
 class AdminProductFileListCreateView(generics.ListCreateAPIView):

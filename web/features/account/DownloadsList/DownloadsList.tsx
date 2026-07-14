@@ -55,7 +55,7 @@ export function DownloadsList() {
                     {file.version_label}
                     {file.is_current && <span className={styles.current}>current</span>}
                   </span>
-                  <Button href={file.download_url} variant="secondary" size="md">
+                  <Button href={file.download_url} external variant="secondary" size="md">
                     <Icon name="download" size={14} /> Download
                   </Button>
                 </div>

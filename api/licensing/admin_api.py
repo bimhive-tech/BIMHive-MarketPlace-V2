@@ -14,6 +14,8 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from activity.models import ActivityVerb
+from activity.services import log_activity
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
 from licensing.services import restore_purchase_access, revoke_purchase_access
 
@@ -74,6 +76,7 @@ class AdminLicenseRevokeView(APIView):
             license_obj.last_seen_at = now
             license_obj.save(update_fields=["status", "last_seen_at"])
         license_obj.refresh_from_db()
+        log_activity(request.user, ActivityVerb.LICENSE_REVOKED, target_label=license_obj.product.name)
         return Response(AdminMachineLicenseSerializer(license_obj).data)
 
 
@@ -90,6 +93,7 @@ class AdminLicenseRestoreView(APIView):
             license_obj.last_seen_at = now
             license_obj.save(update_fields=["status", "last_seen_at"])
         license_obj.refresh_from_db()
+        log_activity(request.user, ActivityVerb.LICENSE_RESTORED, target_label=license_obj.product.name)
         return Response(AdminMachineLicenseSerializer(license_obj).data)
 
 
@@ -108,6 +112,12 @@ class AdminLicenseExtendView(APIView):
         license_obj.expires_at = license_obj.expires_at + timedelta(days=days)
         license_obj.last_seen_at = timezone.now()
         license_obj.save(update_fields=["expires_at", "last_seen_at"])
+        log_activity(
+            request.user,
+            ActivityVerb.LICENSE_EXTENDED,
+            target_label=license_obj.product.name,
+            metadata={"days": days},
+        )
         return Response(AdminMachineLicenseSerializer(license_obj).data)
 
 
@@ -157,6 +167,12 @@ class AdminOrderStatusView(APIView):
         else:
             raise ValidationError({"action": "Must be one of: restore, revoke, refund."})
         purchase.refresh_from_db()
+        log_activity(
+            request.user,
+            ActivityVerb.ORDER_STATUS_CHANGED,
+            target_label=purchase.product.name,
+            metadata={"action": action, "new_status": purchase.payment_status},
+        )
         return Response(AdminOrderSerializer(purchase).data)
 
 

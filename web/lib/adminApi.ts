@@ -327,3 +327,23 @@ export interface AdminReview {
 }
 export const getAdminReviews = () => getJSON<AdminReview[]>("/api/admin/reviews");
 export const deleteAdminReview = (id: number) => request<void>(`/api/admin/reviews/${id}`, "DELETE");
+
+// ── Activity log ──
+export interface AdminActivityEntry {
+  id: number;
+  actor_label: string;
+  verb: string;
+  target_label: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+export const getAdminActivity = (params?: {
+  actor?: string;
+  verb?: string;
+  date_from?: string;
+  date_to?: string;
+}) => {
+  const clean = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v)) as Record<string, string>;
+  const qs = new URLSearchParams(clean).toString();
+  return getJSON<AdminActivityEntry[]>(`/api/admin/activity${qs ? `?${qs}` : ""}`);
+};

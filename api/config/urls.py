@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/admin/", include("licensing.admin_urls")),
     path("api/admin/", include("accounts.admin_urls")),
     path("api/admin/", include("reviews.admin_urls")),
+    path("api/admin/", include("activity.admin_urls")),
     # ── Storefront/catalog API ──
     path("api/", include("catalog.urls")),
 ]

@@ -20,6 +20,8 @@ from accounts.serializers import (
     RegisterSerializer,
     UserSerializer,
 )
+from activity.models import ActivityVerb
+from activity.services import log_activity
 
 
 @method_decorator(ensure_csrf_cookie, name="get")
@@ -42,6 +44,7 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         login(request, user)  # start a session immediately after signup
+        log_activity(user, ActivityVerb.SIGNED_UP)
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
@@ -60,6 +63,7 @@ class LoginView(APIView):
                 {"detail": "Invalid email or password."}, status=status.HTTP_401_UNAUTHORIZED
             )
         login(request, user)
+        log_activity(user, ActivityVerb.SIGNED_IN)
         return Response(UserSerializer(user).data)
 
 
