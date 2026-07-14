@@ -5,7 +5,9 @@ Environment-driven (see repo-root .env / .env.example). Security defaults are sa
 DEBUG is False unless explicitly enabled, and HSTS + secure cookies are enforced in code
 when DEBUG is off so a stray env var can't weaken them in production.
 """
+import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dj_database_url
 import environ
@@ -17,15 +19,42 @@ REPO_ROOT = BASE_DIR.parent
 env = environ.Env()
 environ.Env.read_env(REPO_ROOT / ".env")
 
+
+def _clean_hosts(raw):
+    """Drop blank entries. Host vars are commonly templated from a platform-
+    provided domain (e.g. Railway's ${{RAILWAY_PUBLIC_DOMAIN}}) that may not be
+    assigned yet on a service's first deploy, leaving an empty string in the list
+    instead of a real host — better to drop it than let it silently match nothing
+    (or, for origins below, hard-crash the whole app on every boot)."""
+    return [h for h in raw if h.strip()]
+
+
+def _clean_origins(raw):
+    """Same idea as _clean_hosts, but for full origins (scheme://netloc) — Django
+    hard-crashes via a SystemCheckError if any entry lacks a scheme or netloc, so
+    an unresolved template variable here takes the whole app down on every boot
+    until someone notices and fixes the env var. Drop what's invalid instead."""
+    kept = []
+    for origin in raw:
+        parsed = urlparse(origin)
+        if parsed.scheme and parsed.netloc:
+            kept.append(origin)
+        else:
+            print(f"Ignoring invalid origin in env config: {origin!r}", file=sys.stderr)
+    return kept
+
+
 # ─────────────────────────────────────────────────────────────
 # Core
 # ─────────────────────────────────────────────────────────────
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="insecure-dev-key")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
-CSRF_TRUSTED_ORIGINS = env.list(
-    "DJANGO_CSRF_TRUSTED_ORIGINS",
-    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+ALLOWED_HOSTS = _clean_hosts(env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]))
+CSRF_TRUSTED_ORIGINS = _clean_origins(
+    env.list(
+        "DJANGO_CSRF_TRUSTED_ORIGINS",
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+    )
 )
 
 INSTALLED_APPS = [
@@ -131,9 +160,11 @@ REST_FRAMEWORK = {
 }
 
 # CORS — only needed in dev when Next.js (:3000) calls Django (:8000) directly.
-CORS_ALLOWED_ORIGINS = env.list(
-    "DJANGO_CSRF_TRUSTED_ORIGINS",
-    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+CORS_ALLOWED_ORIGINS = _clean_origins(
+    env.list(
+        "DJANGO_CSRF_TRUSTED_ORIGINS",
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+    )
 )
 CORS_ALLOW_CREDENTIALS = True
 
