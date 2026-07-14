@@ -49,7 +49,14 @@ def _clean_origins(raw):
 # ─────────────────────────────────────────────────────────────
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="insecure-dev-key")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
-ALLOWED_HOSTS = _clean_hosts(env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]))
+# 127.0.0.1/localhost are always allowed regardless of DJANGO_ALLOWED_HOSTS: in
+# this single-container topology (see scripts/start.sh), Next.js's server-side
+# fetches always reach Django over that loopback address, no matter what public
+# domain is (or isn't yet) configured — it's a fact of the container's internal
+# wiring, not deployment config.
+ALLOWED_HOSTS = list(
+    {"localhost", "127.0.0.1", *_clean_hosts(env.list("DJANGO_ALLOWED_HOSTS", default=[]))}
+)
 CSRF_TRUSTED_ORIGINS = _clean_origins(
     env.list(
         "DJANGO_CSRF_TRUSTED_ORIGINS",
@@ -248,8 +255,12 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # No SECURE_SSL_REDIRECT here on purpose: gunicorn binds to 127.0.0.1 only
+    # (see scripts/start.sh) and is never reachable from outside the container —
+    # every request it sees is Next.js's internal loopback fetch, which is always
+    # plain HTTP and never carries X-Forwarded-Proto. Redirecting those to https
+    # would just break every server-side API call. TLS termination and enforcement
+    # happen at Railway's edge and in Next.js, the only public-facing process.
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
