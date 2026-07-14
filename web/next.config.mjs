@@ -11,8 +11,15 @@ const API_INTERNAL_URL = process.env.API_INTERNAL_URL || "http://127.0.0.1:8000"
 // docker-compose already starts on a fixed local port.
 const remotePatterns = [{ protocol: "http", hostname: "localhost", port: "9000" }];
 if (process.env.R2_PUBLIC_BASE_URL) {
-  const r2 = new URL(process.env.R2_PUBLIC_BASE_URL);
-  remotePatterns.push({ protocol: r2.protocol.replace(":", ""), hostname: r2.hostname });
+  // Next re-evaluates this config per page during the build; an incomplete value
+  // here (e.g. a placeholder still being filled in) must not fail the whole build —
+  // worst case is just no R2 image optimization until the value is fixed.
+  try {
+    const r2 = new URL(process.env.R2_PUBLIC_BASE_URL);
+    remotePatterns.push({ protocol: r2.protocol.replace(":", ""), hostname: r2.hostname });
+  } catch {
+    console.warn(`R2_PUBLIC_BASE_URL is set but not a valid URL: "${process.env.R2_PUBLIC_BASE_URL}"`);
+  }
 }
 
 const nextConfig = {
