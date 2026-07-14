@@ -1,11 +1,28 @@
 /** Site-wide constants and navigation config (no magic strings in components). */
 
+const DEFAULT_SITE_URL = "http://localhost:3000";
+
+// NEXT_PUBLIC_SITE_URL is often templated from a platform-provided domain (e.g.
+// Railway's ${{RAILWAY_PUBLIC_DOMAIN}}) that isn't assigned yet on a service's
+// first build, leaving a truthy-but-incomplete value like "https://" — which
+// `||` doesn't catch, but a real URL parse does. metadataBase (app/layout.tsx)
+// depends on this always being well-formed.
+function resolveSiteUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!raw) return DEFAULT_SITE_URL;
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return DEFAULT_SITE_URL;
+  }
+}
+
 export const SITE = {
   name: "BIMHIVE",
   tagline: "Digital tools for smarter construction.",
   description:
     "Explore plugins, automation tools, and digital solutions designed for the AEC industry.",
-  url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+  url: resolveSiteUrl(),
   support: { usersWorldwide: "10,000+" },
 } as const;
 

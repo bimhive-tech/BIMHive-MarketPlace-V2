@@ -7,6 +7,12 @@ import { getHome } from "@/lib/api";
 
 import styles from "./page.module.css";
 
+// Featured products/categories/collections change independently of deploys, and
+// the Django API this fetches from isn't up yet during the Docker build's
+// frontend stage — this must render at request time, not be prerendered at build
+// time (which is also how /catalog and /products/[slug] already behave).
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const { categories, featured_products, collections } = await getHome();
 
