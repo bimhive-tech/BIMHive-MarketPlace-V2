@@ -111,8 +111,6 @@ export default async function ProductPage({ params }: PageProps) {
                 </span>
               </div>
 
-              <p className={styles.desc}>{product.description}</p>
-
               {product.compatibility.length > 0 && (
                 <div className={styles.chips}>
                   {product.compatibility.slice(0, 3).map((row) => (

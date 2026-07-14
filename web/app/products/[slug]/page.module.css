@@ -85,13 +85,6 @@
   color: var(--color-muted);
 }
 
-.desc {
-  font-size: var(--fs-base);
-  color: var(--ink-700);
-  line-height: var(--lh-normal);
-  margin-top: var(--space-2);
-}
-
 .chips {
   display: flex;
   flex-wrap: wrap;
