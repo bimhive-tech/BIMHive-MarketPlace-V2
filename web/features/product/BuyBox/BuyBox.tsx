@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button/Button";
 import { Icon, type IconName } from "@/components/Icon/Icon";
+import { QtyStepper } from "@/components/QtyStepper/QtyStepper";
 import { AccountApiError, claimFreeProduct } from "@/lib/accountApi";
 import { me } from "@/lib/auth";
 import { formatPrice } from "@/config/site";
@@ -117,23 +118,13 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
 
       <div className={styles.actions}>
         {cartItem ? (
-          <div className={styles.qtyStepper} role="group" aria-label={`${product.name} quantity in cart`}>
-            <button
-              className={styles.qtyBtn}
-              aria-label="Decrease quantity"
-              onClick={() => setQty(cartItem.key, cartItem.qty - 1)}
-            >
-              −
-            </button>
-            <span className={styles.qtyValue}>{cartItem.qty}</span>
-            <button
-              className={styles.qtyBtn}
-              aria-label="Increase quantity"
-              onClick={() => setQty(cartItem.key, cartItem.qty + 1)}
-            >
-              +
-            </button>
-          </div>
+          <QtyStepper
+            qty={cartItem.qty}
+            onDecrease={() => setQty(cartItem.key, cartItem.qty - 1)}
+            onIncrease={() => setQty(cartItem.key, cartItem.qty + 1)}
+            ariaLabel={`${product.name} quantity in cart`}
+            variant="full"
+          />
         ) : (
           <Button size="lg" fullWidth onClick={handleAddToCart}>
             <Icon name="cart" size={18} />

@@ -1,0 +1,81 @@
+.stepper {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--gold-100);
+  animation: stepperIn var(--dur-base) var(--ease-out);
+}
+
+@keyframes stepperIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stepper {
+    animation: none;
+  }
+}
+
+.btn {
+  display: grid;
+  place-items: center;
+  font-weight: var(--fw-semibold);
+  color: var(--gold-700);
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.btn:hover {
+  background: var(--surface-0);
+}
+
+.value {
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+  text-align: center;
+}
+
+/* Full: wide BuyBox layout, replaces a full-width "Add to Cart" button. */
+.full {
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-2);
+}
+
+.full .btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-lg);
+}
+
+.full .value {
+  font-size: var(--fs-base);
+  min-width: 2ch;
+}
+
+/* Compact: drops into a product card's footer row in place of the circular QuickAddButton. */
+.compact {
+  border-radius: var(--radius-pill);
+  height: 38px;
+  padding-inline: var(--space-1);
+}
+
+.compact .btn {
+  width: 26px;
+  height: 100%;
+  font-size: var(--fs-md);
+}
+
+.compact .value {
+  font-size: var(--fs-sm);
+  min-width: 1.5ch;
+  padding-inline: var(--space-1);
+}
