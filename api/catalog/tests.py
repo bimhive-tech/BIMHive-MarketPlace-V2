@@ -137,6 +137,26 @@ def test_can_save_as_draft_without_a_file(category, partner):
     assert serializer.is_valid(), serializer.errors
 
 
+def test_media_accepts_a_long_presigned_url(category, partner):
+    # R2 presigned URLs (the fallback used whenever R2_PUBLIC_BASE_URL isn't
+    # set) run 350-450+ chars — well past Django's URLField default of 200.
+    long_url = "https://example.r2.cloudflarestorage.com/bucket/product_media/1/cover.png?" + (
+        "X-Amz-Signature=" + "a" * 250
+    )
+    assert len(long_url) > 200
+    product = Product.objects.create(
+        name="Long URL", short_description="s", description="d", category=category, partner=partner,
+    )
+    serializer = AdminProductDetailSerializer(
+        product,
+        data={"media": [{"media_type": "image", "url": long_url, "caption": "", "is_cover": True, "sort_order": 0}]},
+        partial=True,
+    )
+    assert serializer.is_valid(), serializer.errors
+    updated = serializer.save()
+    assert updated.media.first().url == long_url
+
+
 def test_nested_lists_replace_all_on_update(category, partner):
     product = Product.objects.create(
         name="Nested", short_description="s", description="d", category=category, partner=partner,

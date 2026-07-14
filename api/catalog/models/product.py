@@ -148,7 +148,10 @@ class ProductMedia(TimeStamped):
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="media")
     media_type = models.CharField(max_length=12, choices=MediaType.choices, default=MediaType.IMAGE)
-    url = models.URLField()
+    # Django's URLField defaults to max_length=200, but a presigned R2 URL (the
+    # fallback used whenever R2_PUBLIC_BASE_URL isn't set) runs 350-450+ chars
+    # on its own — wide enough to comfortably fit either shape.
+    url = models.URLField(max_length=1000)
     caption = models.CharField(max_length=180, blank=True)
     is_cover = models.BooleanField(default=False)
     sort_order = models.PositiveIntegerField(default=0)
