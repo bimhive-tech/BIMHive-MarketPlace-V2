@@ -213,3 +213,15 @@ def test_media_upload_rejects_other_file_types(staff_client, category, partner):
     upload = SimpleUploadedFile("installer.exe", b"not media", content_type="application/octet-stream")
     resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
     assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_media_upload_fails_fast_without_r2_configured(staff_client, category, partner, settings):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.R2_ACCESS_KEY_ID = ""
+    product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
+    upload = SimpleUploadedFile("cover.png", b"fake png bytes", content_type="image/png")
+    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    assert resp.status_code == 400
+    assert "R2" in resp.json()["detail"]

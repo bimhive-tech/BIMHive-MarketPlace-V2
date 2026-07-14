@@ -31,16 +31,31 @@ async function request<T>(path: string, method: string, body?: unknown, isForm =
   return data as T;
 }
 
+/** DRF error bodies nest strings inside arbitrarily deep dicts/lists (e.g. a
+ * nested serializer field like `media` reports as `{media: [{url: [...]}]}`)
+ * — dig in for the first actual message instead of assuming a flat shape. */
+function firstErrorMessage(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstErrorMessage(item);
+      if (found) return found;
+    }
+  } else if (value && typeof value === "object") {
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      const found = firstErrorMessage(nested);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
 export class AdminApiError extends Error {
   status: number;
   detail: string;
   fields: Record<string, string[]>;
   constructor(data: Record<string, unknown>, status: number) {
-    const firstField = Object.keys(data)[0];
-    const detail =
-      (data.detail as string) ||
-      (firstField && Array.isArray(data[firstField]) ? (data[firstField] as string[])[0] : "") ||
-      "Something went wrong. Please try again.";
+    const detail = firstErrorMessage(data) || "Something went wrong. Please try again.";
     super(detail);
     this.detail = detail;
     this.status = status;

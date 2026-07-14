@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
-import { deleteProductFile, uploadProductFile, type AdminProductFile } from "@/lib/adminApi";
+import { AdminApiError, deleteProductFile, uploadProductFile, type AdminProductFile } from "@/lib/adminApi";
 
 import styles from "./ProductForm.module.css";
 
@@ -46,8 +46,8 @@ export function FilesTab({ productId, files, setFiles, ensureSaved }: FilesTabPr
       setFiles((list) => [created, ...list]);
       setVersionLabel("");
       setFile(null);
-    } catch {
-      setError("Upload failed. Please try again.");
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.detail : "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }

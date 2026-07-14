@@ -3,7 +3,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
-import { uploadProductMedia, type AdminProductMedia } from "@/lib/adminApi";
+import { AdminApiError, uploadProductMedia, type AdminProductMedia } from "@/lib/adminApi";
 
 import styles from "./ProductForm.module.css";
 
@@ -53,8 +53,8 @@ export function MediaTab({ media, setMedia, productId, ensureSaved }: MediaTabPr
           sort_order: list.length,
         },
       ]);
-    } catch {
-      setError("Upload failed. Please try again.");
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.detail : "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }

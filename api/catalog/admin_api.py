@@ -314,7 +314,18 @@ class AdminProductMediaUploadView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, product_id):
+        from django.conf import settings
         from django.core.files.storage import storages
+
+        # ProductMedia.url is a URLField — without R2 configured, storage falls
+        # back to a relative /media/ path (see settings.py STORAGES) that would
+        # save here successfully but then fail URL validation later when the
+        # product itself is saved, as a confusing, unrelated-looking error.
+        # Fail fast with a clear message instead.
+        if not (settings.R2_ACCESS_KEY_ID and settings.R2_SECRET_ACCESS_KEY and settings.R2_BUCKET_NAME):
+            raise ValidationError(
+                {"detail": "Media uploads need Cloudflare R2 storage configured on the server first."}
+            )
 
         if not Product.objects.filter(pk=product_id).exists():
             raise ValidationError({"detail": "Product not found."})
