@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   description: "Curated bundles of BIMHIVE products, grouped around a workflow or need.",
 };
 
+// No dynamic segments here, so Next would otherwise try to prerender this at
+// image-build time — when the API isn't reachable yet (it starts in the same
+// container, after this build step finishes). Render on-demand instead, same
+// as /catalog and /products/[slug].
+export const dynamic = "force-dynamic";
+
 export default async function CollectionsPage() {
   const collections = await getCollections();
 
