@@ -1,7 +1,10 @@
 import Link from "next/link";
 
 import { Icon } from "@/components/Icon/Icon";
+import { ResourcesPanel } from "@/components/Header/ResourcesPanel";
+import { SolutionsPanel } from "@/components/Header/SolutionsPanel";
 import { Logo } from "@/components/Logo/Logo";
+import { MegaMenu } from "@/components/MegaMenu/MegaMenu";
 import { NAV_LINKS } from "@/config/site";
 import { AuthNav } from "@/features/auth/AuthNav/AuthNav";
 import { CartLink } from "@/features/cart/CartLink/CartLink";
@@ -28,9 +31,14 @@ export function Header() {
           {NAV_LINKS.map((link) => (
             <Link key={link.label} href={link.href} className={styles.navLink}>
               {link.label}
-              <Icon name="chevron-down" size={16} />
             </Link>
           ))}
+          <MegaMenu label="Solutions">
+            <SolutionsPanel />
+          </MegaMenu>
+          <MegaMenu label="Resources">
+            <ResourcesPanel />
+          </MegaMenu>
         </nav>
 
         <div className={styles.actions}>

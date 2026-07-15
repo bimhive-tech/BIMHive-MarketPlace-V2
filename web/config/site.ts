@@ -27,12 +27,20 @@ export const SITE = {
   support: { usersWorldwide: "10,000+" },
 } as const;
 
-/** Top-nav dropdown groups. */
-export const NAV_LINKS = [
-  { label: "Categories", href: "/catalog" },
-  { label: "Solutions", href: "/solutions" },
-  { label: "Resources", href: "/resources" },
-] as const;
+/** Plain (non-dropdown) top-nav links — Solutions/Resources are mega menus, handled directly in Header.tsx. */
+export const NAV_LINKS = [{ label: "Categories", href: "/catalog" }] as const;
+
+/** Category slug → icon, shared between /catalog's filter sidebar and the header's Solutions mega menu. */
+export const CATEGORY_ICON_BY_SLUG: Record<string, IconName> = {
+  "revit-plugins": "puzzle",
+  "automation-tools": "bolt",
+  "dynamo-scripts": "workflow",
+  "bim-libraries": "library",
+  templates: "template",
+  "training-courses": "graduation-cap",
+  integrations: "plug",
+  "other-tools": "wrench",
+};
 
 /** Trust badges shown under the hero. */
 export const TRUST_BADGES = [
@@ -49,6 +57,35 @@ export const COLLECTION_ICON_BY_SLUG: Record<string, IconName> = {
   "bim-management": "library",
   "data-analytics": "chart",
 };
+
+/** The /resources hub — shared between the header's Resources mega menu and the
+ * full /resources page. href: null renders as a "Soon" state instead of a link;
+ * only add a page here once it actually exists (see CLAUDE.md — no dead links). */
+export const RESOURCE_LINKS: {
+  title: string;
+  description: string;
+  icon: IconName;
+  href: string | null;
+}[] = [
+  {
+    title: "Documentation",
+    description: "Setup guides and references for every product.",
+    icon: "document",
+    href: "/docs",
+  },
+  {
+    title: "Knowledge Base",
+    description: "General guides not tied to a single product.",
+    icon: "help",
+    href: null,
+  },
+  {
+    title: "Blog",
+    description: "News, tips, and product updates.",
+    icon: "layers",
+    href: null,
+  },
+];
 
 export const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 

@@ -1,0 +1,69 @@
+.wrap {
+  position: relative;
+  display: flex;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink-800);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.trigger:hover {
+  color: var(--gold-700);
+}
+
+.chevron {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.panel {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  z-index: var(--z-dropdown);
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  /* Always in the DOM (see MegaMenu.tsx) — visibility, not mount state, gates
+     both display and interaction, so a fetch inside `children` runs once. */
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out),
+    visibility var(--dur-base) var(--ease-out);
+}
+
+.panel.panelOpen {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.panelInner {
+  padding-block: var(--space-6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: opacity var(--dur-fast) linear, visibility var(--dur-fast) linear;
+    transform: none;
+  }
+  .panel.panelOpen {
+    transform: none;
+  }
+  .chevron {
+    transition: none;
+  }
+}

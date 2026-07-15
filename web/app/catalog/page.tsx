@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/EmptyState/EmptyState";
-import { Icon, type IconName } from "@/components/Icon/Icon";
+import { Icon } from "@/components/Icon/Icon";
 import { Pagination } from "@/components/Pagination/Pagination";
 import { ProductCard } from "@/components/ProductCard/ProductCard";
+import { CATEGORY_ICON_BY_SLUG } from "@/config/site";
 import { getCategories, getProducts } from "@/lib/api";
 
 import styles from "./page.module.css";
@@ -12,17 +13,6 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Browse all products",
   description: "Explore plugins, automation tools, and digital solutions for the AEC industry.",
-};
-
-const ICON_BY_SLUG: Record<string, IconName> = {
-  "revit-plugins": "puzzle",
-  "automation-tools": "bolt",
-  "dynamo-scripts": "workflow",
-  "bim-libraries": "library",
-  templates: "template",
-  "training-courses": "graduation-cap",
-  integrations: "plug",
-  "other-tools": "wrench",
 };
 
 // Must match ProductPagination.page_size in api/catalog/views.py.
@@ -88,7 +78,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
                   href={`/catalog?category=${cat.slug}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
                   className={`${styles.filter} ${category === cat.slug ? styles.active : ""}`}
                 >
-                  <Icon name={ICON_BY_SLUG[cat.slug] ?? "wrench"} size={18} />
+                  <Icon name={CATEGORY_ICON_BY_SLUG[cat.slug] ?? "wrench"} size={18} />
                   {cat.name}
                   <span className={styles.count}>{cat.product_count}</span>
                 </Link>
