@@ -104,6 +104,27 @@ class DocumentationSerializer(serializers.ModelSerializer):
         fields = ["id", "slug", "title", "summary", "overview", "is_published", "sections"]
 
 
+class DocumentationListSerializer(serializers.ModelSerializer):
+    """The standalone /docs library — distinct from DocumentationSerializer, which
+    nests inside a product detail response without needing to say which product
+    it belongs to."""
+
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_slug = serializers.CharField(source="product.slug", read_only=True)
+    product_cover_image_url = serializers.CharField(source="product.cover_image_url", read_only=True)
+
+    class Meta:
+        model = Documentation
+        fields = ["id", "slug", "title", "summary", "product_name", "product_slug", "product_cover_image_url"]
+
+
+class DocumentationDetailSerializer(DocumentationListSerializer):
+    sections = DocSectionSerializer(many=True, read_only=True)
+
+    class Meta(DocumentationListSerializer.Meta):
+        fields = DocumentationListSerializer.Meta.fields + ["overview", "sections"]
+
+
 class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review

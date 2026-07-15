@@ -138,17 +138,20 @@ function CompatibilityPanel({ product }: { product: ProductDetail }) {
 function DocumentationPanel({ product }: { product: ProductDetail }) {
   const doc = product.documentation;
   if (!doc) return <p className={styles.empty}>Documentation coming soon.</p>;
+  const sectionCount = doc.sections.length;
   return (
     <div className={styles.docs}>
       <h2 className={styles.h2}>{doc.title}</h2>
       {doc.summary && <p className={styles.docSummary}>{doc.summary}</p>}
-      {doc.overview && <ExpandableText text={doc.overview} className={styles.body} maxLines={6} />}
-      {doc.sections.map((section) => (
-        <div key={section.id} className={styles.docSection}>
-          <h3 className={styles.h3}>{section.title}</h3>
-          <ExpandableText text={section.body} className={styles.body} maxLines={6} />
-        </div>
-      ))}
+      {sectionCount > 0 && (
+        <p className={styles.docMeta}>
+          {sectionCount} {sectionCount === 1 ? "guide" : "guides"} inside — installation, setup, and more.
+        </p>
+      )}
+      <Button href={`/docs/${doc.slug}`} variant="secondary">
+        View Full Documentation
+        <Icon name="arrow-right" size={16} />
+      </Button>
     </div>
   );
 }

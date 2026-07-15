@@ -11,11 +11,13 @@ from rest_framework.response import Response
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
-from catalog.models import Category, Collection, Partner, Product
+from catalog.models import Category, Collection, Documentation, Partner, Product
 from catalog.models.product import ProductStatus, ProductVisibility
 from catalog.serializers import (
     CategorySerializer,
     CollectionSerializer,
+    DocumentationDetailSerializer,
+    DocumentationListSerializer,
     PartnerSerializer,
     ProductCardSerializer,
     ProductDetailSerializer,
@@ -135,6 +137,22 @@ class PartnerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Partner.objects.filter(products__in=_published_products()).distinct()
     serializer_class = PartnerSerializer
     lookup_field = "slug"
+
+
+class DocumentationViewSet(viewsets.ReadOnlyModelViewSet):
+    """The standalone /docs library — the "Learn more" destination linked from a
+    product page's Documentation tab. Same publish gating as the product itself:
+    a doc marked published on an unpublished/hidden product still isn't public."""
+
+    queryset = (
+        Documentation.objects.filter(is_published=True, product__in=_published_products())
+        .select_related("product")
+        .prefetch_related("sections")
+    )
+    lookup_field = "slug"
+
+    def get_serializer_class(self):
+        return DocumentationDetailSerializer if self.action == "retrieve" else DocumentationListSerializer
 
 
 @api_view(["GET"])

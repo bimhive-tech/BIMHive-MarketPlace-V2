@@ -180,9 +180,9 @@
   color: var(--ink-600);
 }
 
-.docSection {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
+.docMeta {
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
 }
 
 /* ── Support ── */

@@ -2,7 +2,14 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from catalog.views import CategoryViewSet, CollectionViewSet, PartnerViewSet, ProductViewSet, home_api
+from catalog.views import (
+    CategoryViewSet,
+    CollectionViewSet,
+    DocumentationViewSet,
+    PartnerViewSet,
+    ProductViewSet,
+    home_api,
+)
 
 # trailing_slash=False: reads (getProducts/getCategories/getProduct in lib/api.ts)
 # go straight to Django server-side and never cared either way, but the reviews
@@ -15,6 +22,7 @@ router.register("products", ProductViewSet, basename="product")
 router.register("categories", CategoryViewSet, basename="category")
 router.register("collections", CollectionViewSet, basename="collection")
 router.register("partners", PartnerViewSet, basename="partner")
+router.register("documentation", DocumentationViewSet, basename="documentation")
 
 urlpatterns = [
     path("home", home_api, name="home-api"),

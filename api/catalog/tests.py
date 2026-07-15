@@ -447,3 +447,62 @@ def test_public_api_shows_published_documentation(client, category, partner):
 
     resp = client.get(f"/api/products/{product.slug}")
     assert resp.json()["documentation"]["title"] == "Live Doc"
+
+
+# ── Standalone /docs library ──
+def test_documentation_list_only_shows_published_docs_on_published_products(client, category, partner):
+    from catalog.models import Documentation
+
+    live_product = Product.objects.create(
+        name="Live Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Documentation.objects.create(product=live_product, title="Live Doc", summary="s", is_published=True)
+
+    draft_doc_product = Product.objects.create(
+        name="Draft Doc Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Documentation.objects.create(product=draft_doc_product, title="Draft Doc", is_published=False)
+
+    unpublished_product = Product.objects.create(
+        name="Unpublished Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.DRAFT,
+    )
+    Documentation.objects.create(product=unpublished_product, title="Doc On Draft Product", is_published=True)
+
+    resp = client.get("/api/documentation")
+    titles = [row["title"] for row in resp.json()]
+    assert titles == ["Live Doc"]
+
+
+def test_documentation_detail_includes_sections_and_product_link(client, category, partner):
+    from catalog.models import Documentation, DocSection
+
+    product = Product.objects.create(
+        name="Doc Detail Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    doc = Documentation.objects.create(
+        product=product, title="Doc Detail", summary="Short summary", overview="Full overview", is_published=True,
+    )
+    DocSection.objects.create(documentation=doc, title="Installation", body="Run the installer.", sort_order=0)
+
+    resp = client.get(f"/api/documentation/{doc.slug}")
+    body = resp.json()
+    assert body["overview"] == "Full overview"
+    assert body["product_slug"] == product.slug
+    assert [s["title"] for s in body["sections"]] == ["Installation"]
+
+
+def test_documentation_detail_404s_for_unpublished_doc(client, category, partner):
+    from catalog.models import Documentation
+
+    product = Product.objects.create(
+        name="Hidden Doc Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    doc = Documentation.objects.create(product=product, title="Hidden Doc", is_published=False)
+
+    resp = client.get(f"/api/documentation/{doc.slug}")
+    assert resp.status_code == 404

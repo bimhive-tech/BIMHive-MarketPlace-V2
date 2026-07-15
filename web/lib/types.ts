@@ -121,6 +121,23 @@ export interface Documentation {
   sections: DocSection[];
 }
 
+/** The standalone /docs library — same underlying Documentation row as above,
+ * but shaped for a page that isn't already inside a specific product's context. */
+export interface DocumentationListItem {
+  id: number;
+  slug: string;
+  title: string;
+  summary: string;
+  product_name: string;
+  product_slug: string;
+  product_cover_image_url: string;
+}
+
+export interface DocumentationDetail extends DocumentationListItem {
+  overview: string;
+  sections: DocSection[];
+}
+
 export interface Review {
   id: number;
   author_name: string;
