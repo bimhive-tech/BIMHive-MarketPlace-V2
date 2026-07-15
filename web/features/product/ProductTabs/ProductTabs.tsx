@@ -61,7 +61,7 @@ function OverviewPanel({ product }: { product: ProductDetail }) {
       <div className={styles.overviewMain}>
         <h2 className={styles.h2}>Overview</h2>
         <ExpandableText text={product.description} className={styles.body} maxLines={6} />
-        <KeyFeatures features={product.features} />
+        <KeyFeatures features={product.features} previewCount={3} />
       </div>
       <div className={styles.overviewMid}>
         <WhatsNew changelog={product.changelog} />
