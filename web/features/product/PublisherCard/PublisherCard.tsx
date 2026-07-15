@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import type { ProductDetail } from "@/lib/types";
@@ -20,7 +22,13 @@ export function PublisherCard({ product }: { product: ProductDetail }) {
         <div>
           <p className={styles.pubLabel}>Published by</p>
           <p className={styles.pubName}>
-            {partner?.name ?? "BIMHIVE"}
+            {partner ? (
+              <Link href={`/partners/${partner.slug}`} className={styles.pubLink}>
+                {partner.name}
+              </Link>
+            ) : (
+              "BIMHIVE"
+            )}
             {partner?.is_verified && <Icon name="check-circle" size={16} className={styles.verified} />}
           </p>
           <p className={styles.pubTagline}>{partner?.tagline ?? "Trusted developer"}</p>

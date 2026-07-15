@@ -40,6 +40,14 @@
   color: var(--color-heading);
 }
 
+.pubLink {
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.pubLink:hover {
+  color: var(--gold-700);
+}
+
 .verified {
   color: var(--gold-600);
 }

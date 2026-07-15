@@ -2,7 +2,7 @@
  * Server-side API client. Runs in React Server Components, so it talks to Django
  * directly via API_INTERNAL_URL (not the browser proxy). See ARCHITECTURE §3.
  */
-import type { Category, HomeData, ProductCard, ProductDetail } from "@/lib/types";
+import type { Category, Collection, HomeData, Partner, ProductCard, ProductDetail } from "@/lib/types";
 
 const API_BASE = process.env.API_INTERNAL_URL || "http://127.0.0.1:8000";
 
@@ -21,7 +21,7 @@ export function getHome() {
   return getJSON<HomeData>("/api/home");
 }
 
-export function getProducts(params?: { category?: string; type?: string }) {
+export function getProducts(params?: { category?: string; type?: string; q?: string; collection?: string; partner?: string }) {
   const clean = Object.fromEntries(
     Object.entries(params ?? {}).filter(([, v]) => v),
   ) as Record<string, string>;
@@ -36,6 +36,26 @@ export function getCategories() {
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
   try {
     return await getJSON<ProductDetail>(`/api/products/${slug}`);
+  } catch {
+    return null;
+  }
+}
+
+export function getCollections() {
+  return getJSON<Collection[]>("/api/collections");
+}
+
+export async function getCollection(slug: string): Promise<Collection | null> {
+  try {
+    return await getJSON<Collection>(`/api/collections/${slug}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function getPartner(slug: string): Promise<Partner | null> {
+  try {
+    return await getJSON<Partner>(`/api/partners/${slug}`);
   } catch {
     return null;
   }

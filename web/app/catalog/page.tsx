@@ -25,24 +25,32 @@ const ICON_BY_SLUG: Record<string, IconName> = {
 };
 
 interface CatalogPageProps {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; q?: string }>;
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const { category } = await searchParams;
+  const { category, q } = await searchParams;
   const [categories, products] = await Promise.all([
     getCategories(),
-    getProducts({ category }),
+    getProducts({ category, q }),
   ]);
   const active = categories.find((c) => c.slug === category);
 
   return (
     <div className={`container ${styles.page}`}>
       <header className={styles.head}>
-        <h1 className={styles.title}>{active ? active.name : "All Products"}</h1>
+        <h1 className={styles.title}>{q ? `Search results for "${q}"` : active ? active.name : "All Products"}</h1>
         <p className={styles.sub}>
           {products.length} {products.length === 1 ? "product" : "products"}
-          {active ? ` in ${active.name}` : " across the marketplace"}.
+          {active ? ` in ${active.name}` : q ? "" : " across the marketplace"}.
+          {q && (
+            <>
+              {" "}
+              <Link href={category ? `/catalog?category=${category}` : "/catalog"} className={styles.clearSearch}>
+                Clear search
+              </Link>
+            </>
+          )}
         </p>
       </header>
 
@@ -51,7 +59,10 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           <h2 className={styles.filterHeading}>Categories</h2>
           <ul className={styles.filterList}>
             <li>
-              <Link href="/catalog" className={`${styles.filter} ${!category ? styles.active : ""}`}>
+              <Link
+                href={q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog"}
+                className={`${styles.filter} ${!category ? styles.active : ""}`}
+              >
                 <Icon name="grid" size={18} />
                 All Products
               </Link>
@@ -59,7 +70,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
             {categories.map((cat) => (
               <li key={cat.id}>
                 <Link
-                  href={`/catalog?category=${cat.slug}`}
+                  href={`/catalog?category=${cat.slug}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
                   className={`${styles.filter} ${category === cat.slug ? styles.active : ""}`}
                 >
                   <Icon name={ICON_BY_SLUG[cat.slug] ?? "wrench"} size={18} />
@@ -81,8 +92,12 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           ) : (
             <EmptyState
               icon="search"
-              title="No products found"
-              text="There are no products in this category yet. Try another category."
+              title={q ? "No matching products" : "No products found"}
+              text={
+                q
+                  ? `Nothing matched "${q}". Try a different search term.`
+                  : "There are no products in this category yet. Try another category."
+              }
               actionLabel="View all products"
               actionHref="/catalog"
             />

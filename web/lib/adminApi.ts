@@ -142,6 +142,19 @@ export interface AdminProductFile {
   is_current: boolean;
   download_url: string;
 }
+export interface AdminDocSection {
+  title: string;
+  body: string;
+  image_url: string;
+  sort_order: number;
+}
+export interface AdminDocumentation {
+  title: string;
+  summary: string;
+  overview: string;
+  is_published: boolean;
+  sections: AdminDocSection[];
+}
 
 export interface AdminProductDetail {
   id: number;
@@ -169,6 +182,7 @@ export interface AdminProductDetail {
   media: AdminProductMedia[];
   changelog: AdminChangelogItem[];
   compatibility: AdminCompatibilityItem[];
+  documentation: AdminDocumentation | null;
   files: AdminProductFile[];
 }
 

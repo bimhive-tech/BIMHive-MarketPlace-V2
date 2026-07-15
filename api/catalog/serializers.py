@@ -148,7 +148,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     features = KeyFeatureSerializer(many=True, read_only=True)
     changelog = ChangelogEntrySerializer(many=True, read_only=True)
     compatibility = CompatibilityEntrySerializer(many=True, read_only=True)
-    documentation = DocumentationSerializer(read_only=True)
+    documentation = serializers.SerializerMethodField()
     reviews = ReviewSerializer(many=True, read_only=True)
     price_label = serializers.CharField(read_only=True)
     is_free = serializers.BooleanField(read_only=True)
@@ -165,6 +165,15 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "category", "partner", "tags", "media", "features", "changelog",
             "compatibility", "documentation", "reviews",
         ]
+
+    def get_documentation(self, obj):
+        # A draft (is_published=False) doc is an admin work-in-progress, not a
+        # public page yet — the product page falls back to "coming soon" for it
+        # exactly as if no Documentation row existed at all.
+        doc = getattr(obj, "documentation", None)
+        if not doc or not doc.is_published:
+            return None
+        return DocumentationSerializer(doc).data
 
     def get_rating_breakdown(self, obj):
         """Percentage of ratings at each star level (5→1), for the ratings bars.

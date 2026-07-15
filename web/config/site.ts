@@ -1,4 +1,5 @@
 /** Site-wide constants and navigation config (no magic strings in components). */
+import type { IconName } from "@/components/Icon/Icon";
 
 const DEFAULT_SITE_URL = "http://localhost:3000";
 
@@ -40,6 +41,14 @@ export const TRUST_BADGES = [
   { icon: "shield", title: "Secure Payments", subtitle: "Safe & encrypted checkout" },
   { icon: "download", title: "Instant Downloads", subtitle: "Get started right away" },
 ] as const;
+
+/** Collection slug → icon, shared between the home page's CollectionsRow teaser and the full /collections index. */
+export const COLLECTION_ICON_BY_SLUG: Record<string, IconName> = {
+  "revit-essentials": "template",
+  "automation-suite": "workflow",
+  "bim-management": "library",
+  "data-analytics": "chart",
+};
 
 export const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 

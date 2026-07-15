@@ -18,6 +18,8 @@ from catalog.models import (
     ChangelogEntry,
     Collection,
     CompatibilityEntry,
+    Documentation,
+    DocSection,
     KeyFeature,
     Partner,
     Product,
@@ -72,6 +74,20 @@ class CompatibilityItemSerializer(serializers.ModelSerializer):
         fields = ["label", "value", "sort_order"]
 
 
+class DocSectionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocSection
+        fields = ["title", "body", "image_url", "sort_order"]
+
+
+class DocumentationItemSerializer(serializers.ModelSerializer):
+    sections = DocSectionItemSerializer(many=True, required=False)
+
+    class Meta:
+        model = Documentation
+        fields = ["title", "summary", "overview", "is_published", "sections"]
+
+
 class ProductFileSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
 
@@ -103,6 +119,7 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
     media = ProductMediaItemSerializer(many=True, required=False)
     changelog = ChangelogItemSerializer(many=True, required=False)
     compatibility = CompatibilityItemSerializer(many=True, required=False)
+    documentation = DocumentationItemSerializer(required=False, allow_null=True)
     files = ProductFileSerializer(many=True, read_only=True)
 
     class Meta:
@@ -112,7 +129,7 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             "category", "partner", "tags", "price", "download_count",
             "default_trial_days", "status", "visibility", "is_featured", "cover_image_url",
             "version", "released_at", "seo_title", "seo_description", "features", "media",
-            "changelog", "compatibility", "files", "created_at", "updated_at",
+            "changelog", "compatibility", "documentation", "files", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "slug", "download_count", "created_at", "updated_at"]
 
@@ -184,14 +201,32 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             items = validated_data.pop("compatibility")
             product.compatibility.all().delete()
             CompatibilityEntry.objects.bulk_create(self._ordered(CompatibilityEntry, product, items))
+        if "documentation" in validated_data:
+            self._sync_documentation(product, validated_data.pop("documentation"))
         return validated_data
+
+    @staticmethod
+    def _sync_documentation(product, doc_data):
+        """Documentation is a single OneToOne, not a repeatable list — replace-all
+        doesn't apply the same way, so this is its own method rather than another
+        `_ordered`/bulk_create branch. A blank title means "no documentation yet",
+        so that's the signal to delete rather than save an empty row."""
+        if not doc_data or not (doc_data.get("title") or "").strip():
+            Documentation.objects.filter(product=product).delete()
+            return
+        sections = doc_data.pop("sections", [])
+        doc, _ = Documentation.objects.update_or_create(product=product, defaults=doc_data)
+        doc.sections.all().delete()
+        DocSection.objects.bulk_create(
+            [DocSection(documentation=doc, **{**s, "sort_order": i}) for i, s in enumerate(sections)]
+        )
 
     @transaction.atomic
     def create(self, validated_data):
         tags = validated_data.pop("tags", [])
         nested = {
             k: validated_data.pop(k)
-            for k in ("features", "media", "changelog", "compatibility")
+            for k in ("features", "media", "changelog", "compatibility", "documentation")
             if k in validated_data
         }
         product = Product.objects.create(**validated_data)
@@ -244,7 +279,7 @@ class AdminProductListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAdminUser]
     serializer_class = AdminProductDetailSerializer
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
-        "tags", "features", "media", "changelog", "compatibility", "files"
+        "tags", "features", "media", "changelog", "compatibility", "files", "documentation__sections"
     )
 
     def get_serializer_class(self):
@@ -267,7 +302,7 @@ class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAdminUser]
     serializer_class = AdminProductDetailSerializer
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
-        "tags", "features", "media", "changelog", "compatibility", "files"
+        "tags", "features", "media", "changelog", "compatibility", "files", "documentation__sections"
     )
 
     def perform_destroy(self, instance):

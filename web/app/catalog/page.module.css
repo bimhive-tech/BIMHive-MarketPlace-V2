@@ -17,6 +17,16 @@
   margin-top: var(--space-1);
 }
 
+.clearSearch {
+  color: var(--gold-700);
+  font-weight: var(--fw-semibold);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.clearSearch:hover {
+  color: var(--gold-800);
+}
+
 .layout {
   display: grid;
   grid-template-columns: 240px 1fr;

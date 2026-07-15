@@ -11,11 +11,12 @@ from rest_framework.response import Response
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
-from catalog.models import Category, Collection, Product
+from catalog.models import Category, Collection, Partner, Product
 from catalog.models.product import ProductStatus, ProductVisibility
 from catalog.serializers import (
     CategorySerializer,
     CollectionSerializer,
+    PartnerSerializer,
     ProductCardSerializer,
     ProductDetailSerializer,
     ReviewCreateSerializer,
@@ -65,10 +66,24 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             )
         category = self.request.query_params.get("category")
         product_type = self.request.query_params.get("type")
+        collection = self.request.query_params.get("collection")
+        partner = self.request.query_params.get("partner")
+        search = self.request.query_params.get("q")
         if category:
             qs = qs.filter(category__slug=category)
         if product_type:
             qs = qs.filter(type=product_type)
+        if collection:
+            qs = qs.filter(collections__slug=collection)
+        if partner:
+            qs = qs.filter(partner__slug=partner)
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search)
+                | Q(short_description__icontains=search)
+                | Q(description__icontains=search)
+                | Q(tags__name__icontains=search)
+            ).distinct()
         return qs
 
     def get_serializer_class(self):
@@ -111,6 +126,14 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 class CollectionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = _collections_with_counts(Collection.objects.all())
     serializer_class = CollectionSerializer
+    lookup_field = "slug"
+
+
+class PartnerViewSet(viewsets.ReadOnlyModelViewSet):
+    """Public seller profile — only partners with at least one live product are listed."""
+
+    queryset = Partner.objects.filter(products__in=_published_products()).distinct()
+    serializer_class = PartnerSerializer
     lookup_field = "slug"
 
 

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
 import { CompatibilityTab } from "@/features/admin/ProductForm/CompatibilityTab";
+import { DocumentationTab } from "@/features/admin/ProductForm/DocumentationTab";
 import { FilesTab } from "@/features/admin/ProductForm/FilesTab";
 import { MediaTab } from "@/features/admin/ProductForm/MediaTab";
 import {
@@ -16,6 +17,7 @@ import {
   updateProduct,
   type AdminChangelogItem,
   type AdminCompatibilityItem,
+  type AdminDocumentation,
   type AdminOptions,
   type AdminProductFeature,
   type AdminProductFile,
@@ -24,15 +26,24 @@ import {
 
 import styles from "./ProductForm.module.css";
 
-type TabId = "info" | "media" | "pricing" | "files" | "compatibility" | "seo";
+type TabId = "info" | "media" | "pricing" | "files" | "compatibility" | "documentation" | "seo";
 const TABS: { id: TabId; label: string }[] = [
   { id: "info", label: "Product Information" },
   { id: "media", label: "Media & Previews" },
   { id: "pricing", label: "Pricing & License" },
   { id: "files", label: "Files & Downloads" },
   { id: "compatibility", label: "Compatibility" },
+  { id: "documentation", label: "Documentation" },
   { id: "seo", label: "SEO & Settings" },
 ];
+
+const EMPTY_DOCUMENTATION: AdminDocumentation = {
+  title: "",
+  summary: "",
+  overview: "",
+  is_published: false,
+  sections: [],
+};
 
 const MAX_SHORT = 150;
 const MAX_DESC = 5000;
@@ -84,6 +95,7 @@ export function ProductForm({ productId }: { productId?: number }) {
   const [media, setMedia] = useState<AdminProductMedia[]>([]);
   const [changelog, setChangelog] = useState<AdminChangelogItem[]>([]);
   const [compatibility, setCompatibility] = useState<AdminCompatibilityItem[]>([]);
+  const [documentation, setDocumentation] = useState<AdminDocumentation>(EMPTY_DOCUMENTATION);
   const [files, setFiles] = useState<AdminProductFile[]>([]);
 
   useEffect(() => {
@@ -115,6 +127,7 @@ export function ProductForm({ productId }: { productId?: number }) {
         setMedia(p.media);
         setChangelog(p.changelog);
         setCompatibility(p.compatibility);
+        setDocumentation(p.documentation ?? EMPTY_DOCUMENTATION);
         setFiles(p.files);
         setDownloadCount(p.download_count);
         setLoaded(true);
@@ -155,6 +168,16 @@ export function ProductForm({ productId }: { productId?: number }) {
       media: media.map((m, i) => ({ ...m, sort_order: i })),
       changelog: changelog.filter((c) => c.version.trim()).map((c, i) => ({ ...c, sort_order: i })),
       compatibility: compatibility.filter((c) => c.label.trim()).map((c, i) => ({ ...c, sort_order: i })),
+      // A blank title means "no documentation yet" — send null so the backend
+      // deletes any existing row instead of rejecting an empty-but-required title.
+      documentation: documentation.title.trim()
+        ? {
+            ...documentation,
+            sections: documentation.sections
+              .filter((s) => s.title.trim())
+              .map((s, i) => ({ ...s, sort_order: i })),
+          }
+        : null,
     };
   }
 
@@ -439,6 +462,10 @@ export function ProductForm({ productId }: { productId?: number }) {
 
           {tab === "compatibility" && (
             <CompatibilityTab compatibility={compatibility} setCompatibility={setCompatibility} />
+          )}
+
+          {tab === "documentation" && (
+            <DocumentationTab documentation={documentation} setDocumentation={setDocumentation} />
           )}
 
           {tab === "seo" && (

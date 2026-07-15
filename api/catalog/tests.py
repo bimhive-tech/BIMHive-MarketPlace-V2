@@ -274,3 +274,176 @@ def test_media_upload_fails_fast_without_r2_configured(staff_client, category, p
     resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
     assert resp.status_code == 400
     assert "R2" in resp.json()["detail"]
+
+
+# ── Public search / collection / partner filters ──
+def test_search_matches_name_and_short_description(client, category, partner):
+    Product.objects.create(
+        name="BIM OneClick", short_description="s", description="d", category=category, partner=partner,
+        status=ProductStatus.PUBLISHED,
+    )
+    Product.objects.create(
+        name="Sheet Manager", short_description="Automate worksets", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Product.objects.create(
+        name="Unrelated Tool", short_description="s", description="d", category=category, partner=partner,
+        status=ProductStatus.PUBLISHED,
+    )
+
+    resp = client.get("/api/products?q=OneClick")
+    names = [row["name"] for row in resp.json()]
+    assert names == ["BIM OneClick"]
+
+    resp2 = client.get("/api/products?q=worksets")
+    assert [row["name"] for row in resp2.json()] == ["Sheet Manager"]
+
+
+def test_search_excludes_unpublished_products(client, category, partner):
+    Product.objects.create(
+        name="Draft OneClick", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.DRAFT,
+    )
+    resp = client.get("/api/products?q=OneClick")
+    assert resp.json() == []
+
+
+def test_collection_filter_scopes_products(client, category, partner):
+    from catalog.models import Collection
+
+    collection = Collection.objects.create(name="Revit Essentials")
+    in_collection = Product.objects.create(
+        name="In Collection", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Product.objects.create(
+        name="Not In Collection", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    collection.products.add(in_collection)
+
+    resp = client.get(f"/api/products?collection={collection.slug}")
+    assert [row["name"] for row in resp.json()] == ["In Collection"]
+
+
+def test_partner_endpoint_only_lists_partners_with_live_products(client, category, partner):
+    quiet_partner = Partner.objects.create(name="No Products Yet")
+    Product.objects.create(
+        name="Live Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+
+    resp = client.get("/api/partners")
+    slugs = [row["slug"] for row in resp.json()]
+    assert partner.slug in slugs
+    assert quiet_partner.slug not in slugs
+
+
+def test_partner_filter_scopes_products(client, category, partner):
+    other_partner = Partner.objects.create(name="Other Partner")
+    Product.objects.create(
+        name="This Partner's Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Product.objects.create(
+        name="Other Partner's Product", short_description="s", description="d",
+        category=category, partner=other_partner, status=ProductStatus.PUBLISHED,
+    )
+
+    resp = client.get(f"/api/products?partner={partner.slug}")
+    assert [row["name"] for row in resp.json()] == ["This Partner's Product"]
+
+
+# ── Admin documentation tab ──
+def test_saving_documentation_creates_it_with_sections(category, partner):
+    product = Product.objects.create(
+        name="Doc Product", short_description="s", description="d", category=category, partner=partner,
+    )
+    serializer = AdminProductDetailSerializer(
+        product,
+        data={
+            "documentation": {
+                "title": "Doc Product Documentation",
+                "summary": "Quick summary",
+                "overview": "Getting started overview",
+                "is_published": True,
+                "sections": [
+                    {"title": "Installation", "body": "Run the installer.", "image_url": "", "sort_order": 0},
+                    {"title": "Usage", "body": "Click the button.", "image_url": "", "sort_order": 1},
+                ],
+            }
+        },
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    updated = serializer.save()
+
+    doc = updated.documentation
+    assert doc.title == "Doc Product Documentation"
+    assert doc.is_published is True
+    assert list(doc.sections.values_list("title", flat=True)) == ["Installation", "Usage"]
+
+
+def test_saving_documentation_with_blank_title_deletes_it(category, partner):
+    from catalog.models import Documentation
+
+    product = Product.objects.create(
+        name="Doc Product 2", short_description="s", description="d", category=category, partner=partner,
+    )
+    Documentation.objects.create(product=product, title="Existing Doc")
+    assert Documentation.objects.filter(product=product).exists()
+
+    serializer = AdminProductDetailSerializer(product, data={"documentation": None}, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    assert not Documentation.objects.filter(product=product).exists()
+
+
+def test_documentation_updates_replace_all_sections(category, partner):
+    product = Product.objects.create(
+        name="Doc Product 3", short_description="s", description="d", category=category, partner=partner,
+    )
+    serializer = AdminProductDetailSerializer(
+        product,
+        data={"documentation": {"title": "T", "summary": "", "overview": "", "is_published": False,
+                                 "sections": [{"title": "A", "body": "x", "image_url": "", "sort_order": 0}]}},
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+
+    serializer2 = AdminProductDetailSerializer(
+        product,
+        data={"documentation": {"title": "T", "summary": "", "overview": "", "is_published": False,
+                                 "sections": [{"title": "B", "body": "y", "image_url": "", "sort_order": 0}]}},
+        partial=True,
+    )
+    serializer2.is_valid(raise_exception=True)
+    updated = serializer2.save()
+    assert list(updated.documentation.sections.values_list("title", flat=True)) == ["B"]
+
+
+def test_public_api_hides_unpublished_documentation(client, category, partner):
+    from catalog.models import Documentation
+
+    product = Product.objects.create(
+        name="Unpublished Doc Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Documentation.objects.create(product=product, title="Draft Doc", is_published=False)
+
+    resp = client.get(f"/api/products/{product.slug}")
+    assert resp.json()["documentation"] is None
+
+
+def test_public_api_shows_published_documentation(client, category, partner):
+    from catalog.models import Documentation
+
+    product = Product.objects.create(
+        name="Published Doc Product", short_description="s", description="d",
+        category=category, partner=partner, status=ProductStatus.PUBLISHED,
+    )
+    Documentation.objects.create(product=product, title="Live Doc", is_published=True)
+
+    resp = client.get(f"/api/products/{product.slug}")
+    assert resp.json()["documentation"]["title"] == "Live Doc"
