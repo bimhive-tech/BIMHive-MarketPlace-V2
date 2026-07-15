@@ -87,18 +87,21 @@ export interface AccountDownload {
 }
 export const getAccountDownloads = () => getJSON<AccountDownload[]>("/api/account/downloads");
 
-async function postJSON<T>(path: string, body: unknown): Promise<T> {
+async function writeJSON<T>(path: string, method: string, body?: unknown): Promise<T> {
   const token = await ensureCsrf();
   const res = await fetch(path, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: { "Content-Type": "application/json", "X-CSRFToken": token },
-    body: JSON.stringify(body),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new AccountApiError(data, res.status);
   return data;
 }
+
+const postJSON = <T>(path: string, body: unknown) => writeJSON<T>(path, "POST", body);
 
 export const claimFreeProduct = (slug: string) => postJSON<AccountOrder>("/api/account/claim-free", { slug });
 
@@ -113,3 +116,19 @@ export interface ReviewSubmission {
 // up to a minute.
 export const submitReview = (productSlug: string, review: ReviewSubmission) =>
   postJSON<Review>(`/api/products/${productSlug}/reviews`, review);
+
+export interface AccountReview {
+  id: number;
+  product_name: string;
+  product_slug: string;
+  product_cover_image_url: string;
+  rating: number;
+  title: string;
+  body: string;
+  is_verified_purchase: boolean;
+  created_at: string;
+}
+export const getAccountReviews = () => getJSON<AccountReview[]>("/api/account/reviews");
+export const updateAccountReview = (id: number, review: ReviewSubmission) =>
+  writeJSON<AccountReview>(`/api/account/reviews/${id}`, "PATCH", review);
+export const deleteAccountReview = (id: number) => writeJSON<void>(`/api/account/reviews/${id}`, "DELETE");

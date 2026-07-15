@@ -292,11 +292,11 @@ def test_search_matches_name_and_short_description(client, category, partner):
     )
 
     resp = client.get("/api/products?q=OneClick")
-    names = [row["name"] for row in resp.json()]
+    names = [row["name"] for row in resp.json()["results"]]
     assert names == ["BIM OneClick"]
 
     resp2 = client.get("/api/products?q=worksets")
-    assert [row["name"] for row in resp2.json()] == ["Sheet Manager"]
+    assert [row["name"] for row in resp2.json()["results"]] == ["Sheet Manager"]
 
 
 def test_search_excludes_unpublished_products(client, category, partner):
@@ -305,7 +305,7 @@ def test_search_excludes_unpublished_products(client, category, partner):
         category=category, partner=partner, status=ProductStatus.DRAFT,
     )
     resp = client.get("/api/products?q=OneClick")
-    assert resp.json() == []
+    assert resp.json()["results"] == []
 
 
 def test_collection_filter_scopes_products(client, category, partner):
@@ -323,7 +323,7 @@ def test_collection_filter_scopes_products(client, category, partner):
     collection.products.add(in_collection)
 
     resp = client.get(f"/api/products?collection={collection.slug}")
-    assert [row["name"] for row in resp.json()] == ["In Collection"]
+    assert [row["name"] for row in resp.json()["results"]] == ["In Collection"]
 
 
 def test_partner_endpoint_only_lists_partners_with_live_products(client, category, partner):
@@ -351,7 +351,7 @@ def test_partner_filter_scopes_products(client, category, partner):
     )
 
     resp = client.get(f"/api/products?partner={partner.slug}")
-    assert [row["name"] for row in resp.json()] == ["This Partner's Product"]
+    assert [row["name"] for row in resp.json()["results"]] == ["This Partner's Product"]
 
 
 # ── Admin documentation tab ──
@@ -506,3 +506,44 @@ def test_documentation_detail_404s_for_unpublished_doc(client, category, partner
 
     resp = client.get(f"/api/documentation/{doc.slug}")
     assert resp.status_code == 404
+
+
+# ── Product listing pagination ──
+def test_product_list_is_paginated(client, category, partner):
+    for i in range(30):
+        Product.objects.create(
+            name=f"Paged Product {i}", short_description="s", description="d",
+            category=category, partner=partner, status=ProductStatus.PUBLISHED,
+        )
+
+    first = client.get("/api/products").json()
+    assert first["count"] == 30
+    assert len(first["results"]) == 24
+    assert first["next"] is not None
+    assert first["previous"] is None
+
+    second = client.get("/api/products?page=2").json()
+    assert len(second["results"]) == 6
+    assert second["next"] is None
+
+    first_names = {p["name"] for p in first["results"]}
+    second_names = {p["name"] for p in second["results"]}
+    assert first_names.isdisjoint(second_names)
+
+
+def test_product_list_page_size_is_capped(client, category, partner):
+    # bulk_create skips per-instance signals (e.g. activation SKU sync) — fine
+    # here since this test only cares about pagination counts.
+    Product.objects.bulk_create(
+        [
+            Product(
+                name=f"Paged Product {i}", slug=f"paged-product-{i}", product_code=f"paged-product-{i}",
+                short_description="s", description="d",
+                category=category, partner=partner, status=ProductStatus.PUBLISHED,
+            )
+            for i in range(110)
+        ]
+    )
+
+    resp = client.get("/api/products?page_size=1000").json()
+    assert len(resp["results"]) == 100  # max_page_size=100 wins over the requested 1000

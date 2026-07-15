@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon, type IconName } from "@/components/Icon/Icon";
+import { Pagination } from "@/components/Pagination/Pagination";
 import { ProductCard } from "@/components/ProductCard/ProductCard";
 import { getCategories, getProducts } from "@/lib/api";
 
@@ -24,24 +25,38 @@ const ICON_BY_SLUG: Record<string, IconName> = {
   "other-tools": "wrench",
 };
 
+// Must match ProductPagination.page_size in api/catalog/views.py.
+const PAGE_SIZE = 24;
+
 interface CatalogPageProps {
-  searchParams: Promise<{ category?: string; q?: string }>;
+  searchParams: Promise<{ category?: string; q?: string; page?: string }>;
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const { category, q } = await searchParams;
-  const [categories, products] = await Promise.all([
+  const { category, q, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const [categories, { results: products, count }] = await Promise.all([
     getCategories(),
-    getProducts({ category, q }),
+    getProducts({ category, q, page }),
   ]);
   const active = categories.find((c) => c.slug === category);
+  const totalPages = Math.ceil(count / PAGE_SIZE);
+
+  function buildHref(targetPage: number): string {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (q) params.set("q", q);
+    if (targetPage > 1) params.set("page", String(targetPage));
+    const qs = params.toString();
+    return qs ? `/catalog?${qs}` : "/catalog";
+  }
 
   return (
     <div className={`container ${styles.page}`}>
       <header className={styles.head}>
         <h1 className={styles.title}>{q ? `Search results for "${q}"` : active ? active.name : "All Products"}</h1>
         <p className={styles.sub}>
-          {products.length} {products.length === 1 ? "product" : "products"}
+          {count} {count === 1 ? "product" : "products"}
           {active ? ` in ${active.name}` : q ? "" : " across the marketplace"}.
           {q && (
             <>
@@ -84,11 +99,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
 
         <div className={styles.main}>
           {products.length ? (
-            <div className={styles.grid}>
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
+            <>
+              <div className={styles.grid}>
+                {products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+              <Pagination page={page} totalPages={totalPages} buildHref={buildHref} />
+            </>
           ) : (
             <EmptyState
               icon="search"

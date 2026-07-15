@@ -1,5 +1,13 @@
 /** Shapes returned by the Django storefront API (see api/catalog/serializers.py). */
 
+/** DRF's PageNumberPagination envelope — see ProductPagination in api/catalog/views.py. */
+export interface Paginated<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
 export interface User {
   id: number;
   username: string;

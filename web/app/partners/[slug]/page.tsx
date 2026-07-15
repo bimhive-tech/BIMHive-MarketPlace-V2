@@ -25,7 +25,7 @@ export default async function PartnerProfilePage({ params }: PageProps) {
   const partner = await getPartner(slug);
   if (!partner) notFound();
 
-  const products = await getProducts({ partner: slug });
+  const { results: products } = await getProducts({ partner: slug, pageSize: 100 });
 
   return (
     <div className={`container ${styles.page}`}>

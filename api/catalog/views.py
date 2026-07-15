@@ -6,6 +6,8 @@ authenticated admin API endpoints).
 from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets
 from rest_framework.decorators import action, api_view
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -49,8 +51,19 @@ def _collections_with_counts(qs=None):
     )
 
 
+class ProductPagination(PageNumberPagination):
+    # A big catalog (or a "load everything" caller like a collection/partner
+    # page) can override via ?page_size=, capped so no one request can force
+    # the DB to hand back the whole table.
+    page_size = 24
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     """`/api/products` (list) and `/api/products/<slug>` (detail)."""
+
+    pagination_class = ProductPagination
 
     lookup_field = "slug"
 
@@ -98,14 +111,21 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         from licensing.models import ProductPurchase
 
         product = self.get_object()
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
 
         is_verified = ProductPurchase.objects.filter(
             user=request.user,
             product__product=product,
             payment_status=ProductPurchase.PaymentStatus.PAID,
         ).exists()
+        if not is_verified:
+            raise PermissionDenied("You can only review products you own.")
+        if Review.objects.filter(product=product, author=request.user).exists():
+            raise ValidationError(
+                {"detail": "You've already reviewed this product — edit your existing review instead."}
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         review = serializer.save(
             product=product,
             author=request.user,

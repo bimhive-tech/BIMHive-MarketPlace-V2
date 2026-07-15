@@ -26,7 +26,7 @@ export default async function CollectionDetailPage({ params }: PageProps) {
   const collection = await getCollection(slug);
   if (!collection) notFound();
 
-  const products = await getProducts({ collection: slug });
+  const { results: products } = await getProducts({ collection: slug, pageSize: 100 });
 
   return (
     <div className={`container ${styles.page}`}>

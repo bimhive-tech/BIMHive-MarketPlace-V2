@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/Button/Button";
 import { Field } from "@/components/Field/Field";
 import { StarRatingInput } from "@/components/StarRatingInput/StarRatingInput";
-import { AccountApiError, submitReview } from "@/lib/accountApi";
+import { AccountApiError, getAccountReviews, submitReview } from "@/lib/accountApi";
 import { me } from "@/lib/auth";
 import type { Review, User } from "@/lib/types";
 
@@ -20,6 +20,8 @@ interface WriteReviewFormProps {
 export function WriteReviewForm({ productSlug, onPosted }: WriteReviewFormProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  // undefined = still checking, null = no existing review for this product
+  const [alreadyReviewed, setAlreadyReviewed] = useState<boolean | undefined>(undefined);
   const [rating, setRating] = useState(0);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -30,6 +32,13 @@ export function WriteReviewForm({ productSlug, onPosted }: WriteReviewFormProps)
   useEffect(() => {
     me().then(setUser);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    getAccountReviews()
+      .then((reviews) => setAlreadyReviewed(reviews.some((r) => r.product_slug === productSlug)))
+      .catch(() => setAlreadyReviewed(false));
+  }, [user, productSlug]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,7 +75,18 @@ export function WriteReviewForm({ productSlug, onPosted }: WriteReviewFormProps)
     );
   }
 
-  if (user === undefined) return null;
+  if (user === undefined || alreadyReviewed === undefined) return null;
+
+  if (alreadyReviewed) {
+    return (
+      <div className={styles.loginPrompt}>
+        <span>You've already reviewed this product.</span>
+        <Button href="/account/reviews" variant="secondary" size="md">
+          Edit your review
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <form className={styles.form} onSubmit={onSubmit}>

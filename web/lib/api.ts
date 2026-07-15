@@ -8,6 +8,7 @@ import type {
   DocumentationDetail,
   DocumentationListItem,
   HomeData,
+  Paginated,
   Partner,
   ProductCard,
   ProductDetail,
@@ -30,12 +31,26 @@ export function getHome() {
   return getJSON<HomeData>("/api/home");
 }
 
-export function getProducts(params?: { category?: string; type?: string; q?: string; collection?: string; partner?: string }) {
+interface GetProductsParams {
+  category?: string;
+  type?: string;
+  q?: string;
+  collection?: string;
+  partner?: string;
+  page?: number;
+  /** Defaults to the backend's page_size (24, see ProductPagination). Pass a
+   * bigger ceiling for a scoped list (collection/partner) that isn't paginated
+   * in its own UI yet, so it doesn't silently truncate. */
+  pageSize?: number;
+}
+
+export function getProducts(params?: GetProductsParams) {
+  const { page, pageSize, ...rest } = params ?? {};
   const clean = Object.fromEntries(
-    Object.entries(params ?? {}).filter(([, v]) => v),
+    Object.entries({ ...rest, page, page_size: pageSize }).filter(([, v]) => v),
   ) as Record<string, string>;
   const qs = new URLSearchParams(clean).toString();
-  return getJSON<ProductCard[]>(`/api/products${qs ? `?${qs}` : ""}`);
+  return getJSON<Paginated<ProductCard>>(`/api/products${qs ? `?${qs}` : ""}`);
 }
 
 export function getCategories() {

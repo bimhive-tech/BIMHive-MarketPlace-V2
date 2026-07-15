@@ -30,6 +30,7 @@ const GROUPS: NavGroup[] = [
       { label: "Orders & Invoices", href: "/account/orders", icon: "document", ready: true },
       { label: "Payment Methods", href: "/account/payment-methods", icon: "lock" },
       { label: "Profile", href: "/account/profile", icon: "users", ready: true },
+      { label: "My Reviews", href: "/account/reviews", icon: "star", ready: true },
       { label: "Security", href: "/account/security", icon: "shield" },
       { label: "Notifications", href: "/account/notifications", icon: "bell" },
     ],
