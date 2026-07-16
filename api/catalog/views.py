@@ -152,9 +152,15 @@ class CollectionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class PartnerViewSet(viewsets.ReadOnlyModelViewSet):
-    """Public seller profile — only partners with at least one live product are listed."""
+    """Public seller profile — only APPROVED partners with at least one live
+    product are listed. The status filter is belt-and-suspenders: a pending/
+    rejected applicant can't have a published product yet anyway (product
+    creation itself is gated on approval — see catalog.permissions), but a
+    freshly-un-verified partner should never be reachable regardless."""
 
-    queryset = Partner.objects.filter(products__in=_published_products()).distinct()
+    queryset = Partner.objects.filter(
+        status=Partner.ApplicationStatus.APPROVED, products__in=_published_products()
+    ).distinct()
     serializer_class = PartnerSerializer
     lookup_field = "slug"
 

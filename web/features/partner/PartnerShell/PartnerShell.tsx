@@ -7,9 +7,10 @@ import type { User } from "@/lib/types";
 import styles from "./PartnerShell.module.css";
 
 export function PartnerShell({ user, children }: { user: User; children: ReactNode }) {
+  const approved = user.partner?.status === "approved";
   return (
     <div className={styles.shell}>
-      <PartnerSidebar />
+      <PartnerSidebar approved={approved} />
       <div className={styles.body}>
         <header className={styles.topbar}>
           <div>

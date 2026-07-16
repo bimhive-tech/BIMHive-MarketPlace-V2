@@ -2,13 +2,9 @@
 Staff-only admin API powering the Next.js admin portal (/admin-portal).
 Separate from Django's built-in /admin. All endpoints require is_staff.
 """
-import secrets
-
-from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count
 from rest_framework import generics, serializers, viewsets
-from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser
@@ -547,11 +543,14 @@ class PartnerSerializer(ProductCountMixin, serializers.ModelSerializer):
         model = Partner
         fields = [
             "id", "name", "slug", "tagline", "bio", "logo_url", "website", "is_verified",
-            "product_count", "owner_email",
+            "status", "rejection_note", "product_count", "owner_email",
         ]
         read_only_fields = ["slug"]
 
     def get_owner_email(self, obj):
+        # The account that submitted the seller application (see
+        # catalog.partner_api.BecomeSellerView) — read-only here, staff never
+        # sets this directly.
         member = obj.team_members.first()
         return member.email if member else ""
 
@@ -562,32 +561,6 @@ class AdminPartnerViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Partner.objects.annotate(product_count=Count("products", distinct=True))
-
-    @action(detail=True, methods=["post"], url_path="set-login")
-    def set_login(self, request, pk=None):
-        """Issue (or re-link) this partner's self-service login. No email
-        infrastructure exists in this app — the generated/entered password is
-        returned exactly once here for the admin to relay to the partner
-        manually, and is never retrievable again after this response."""
-        User = get_user_model()
-        partner = self.get_object()
-        email = (request.data.get("email") or "").strip().lower()
-        if not email:
-            raise ValidationError({"email": "An email is required."})
-        password = request.data.get("password") or secrets.token_urlsafe(12)
-
-        user = User.objects.filter(email__iexact=email).first()
-        if user:
-            user.set_password(password)
-            user.partner = partner
-            user.must_change_password = True
-            user.save(update_fields=["password", "partner", "must_change_password"])
-        else:
-            # Same create_user(...) pattern as RegisterSerializer (accounts/serializers.py)
-            # for correct password hashing — this just skips the public-signup path.
-            user = User.objects.create_user(
-                username=email, email=email, password=password, partner=partner, must_change_password=True,
-            )
 
         return Response({"email": user.email, "password": password}, status=201)
 

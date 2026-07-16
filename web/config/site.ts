@@ -87,6 +87,25 @@ export const RESOURCE_LINKS: {
   },
 ];
 
+/** The /sell landing page's "why sell with us" row. */
+export const SELL_BENEFITS: { icon: IconName; title: string; text: string }[] = [
+  {
+    icon: "users",
+    title: "Reach thousands of AEC professionals",
+    text: "Your tools land in front of BIMHIVE's existing audience of Revit and BIM users.",
+  },
+  {
+    icon: "shield",
+    title: "Every product is reviewed",
+    text: "BIMHive staff review each submission before it goes live, so buyers trust what they download.",
+  },
+  {
+    icon: "chart",
+    title: "Track your sales",
+    text: "The partner dashboard shows your revenue and order history alongside your product catalog.",
+  },
+];
+
 export const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 
 export function formatPrice(amount: number | string, currency = "USD"): string {

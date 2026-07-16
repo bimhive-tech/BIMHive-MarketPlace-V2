@@ -16,11 +16,15 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 class UserPartnerSerializer(serializers.Serializer):
     """Minimal partner summary attached to /api/auth/me — enough for the frontend
-    to know a user has partner-portal access without a second round trip."""
+    to know a user's seller-application status without a second round trip.
+    `status` is pending/approved/rejected (see catalog.Partner.ApplicationStatus) —
+    only "approved" grants real partner-portal access."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
     slug = serializers.CharField()
+    status = serializers.CharField()
+    rejection_note = serializers.CharField()
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -32,7 +36,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "username", "email", "first_name", "last_name", "full_name",
-            "is_staff", "date_joined", "profile", "partner", "must_change_password",
+            "is_staff", "date_joined", "profile", "partner",
         ]
 
     def get_full_name(self, obj):

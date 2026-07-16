@@ -257,7 +257,7 @@
   gap: var(--space-3);
 }
 
-/* ── Partner login issuance ── */
+/* ── Seller application review (inline in the Partners edit form) ── */
 .loginPanel {
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
@@ -270,14 +270,4 @@
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--color-heading);
-}
-
-.passwordReveal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-4);
-  background: var(--gold-100);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-sm);
 }

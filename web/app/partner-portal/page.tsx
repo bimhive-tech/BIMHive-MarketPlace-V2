@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 
 import { Icon, type IconName } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
+import { formatPrice } from "@/config/site";
 import { getAdminProducts, type AdminProductRow } from "@/lib/adminApi";
+import { getPartnerSales, type PartnerSalesSummary } from "@/lib/partnerApi";
 
 import styles from "./dashboard.module.css";
 
@@ -29,11 +31,15 @@ function formatDate(value: string): string {
 
 export default function PartnerDashboard() {
   const [products, setProducts] = useState<AdminProductRow[] | null>(null);
+  const [sales, setSales] = useState<PartnerSalesSummary | null>(null);
 
   useEffect(() => {
     // The backend auto-scopes this to the caller's own partner for a
     // non-staff user (see IsStaffOrPartner + AdminProductListCreateView).
     getAdminProducts("all").then(setProducts).catch(() => setProducts([]));
+    getPartnerSales()
+      .then(setSales)
+      .catch(() => setSales({ total_revenue: "0", order_count: 0, orders: [] }));
   }, []);
 
   const counts = STAT_CARDS.reduce<Record<string, number>>((acc, card) => {
@@ -55,6 +61,13 @@ export default function PartnerDashboard() {
       </header>
 
       <div className={styles.statGrid}>
+        <div className={styles.statCard}>
+          <span className={`${styles.statIcon} ${styles.gold}`}>
+            <Icon name="wallet" size={20} />
+          </span>
+          <span className={styles.statValue}>{sales ? formatPrice(sales.total_revenue) : "—"}</span>
+          <span className={styles.statLabel}>Total Revenue</span>
+        </div>
         {STAT_CARDS.map((card) => (
           <div key={card.status} className={styles.statCard}>
             <span className={`${styles.statIcon} ${styles[card.tone]}`}>
@@ -65,6 +78,26 @@ export default function PartnerDashboard() {
           </div>
         ))}
       </div>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHead}>
+          <h2 className={styles.panelTitle}>Recent Sales</h2>
+          <Link href="/partner-portal/sales" className={styles.link}>
+            View all <Icon name="arrow-right" size={14} />
+          </Link>
+        </div>
+        <ol className={styles.topList}>
+          {sales?.orders.slice(0, 5).map((sale) => (
+            <li key={sale.id} className={styles.topRow}>
+              <span className={styles.topName}>{sale.product_name}</span>
+              <Pill tone={sale.payment_status === "paid" ? "success" : "neutral"}>{sale.payment_status}</Pill>
+              <span>{formatPrice(sale.amount, sale.currency)}</span>
+            </li>
+          ))}
+          {sales?.orders.length === 0 && <li className={styles.empty}>No sales yet.</li>}
+          {!sales && <li className={styles.loading}>Loading…</li>}
+        </ol>
+      </section>
 
       <section className={styles.panel}>
         <div className={styles.panelHead}>

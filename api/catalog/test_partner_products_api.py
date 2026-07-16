@@ -21,12 +21,12 @@ def category():
 
 @pytest.fixture
 def partner_a():
-    return Partner.objects.create(name="Partner A")
+    return Partner.objects.create(name="Partner A", status=Partner.ApplicationStatus.APPROVED)
 
 
 @pytest.fixture
 def partner_b():
-    return Partner.objects.create(name="Partner B")
+    return Partner.objects.create(name="Partner B", status=Partner.ApplicationStatus.APPROVED)
 
 
 @pytest.fixture
@@ -329,48 +329,17 @@ def test_staff_without_a_partner_cannot_reach_partner_profile(staff_client):
     assert resp.status_code == 403
 
 
-# ── Admin issues a partner login (POST /api/admin/partners/{id}/set-login) ──
-def test_admin_issues_a_new_partner_login(staff_client, partner_a):
-    resp = staff_client.post(
-        f"/api/admin/partners/{partner_a.id}/set-login", {"email": "new@partnera.com"},
-        content_type="application/json",
-    )
-    assert resp.status_code == 201, resp.json()
-    body = resp.json()
-    assert body["email"] == "new@partnera.com"
-    assert body["password"]  # auto-generated, returned exactly once
-
-    user = User.objects.get(email="new@partnera.com")
-    assert user.partner_id == partner_a.id
-    assert user.must_change_password is True
-    assert user.check_password(body["password"])
-
-
-def test_admin_can_relink_an_existing_user_as_a_partner_login(staff_client, partner_a):
-    existing = User.objects.create_user(username="already@x.com", email="already@x.com", password="oldpw")
-    resp = staff_client.post(
-        f"/api/admin/partners/{partner_a.id}/set-login",
-        {"email": "already@x.com", "password": "NewPassword!123"},
-        content_type="application/json",
-    )
-    assert resp.status_code == 201, resp.json()
-    existing.refresh_from_db()
-    assert existing.partner_id == partner_a.id
-    assert existing.check_password("NewPassword!123")
-
-
-def test_partner_admin_form_shows_owner_email_once_issued(staff_client, partner_a):
-    staff_client.post(
-        f"/api/admin/partners/{partner_a.id}/set-login", {"email": "owner@partnera.com"},
-        content_type="application/json",
-    )
+def test_owner_email_reflects_whoever_applied(staff_client, partner_a):
+    User.objects.create_user(username="owner@partnera.com", email="owner@partnera.com", password="x", partner=partner_a)
     resp = staff_client.get(f"/api/admin/partners/{partner_a.id}")
     assert resp.json()["owner_email"] == "owner@partnera.com"
 
 
-def test_non_staff_cannot_issue_a_partner_login(partner_a_client, partner_a):
-    resp = partner_a_client.post(
-        f"/api/admin/partners/{partner_a.id}/set-login", {"email": "sneaky@x.com"},
-        content_type="application/json",
-    )
+def test_pending_partner_is_blocked_by_isstaffOrpartner(client, category):
+    # A partner-linked user whose application hasn't been approved yet must be
+    # blocked from the product endpoints even though partner_id is set.
+    partner = Partner.objects.create(name="Pending Co")  # defaults to pending
+    user = User.objects.create_user(username="pending@x.com", email="pending@x.com", password="x", partner=partner)
+    client.force_login(user)
+    resp = client.get("/api/admin/products")
     assert resp.status_code == 403

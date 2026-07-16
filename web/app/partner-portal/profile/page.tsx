@@ -48,6 +48,9 @@ export default function PartnerProfilePage() {
 
   if (!profile) return <div className={styles.loading}>Loading your partner profile…</div>;
 
+  const STATUS_TONE = { pending: "warning", approved: "success", rejected: "error" } as const;
+  const STATUS_LABEL = { pending: "Pending Review", approved: "Approved", rejected: "Rejected" } as const;
+
   return (
     <div className={styles.page}>
       <header className={styles.head}>
@@ -55,8 +58,21 @@ export default function PartnerProfilePage() {
           <h1 className={styles.title}>Partner Profile</h1>
           <p className={styles.sub}>This is what customers see on your public partner page.</p>
         </div>
-        {profile.is_verified && <Pill tone="success">Verified</Pill>}
+        <div className={styles.badges}>
+          <Pill tone={STATUS_TONE[profile.status]}>{STATUS_LABEL[profile.status]}</Pill>
+          {profile.is_verified && <Pill tone="success">Verified</Pill>}
+        </div>
       </header>
+
+      {profile.status !== "approved" && (
+        <div className={profile.status === "pending" ? styles.noticeInfo : styles.noticeError}>
+          <p>
+            {profile.status === "pending"
+              ? "Your application is under review — BIMHive staff will approve or reject it soon."
+              : profile.rejection_note || "Your application was rejected. No reason was given."}
+          </p>
+        </div>
+      )}
 
       <form className={styles.card} onSubmit={onSubmit}>
         <label className={styles.field}>

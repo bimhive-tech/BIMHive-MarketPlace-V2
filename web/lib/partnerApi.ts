@@ -17,13 +17,15 @@ async function ensureCsrf(): Promise<string> {
   return token ?? "";
 }
 
-async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
+async function request<T>(path: string, method: string, body?: unknown, isForm = false): Promise<T> {
   const token = await ensureCsrf();
+  const headers: Record<string, string> = { "X-CSRFToken": token };
+  if (!isForm) headers["Content-Type"] = "application/json";
   const res = await fetch(path, {
     method,
     credentials: "include",
-    headers: { "Content-Type": "application/json", "X-CSRFToken": token },
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: body ? (isForm ? (body as FormData) : JSON.stringify(body)) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new PartnerApiError(data, res.status);
@@ -54,8 +56,33 @@ export interface PartnerProfile {
   logo_url: string;
   website: string;
   is_verified: boolean;
+  status: "pending" | "approved" | "rejected";
+  rejection_note: string;
 }
 
 export const getPartnerProfile = () => request<PartnerProfile>("/api/partner/profile", "GET");
 export const updatePartnerProfile = (data: Partial<PartnerProfile>) =>
   request<PartnerProfile>("/api/partner/profile", "PATCH", data);
+
+export const applyToBecomeSeller = (companyName: string, logo: File | null) => {
+  const form = new FormData();
+  form.append("company_name", companyName);
+  if (logo) form.append("logo", logo);
+  return request<PartnerProfile>("/api/partner/apply", "POST", form, true);
+};
+
+export interface PartnerSale {
+  id: string;
+  product_name: string;
+  amount: string;
+  currency: string;
+  payment_status: string;
+  requested_at: string;
+  paid_at: string | null;
+}
+export interface PartnerSalesSummary {
+  total_revenue: string;
+  order_count: number;
+  orders: PartnerSale[];
+}
+export const getPartnerSales = () => request<PartnerSalesSummary>("/api/partner/sales", "GET");

@@ -36,10 +36,8 @@ class User(AbstractUser):
         null=True,
         blank=True,
         related_name="team_members",
-        help_text="Set for partner self-service logins — grants access to the partner portal.",
-    )
-    must_change_password = models.BooleanField(
-        default=False, help_text="Forces a password change on next login (set when an admin issues a password)."
+        help_text="Set when this account submits a seller application — see catalog.Partner.status "
+        "for whether they actually have partner-portal access yet.",
     )
 
     def __str__(self):

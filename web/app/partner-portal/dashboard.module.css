@@ -42,7 +42,7 @@
 
 .statGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: var(--space-4);
 }
 
@@ -154,6 +154,12 @@
   padding: var(--space-3) 0;
   color: var(--color-muted);
   font-size: var(--fs-sm);
+}
+
+@media (max-width: 960px) {
+  .statGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 640px) {

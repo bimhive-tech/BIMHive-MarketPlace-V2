@@ -75,11 +75,23 @@ payment flow until Stripe/PayPal are wired).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
 **Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses`,
 `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
-job title/bio, change email, change password, delete account).
+job title/bio, change email, change password, delete account, plus a Seller card linking to
+`/sell` or `/partner-portal` depending on application status).
+**Become a seller**: `/sell` (marketing landing page), `/sell/apply` (auth-gated application form —
+company name + logo upload). Submitting creates a `Partner` in "pending" status linked to the
+user's account; BIMHive staff approve or reject it from the admin Partners page.
+**Partner portal** (auth-gated to users with a linked `Partner`, shared sidebar shell):
+`/partner-portal` (dashboard: product + revenue stats, recent sales), `/partner-portal/products`
+(list/create/edit — partners can only save draft or submit for review, never self-publish),
+`/partner-portal/sales` (read-only order history for their own products, no customer PII),
+`/partner-portal/profile` (edit company tagline/bio/logo/website; always reachable, shows the
+application's pending/rejected status + rejection note). Everything except Partner Profile is
+hidden/gated until the seller application is approved.
 **Admin portal** (staff-gated, separate from Django's `/admin`): `/admin-portal` (dashboard),
 `/admin-portal/products` (list/create/edit, full form incl. media/features/changelog/compatibility/
 files), `/admin-portal/{orders,customers,reviews,licenses}`, `/admin-portal/{categories,tags,
-partners,collections}` (taxonomy CRUD), `/admin-portal/settings` (live system status),
+partners,collections}` (taxonomy CRUD — Partners includes a Pending/Approved/Rejected review queue
+for seller applications), `/admin-portal/settings` (live system status),
 `/admin-portal/settings/{users,roles}` (role-based staff access).
 
 ## API endpoints
@@ -93,6 +105,11 @@ partners,collections}` (taxonomy CRUD), `/admin-portal/settings` (live system st
   status, update a user's role). A product's `product_code` auto-syncs to its licensing SKU on save
   (see `catalog/signals.py`) — creating/editing/publishing a product is immediately reflected in what
   the activation API will authorize.
+- Partner self-service (auth-gated): `POST /api/partner/apply` (become a seller — company name +
+  optional logo, creates a pending `Partner`), `GET|PATCH /api/partner/profile` (reachable at any
+  application status), `GET /api/partner/sales` (approved partners only — own orders/revenue, no
+  customer PII). Product/file/media CRUD is shared with staff via the `/api/admin/products*` routes
+  (`IsStaffOrPartner` scopes a non-staff caller to their own approved partner automatically).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
 
 ## Admin / test access

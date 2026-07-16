@@ -22,7 +22,7 @@ def category():
 
 @pytest.fixture
 def partner():
-    return Partner.objects.create(name="BIMHIVE")
+    return Partner.objects.create(name="BIMHIVE", status=Partner.ApplicationStatus.APPROVED)
 
 
 @pytest.fixture

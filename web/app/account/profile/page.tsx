@@ -8,6 +8,7 @@ import { EmailCard } from "@/features/account/EmailCard/EmailCard";
 import { PasswordCard } from "@/features/account/PasswordCard/PasswordCard";
 import { ProfileForm } from "@/features/account/ProfileForm/ProfileForm";
 import { QuickLinksCard } from "@/features/account/QuickLinksCard/QuickLinksCard";
+import { SellerCard } from "@/features/account/SellerCard/SellerCard";
 import { me } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
@@ -61,6 +62,7 @@ export default function ProfilePage() {
           </div>
           <div className={styles.side}>
             <AccountSummaryCard user={user} />
+            <SellerCard user={user} />
             <QuickLinksCard />
             <DeleteAccountCard />
           </div>

@@ -8,7 +8,32 @@
 .head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.noticeInfo,
+.noticeError {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+}
+
+.noticeInfo {
+  background: var(--gold-50);
+  color: var(--gold-800);
+  border: 1px solid var(--gold-200);
+}
+
+.noticeError {
+  background: var(--error-bg);
+  color: var(--error-fg);
 }
 
 .title {

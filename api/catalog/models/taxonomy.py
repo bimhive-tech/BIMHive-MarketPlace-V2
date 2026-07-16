@@ -82,15 +82,32 @@ class Tag(TimeStamped):
 
 
 class Partner(TimeStamped):
-    """The seller/publisher a product is listed under (shown on the product page)."""
+    """The seller/publisher a product is listed under (shown on the product page).
+    Created via the self-service "Become a Seller" application (see
+    catalog.partner_api.BecomeSellerView) — `status` gates whether the
+    applicant's account actually has partner-portal access yet
+    (catalog.permissions.IsStaffOrPartner/IsApprovedPartner)."""
+
+    class ApplicationStatus(models.TextChoices):
+        PENDING = "pending", "Pending Review"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
 
     name = models.CharField(max_length=160, unique=True)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
     tagline = models.CharField(max_length=180, blank=True)
     bio = models.TextField(blank=True)
-    logo_url = models.URLField(blank=True)
+    # Same 1000-char ceiling as Product.cover_image_url — a presigned R2 URL
+    # (the fallback used whenever R2_PUBLIC_BASE_URL isn't set) runs long.
+    logo_url = models.URLField(max_length=1000, blank=True)
     website = models.URLField(blank=True)
+    # A separate, cosmetic "verified seller" badge BIMHive toggles for public
+    # display — unrelated to `status`, which gates portal access itself.
     is_verified = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=20, choices=ApplicationStatus.choices, default=ApplicationStatus.PENDING
+    )
+    rejection_note = models.TextField(blank=True)
 
     class Meta:
         ordering = ["name"]
