@@ -12,7 +12,9 @@ import { applyToBecomeSeller, PartnerApiError } from "@/lib/partnerApi";
 import styles from "./page.module.css";
 
 export default function SellApplyPage() {
-  return <RequireAuth>{() => <ApplyForm />}</RequireAuth>;
+  return (
+    <RequireAuth blockStaff>{() => <ApplyForm />}</RequireAuth>
+  );
 }
 
 function ApplyForm() {

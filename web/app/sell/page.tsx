@@ -13,6 +13,9 @@ import styles from "./page.module.css";
 function ctaFor(user: User | null | undefined): { label: string; href: string } | null {
   if (user === undefined) return null; // still loading
   if (user === null) return { label: "Log in to apply", href: "/login?next=/sell/apply" };
+  // Staff already have unrestricted access via the admin portal and must
+  // never also be a partner (see catalog.partner_api.BecomeSellerView).
+  if (user.is_staff) return null;
   if (!user.partner) return { label: "Become a Seller", href: "/sell/apply" };
   if (user.partner.status === "approved") return { label: "Go to Partner Dashboard", href: "/partner-portal" };
   return { label: "View Application Status", href: "/partner-portal" };

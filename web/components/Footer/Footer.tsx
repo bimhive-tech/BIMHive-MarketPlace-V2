@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { SellFooterLink } from "@/components/Footer/SellFooterLink";
 import { Logo } from "@/components/Logo/Logo";
 import { SITE } from "@/config/site";
 
@@ -11,7 +12,6 @@ const COLUMNS = [
     links: [
       { label: "All Products", href: "/catalog" },
       { label: "Collections", href: "/collections" },
-      { label: "Become a Seller", href: "/sell" },
     ],
   },
   {
@@ -58,6 +58,7 @@ export function Footer() {
                   {link.label}
                 </Link>
               ))}
+              {col.heading === "Marketplace" && <SellFooterLink />}
             </nav>
           ))}
         </div>

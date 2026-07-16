@@ -82,6 +82,14 @@ def test_anonymous_cannot_apply(client):
     assert resp.status_code in (401, 403)
 
 
+def test_staff_cannot_apply(staff_client):
+    # Staff already have unrestricted access via the admin portal and must
+    # never also be a partner — see catalog.partner_api.BecomeSellerView.
+    resp = staff_client.post("/api/partner/apply", {"company_name": "Acme Tools"})
+    assert resp.status_code == 400
+    assert "detail" in resp.json()
+
+
 # ── Access before approval ──
 def test_pending_partner_can_see_and_edit_own_profile(customer_client):
     client, _ = customer_client

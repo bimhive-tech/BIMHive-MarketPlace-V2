@@ -34,7 +34,9 @@ export default function ProfilePage() {
     { id: "info", label: "Profile Information" },
     { id: "preferences", label: "Preferences" },
     { id: "connected", label: "Connected Accounts" },
-    { id: "seller", label: sellerTabLabel(user) },
+    // Staff already have unrestricted access via the admin portal and must
+    // never also be a partner (see catalog.partner_api.BecomeSellerView).
+    ...(user.is_staff ? [] : [{ id: "seller" as const, label: sellerTabLabel(user) }]),
   ];
 
   return (

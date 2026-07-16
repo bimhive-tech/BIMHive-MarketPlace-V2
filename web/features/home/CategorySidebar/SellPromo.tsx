@@ -10,8 +10,11 @@ import styles from "./CategorySidebar.module.css";
 
 /** Client-side so it can hide once the visitor already has a seller
  * application (any status) — no point pitching "Become a Seller" to someone
- * who already applied. Fetched separately from the server-rendered category
- * list above it so that list doesn't need to wait on a client round trip. */
+ * who already applied — or is staff (staff already have unrestricted admin
+ * access and must never also be a partner, see
+ * catalog.partner_api.BecomeSellerView). Fetched separately from the
+ * server-rendered category list above it so that list doesn't need to wait
+ * on a client round trip. */
 export function SellPromo() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
 
@@ -19,7 +22,7 @@ export function SellPromo() {
     me().then(setUser);
   }, []);
 
-  if (user === undefined || user?.partner) return null;
+  if (user === undefined || user?.partner || user?.is_staff) return null;
 
   return (
     <div className={styles.sellCard}>

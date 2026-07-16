@@ -86,6 +86,13 @@ class BecomeSellerView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
+        if request.user.is_staff:
+            # Staff already have unrestricted access to every product via the
+            # admin portal — a staff account also being a partner would let
+            # them submit "for review" and approve their own submission with
+            # the same login, defeating the human-review process this whole
+            # feature exists for.
+            raise ValidationError({"detail": "Staff accounts can't apply to become a seller."})
         if request.user.partner_id is not None:
             raise ValidationError({"detail": "You've already applied to become a seller."})
 
