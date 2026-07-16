@@ -1,26 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-
 import { Button } from "@/components/Button/Button";
-import { Icon, type IconName } from "@/components/Icon/Icon";
+import { SidebarNav, type SidebarNavGroup } from "@/components/SidebarNav/SidebarNav";
 
 import styles from "./AccountShell.module.css";
 
-interface NavItem {
-  label: string;
-  href: string;
-  icon: IconName;
-  ready?: boolean;
-}
-
-interface NavGroup {
-  heading: string;
-  items: NavItem[];
-}
-
-const GROUPS: NavGroup[] = [
+const GROUPS: SidebarNavGroup[] = [
   {
     heading: "Account",
     items: [
@@ -45,40 +30,9 @@ const GROUPS: NavGroup[] = [
 ];
 
 export function AccountSidebar() {
-  const pathname = usePathname();
-
   return (
     <aside className={styles.sidebar}>
-      <nav className={styles.nav}>
-        {GROUPS.map((group) => (
-          <div key={group.heading} className={styles.group}>
-            <p className={styles.groupHeading}>{group.heading}</p>
-            {group.items.map((item) => {
-              const active =
-                item.href === "/account" ? pathname === "/account" : pathname?.startsWith(item.href);
-              if (!item.ready) {
-                return (
-                  <span key={item.label} className={`${styles.item} ${styles.itemDisabled}`}>
-                    <Icon name={item.icon} size={18} />
-                    {item.label}
-                    <span className={styles.soon}>soon</span>
-                  </span>
-                );
-              }
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={`${styles.item} ${active ? styles.itemActive : ""}`}
-                >
-                  <Icon name={item.icon} size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
+      <SidebarNav groups={GROUPS} rootPath="/account" />
 
       <div className={styles.helpCard}>
         <h3 className={styles.helpTitle}>Need help?</h3>

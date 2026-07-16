@@ -106,6 +106,10 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data["new_password"])
+        # Clears the one-time "admin issued this password" flag (see
+        # catalog.admin_api.AdminPartnerViewSet.set_login) — a no-op for anyone
+        # who didn't have it set.
+        request.user.must_change_password = False
         request.user.save()
         update_session_auth_hash(request, request.user)  # keep the session valid
         return Response({"detail": "Password updated."})

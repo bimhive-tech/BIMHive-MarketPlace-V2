@@ -66,14 +66,27 @@ const EMPTY_FORM = {
   price: "0",
   default_trial_days: "30",
   status: "published",
+  rejection_note: "",
   visibility: "public",
   is_featured: false,
   seo_title: "",
   seo_description: "",
 };
 
-export function ProductForm({ productId }: { productId?: number }) {
+interface ProductFormProps {
+  productId?: number;
+  /** "partner" restricts the Status options to draft/pending (only staff can
+   * publish or reject — see catalog.admin_api.AdminProductDetailSerializer),
+   * hides the Partner picker in favor of the caller's own org, and routes
+   * saves/redirects through /partner-portal instead of /admin-portal. */
+  mode?: "admin" | "partner";
+  /** Shown in place of the Partner dropdown in partner mode. */
+  partnerName?: string;
+}
+
+export function ProductForm({ productId, mode = "admin", partnerName }: ProductFormProps) {
   const router = useRouter();
+  const basePath = mode === "partner" ? "/partner-portal" : "/admin-portal";
   const isEdit = productId != null;
   const [options, setOptions] = useState<AdminOptions | null>(null);
   const [tab, setTab] = useState<TabId>("info");
@@ -87,7 +100,10 @@ export function ProductForm({ productId }: { productId?: number }) {
   // see ensureSaved() below.
   const [savedId, setSavedId] = useState<number | undefined>(productId);
 
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => ({
+    ...EMPTY_FORM,
+    status: mode === "partner" ? "pending" : "published",
+  }));
   const [tags, setTags] = useState<number[]>([]);
   const [features, setFeatures] = useState<AdminProductFeature[]>([
     { title: "", description: "", icon: "", sort_order: 0 },
@@ -117,6 +133,7 @@ export function ProductForm({ productId }: { productId?: number }) {
           price: p.price,
           default_trial_days: String(p.default_trial_days),
           status: p.status,
+          rejection_note: p.rejection_note,
           visibility: p.visibility,
           is_featured: p.is_featured,
           seo_title: p.seo_title,
@@ -154,11 +171,17 @@ export function ProductForm({ productId }: { productId?: number }) {
       description: form.description.trim(),
       type: form.type,
       category: Number(form.category),
-      partner: Number(form.partner),
+      // Partner mode never shows this field — the server force-scopes it to
+      // the caller's own org and ignores anything sent here (see
+      // AdminProductDetailSerializer.validate), so there's nothing to send.
+      ...(mode === "admin" ? { partner: Number(form.partner) } : {}),
       product_code: form.product_code.trim(),
       price: form.price || "0",
       default_trial_days: Number(form.default_trial_days) || 30,
       status,
+      // Only staff can write this (see validate()); a partner's edits to it
+      // are silently ignored server-side, so there's no point sending it.
+      ...(mode === "admin" ? { rejection_note: form.rejection_note } : {}),
       visibility: form.visibility,
       is_featured: form.is_featured,
       seo_title: form.seo_title.trim(),
@@ -188,8 +211,8 @@ export function ProductForm({ productId }: { productId?: number }) {
       setTab("info");
       return;
     }
-    if (!form.category || !form.partner) {
-      setError("Please choose a category and a partner.");
+    if (!form.category || (mode === "admin" && !form.partner)) {
+      setError(mode === "admin" ? "Please choose a category and a partner." : "Please choose a category.");
       setTab("info");
       return;
     }
@@ -199,11 +222,11 @@ export function ProductForm({ productId }: { productId?: number }) {
         await updateProduct(savedId, buildPayload(status));
       } else {
         const created = await createProduct(buildPayload(status));
-        router.push(`/admin-portal/products/${created.id}/edit`);
+        router.push(`${basePath}/products/${created.id}/edit`);
         router.refresh();
         return;
       }
-      router.push("/admin-portal/products");
+      router.push(`${basePath}/products`);
       router.refresh();
     } catch (err) {
       setError(err instanceof AdminApiError ? err.detail : "Could not save the product.");
@@ -224,8 +247,12 @@ export function ProductForm({ productId }: { productId?: number }) {
       setTab("info");
       return null;
     }
-    if (!form.category || !form.partner) {
-      setError("Please choose a category and a partner before uploading files.");
+    if (!form.category || (mode === "admin" && !form.partner)) {
+      setError(
+        mode === "admin"
+          ? "Please choose a category and a partner before uploading files."
+          : "Please choose a category before uploading files.",
+      );
       setTab("info");
       return null;
     }
@@ -247,7 +274,7 @@ export function ProductForm({ productId }: { productId?: number }) {
     setDeleting(true);
     try {
       await deleteProduct(savedId);
-      router.push("/admin-portal/products");
+      router.push(`${basePath}/products`);
       router.refresh();
     } catch {
       setError("Could not delete this product.");
@@ -332,13 +359,20 @@ export function ProductForm({ productId }: { productId?: number }) {
                     {options?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </label>
-                <label className={styles.label}>
-                  Partner <span className={styles.req}>*</span>
-                  <select className={styles.input} value={form.partner} onChange={(e) => set("partner", e.target.value)}>
-                    <option value="">Select a partner</option>
-                    {options?.partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </label>
+                {mode === "partner" ? (
+                  <label className={styles.label}>
+                    Partner
+                    <input className={styles.input} value={partnerName ?? ""} disabled />
+                  </label>
+                ) : (
+                  <label className={styles.label}>
+                    Partner <span className={styles.req}>*</span>
+                    <select className={styles.input} value={form.partner} onChange={(e) => set("partner", e.target.value)}>
+                      <option value="">Select a partner</option>
+                      {options?.partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                )}
               </div>
 
               <div className={styles.label}>
@@ -488,16 +522,46 @@ export function ProductForm({ productId }: { productId?: number }) {
             <label className={styles.label}>
               Status
               <select className={styles.input} value={form.status} onChange={(e) => set("status", e.target.value)}>
-                {/* Not manually selectable — only rendered so an existing draft's
-                    real status shows accurately instead of the browser silently
-                    falling back to the first option. */}
+                {/* Not manually selectable — only rendered so the product's real
+                    current status shows accurately instead of the browser
+                    silently falling back to the first option. */}
                 {form.status === "draft" && <option value="draft">Draft</option>}
                 <option value="pending">Pending Review</option>
-                <option value="published">Published</option>
-                <option value="rejected">Rejected</option>
+                {mode === "admin" ? (
+                  <>
+                    <option value="published">Published</option>
+                    <option value="rejected">Rejected</option>
+                  </>
+                ) : (
+                  <>
+                    {form.status === "published" && <option value="published">Published</option>}
+                    {form.status === "rejected" && <option value="rejected">Rejected</option>}
+                  </>
+                )}
               </select>
-              <span className={styles.hint}>Use &quot;Save as Draft&quot; below to keep this private while you work.</span>
+              <span className={styles.hint}>
+                {mode === "partner"
+                  ? "Only BIMHive staff can publish or reject — choose Pending Review to submit for approval."
+                  : 'Use "Save as Draft" below to keep this private while you work.'}
+              </span>
             </label>
+
+            {form.status === "rejected" && (
+              <label className={styles.label}>
+                Rejection Note
+                {mode === "admin" ? (
+                  <textarea
+                    className={styles.textarea}
+                    rows={3}
+                    value={form.rejection_note}
+                    onChange={(e) => set("rejection_note", e.target.value)}
+                    placeholder="Let the partner know what to fix before resubmitting."
+                  />
+                ) : (
+                  <p className={styles.warnHint}>{form.rejection_note || "No note was left."}</p>
+                )}
+              </label>
+            )}
             <p className={styles.label}>Visibility</p>
             <label className={`${styles.optionRow} ${form.visibility === "public" ? styles.optionActive : ""}`}>
               <input type="radio" name="visibility" checked={form.visibility === "public"} onChange={() => set("visibility", "public")} />

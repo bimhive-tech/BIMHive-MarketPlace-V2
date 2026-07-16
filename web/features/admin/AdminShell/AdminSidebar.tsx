@@ -1,26 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
-import { Icon, type IconName } from "@/components/Icon/Icon";
+import { Icon } from "@/components/Icon/Icon";
 import { Logo } from "@/components/Logo/Logo";
+import { SidebarNav, type SidebarNavGroup } from "@/components/SidebarNav/SidebarNav";
 
 import styles from "./AdminShell.module.css";
 
-interface NavItem {
-  label: string;
-  href: string;
-  icon: IconName;
-  ready?: boolean; // false → shown but not yet built (disabled, no dead link)
-}
-
-interface NavGroup {
-  heading: string;
-  items: NavItem[];
-}
-
-const GROUPS: NavGroup[] = [
+const GROUPS: SidebarNavGroup[] = [
   {
     heading: "Overview",
     items: [
@@ -62,45 +50,12 @@ const GROUPS: NavGroup[] = [
 ];
 
 export function AdminSidebar() {
-  const pathname = usePathname();
-
   return (
     <aside className={styles.sidebar}>
       <div className={styles.sidebarBrand}>
         <Logo />
       </div>
-      <nav className={styles.nav}>
-        {GROUPS.map((group) => (
-          <div key={group.heading} className={styles.group}>
-            <p className={styles.groupHeading}>{group.heading}</p>
-            {group.items.map((item) => {
-              const active =
-                item.href === "/admin-portal"
-                  ? pathname === "/admin-portal"
-                  : pathname?.startsWith(item.href);
-              if (!item.ready) {
-                return (
-                  <span key={item.label} className={`${styles.item} ${styles.itemDisabled}`}>
-                    <Icon name={item.icon} size={18} />
-                    {item.label}
-                    <span className={styles.soon}>soon</span>
-                  </span>
-                );
-              }
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={`${styles.item} ${active ? styles.itemActive : ""}`}
-                >
-                  <Icon name={item.icon} size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
+      <SidebarNav groups={GROUPS} rootPath="/admin-portal" className={styles.navFlex} />
       <Link href="/" className={styles.viewSite}>
         <Icon name="arrow-right" size={16} />
         View Marketplace

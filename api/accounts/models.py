@@ -30,6 +30,17 @@ class User(AbstractUser):
     role = models.ForeignKey(
         Role, on_delete=models.SET_NULL, null=True, blank=True, related_name="users"
     )
+    partner = models.ForeignKey(
+        "catalog.Partner",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_members",
+        help_text="Set for partner self-service logins — grants access to the partner portal.",
+    )
+    must_change_password = models.BooleanField(
+        default=False, help_text="Forces a password change on next login (set when an admin issues a password)."
+    )
 
     def __str__(self):
         return self.get_full_name() or self.username

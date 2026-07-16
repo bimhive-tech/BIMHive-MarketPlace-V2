@@ -171,6 +171,7 @@ export interface AdminProductDetail {
   download_count: number;
   default_trial_days: number;
   status: string;
+  rejection_note: string;
   visibility: string;
   is_featured: boolean;
   cover_image_url: string;
@@ -245,6 +246,7 @@ export interface AdminPartner {
   website: string;
   is_verified: boolean;
   product_count: number;
+  owner_email: string;
 }
 export interface AdminCollection {
   id: number;
@@ -273,6 +275,14 @@ function crud<T>(basePath: string) {
 export const categoriesApi = crud<AdminCategory>("/api/admin/categories");
 export const tagsApi = crud<AdminTag>("/api/admin/tags");
 export const partnersApi = crud<AdminPartner>("/api/admin/partners");
+export interface PartnerLoginResult {
+  email: string;
+  password: string;
+}
+// Shown exactly once in the response — there's no email-sending infrastructure
+// in this app, so the admin relays it to the partner manually. Never retrievable again.
+export const setPartnerLogin = (partnerId: number, email: string, password?: string) =>
+  request<PartnerLoginResult>(`/api/admin/partners/${partnerId}/set-login`, "POST", { email, password });
 export const collectionsApi = crud<AdminCollection>("/api/admin/collections");
 
 // ── Licenses ──

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
+import { UserMenu } from "@/components/UserMenu/UserMenu";
 import { AdminSidebar } from "@/features/admin/AdminShell/AdminSidebar";
-import { AdminUserMenu } from "@/features/admin/AdminShell/AdminUserMenu";
 import type { User } from "@/lib/types";
 
 import styles from "./AdminShell.module.css";
@@ -24,7 +24,7 @@ export function AdminShell({ user, children }: { user: User; children: ReactNode
             <button className={styles.iconBtn} aria-label="Help">
               <Icon name="help" size={20} />
             </button>
-            <AdminUserMenu user={user} />
+            <UserMenu user={user} roleLabel="Administrator" />
           </div>
         </header>
         <div className={styles.content}>{children}</div>

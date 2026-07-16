@@ -27,6 +27,9 @@ urlpatterns = [
     path("api/admin/", include("accounts.admin_urls")),
     path("api/admin/", include("reviews.admin_urls")),
     path("api/admin/", include("activity.admin_urls")),
+    # ── Partner self-service API (partner-linked users only; product CRUD
+    # itself is shared with staff via catalog.admin_urls, see IsStaffOrPartner) ──
+    path("api/partner/", include("catalog.partner_urls")),
     # ── Storefront/catalog API ──
     path("api/", include("catalog.urls")),
 ]

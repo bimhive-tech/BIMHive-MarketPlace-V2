@@ -2,9 +2,13 @@
 Staff-only admin API powering the Next.js admin portal (/admin-portal).
 Separate from Django's built-in /admin. All endpoints require is_staff.
 """
+import secrets
+
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count
 from rest_framework import generics, serializers, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser
@@ -28,6 +32,7 @@ from catalog.models import (
     Tag,
 )
 from catalog.models.product import ProductStatus
+from catalog.permissions import IsStaffOrPartner
 
 
 # ─────────────────────────────────────────────────────────────
@@ -127,11 +132,17 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "slug", "product_code", "short_description", "description", "type",
             "category", "partner", "tags", "price", "download_count",
-            "default_trial_days", "status", "visibility", "is_featured", "cover_image_url",
-            "version", "released_at", "seo_title", "seo_description", "features", "media",
-            "changelog", "compatibility", "documentation", "files", "created_at", "updated_at",
+            "default_trial_days", "status", "rejection_note", "visibility", "is_featured",
+            "cover_image_url", "version", "released_at", "seo_title", "seo_description",
+            "features", "media", "changelog", "compatibility", "documentation", "files",
+            "created_at", "updated_at",
         ]
         read_only_fields = ["id", "slug", "download_count", "created_at", "updated_at"]
+
+    @staticmethod
+    def _is_partner_caller(request):
+        """True for a self-service partner request, as opposed to BIMHive staff."""
+        return bool(request and not request.user.is_staff and request.user.partner_id is not None)
 
     def validate_product_code(self, value):
         value = (value or "").strip()
@@ -149,10 +160,39 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # Only when this request is actually (re)asserting Published — an unrelated
-        # partial update (e.g. just fixing a typo) on an already-published product
-        # must not get blocked by this, only an explicit attempt to publish.
-        if attrs.get("status") == ProductStatus.PUBLISHED:
+        request = self.context.get("request")
+        if self._is_partner_caller(request):
+            # The safety gate: a partner can only ever save a draft or submit for
+            # review. Only BIMHive staff can flip a product to published/rejected —
+            # that's the human review this whole feature exists for. Compared
+            # against the CURRENT value (not just "is status in the payload"), the
+            # same way the publish-file-gate below only fires on an actual attempt
+            # to publish — otherwise a partner re-saving an already-approved
+            # product's description (the frontend always resends its loaded
+            # status) would trip this on every unrelated edit.
+            current_status = self.instance.status if self.instance else None
+            new_status = attrs.get("status")
+            if new_status is not None and new_status != current_status and new_status not in (
+                ProductStatus.DRAFT, ProductStatus.PENDING,
+            ):
+                raise ValidationError(
+                    {"status": "Only BIMHive staff can publish or reject a product. Submit it for review instead."}
+                )
+            # Force-scoped to their own org and blocked from writing the review
+            # note — both apply on create (ignored payload) and update (can't
+            # repoint an existing product to another partner's id).
+            attrs.pop("partner", None)
+            attrs.pop("rejection_note", None)
+
+        # Only when this request is actually transitioning INTO Published — an
+        # unrelated partial update (e.g. just fixing a typo) on a product that's
+        # already published, where the frontend resends its currently-loaded
+        # status unchanged, must not get blocked by this, only a genuine attempt
+        # to publish. (current_status computed above when there's a partner
+        # caller; recomputed here too since that branch may not have run.)
+        if attrs.get("status") == ProductStatus.PUBLISHED and (
+            not self.instance or self.instance.status != ProductStatus.PUBLISHED
+        ):
             # Files are managed on their own endpoint (see ProductFileListCreateView),
             # not part of this payload, so what matters is what's already attached —
             # on create() there's never anything attached yet, which is intentional:
@@ -223,6 +263,9 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        request = self.context.get("request")
+        if self._is_partner_caller(request):
+            validated_data["partner"] = request.user.partner
         tags = validated_data.pop("tags", [])
         nested = {
             k: validated_data.pop(k)
@@ -236,12 +279,14 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         # request is absent when this serializer is exercised directly (unit
         # tests of the save/update logic itself) rather than through the
         # admin view — nothing to attribute the action to in that case.
-        if request := self.context.get("request"):
+        if request:
             log_activity(request.user, ActivityVerb.PRODUCT_CREATED, target_label=product.name)
         return product
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        request = self.context.get("request")
+        old_status = instance.status
         tags = validated_data.pop("tags", None)
         validated_data = self._sync_nested(instance, validated_data)
         for attr, value in validated_data.items():
@@ -249,8 +294,15 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         instance.save()
         if tags is not None:
             instance.tags.set(tags)
-        if request := self.context.get("request"):
-            log_activity(request.user, ActivityVerb.PRODUCT_UPDATED, target_label=instance.name)
+        if request:
+            verb = ActivityVerb.PRODUCT_UPDATED
+            if instance.status != old_status:
+                verb = {
+                    ProductStatus.PENDING: ActivityVerb.PRODUCT_SUBMITTED_FOR_REVIEW,
+                    ProductStatus.PUBLISHED: ActivityVerb.PRODUCT_APPROVED,
+                    ProductStatus.REJECTED: ActivityVerb.PRODUCT_REJECTED,
+                }.get(instance.status, verb)
+            log_activity(request.user, verb, target_label=instance.name)
         return instance
 
 
@@ -276,7 +328,7 @@ class AdminStatsView(APIView):
 
 
 class AdminProductListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrPartner]
     serializer_class = AdminProductDetailSerializer
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
         "tags", "features", "media", "changelog", "compatibility", "files", "documentation__sections"
@@ -289,6 +341,10 @@ class AdminProductListCreateView(generics.ListCreateAPIView):
         qs = super().get_queryset() if self.request.method != "GET" else Product.objects.select_related(
             "category", "partner"
         )
+        # A partner-linked (non-staff) caller only ever sees their own products —
+        # staff keep the unrestricted view across every partner.
+        if not self.request.user.is_staff:
+            qs = qs.filter(partner_id=self.request.user.partner_id)
         status_filter = self.request.query_params.get("status")
         if status_filter and status_filter != "all":
             qs = qs.filter(status=status_filter)
@@ -299,11 +355,19 @@ class AdminProductListCreateView(generics.ListCreateAPIView):
 
 
 class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrPartner]
     serializer_class = AdminProductDetailSerializer
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
         "tags", "features", "media", "changelog", "compatibility", "files", "documentation__sections"
     )
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # 404s (not 403) on another partner's product id via the normal
+        # get_object() lookup below — doesn't confirm the id even exists.
+        if not self.request.user.is_staff:
+            qs = qs.filter(partner_id=self.request.user.partner_id)
+        return qs
 
     def perform_destroy(self, instance):
         log_activity(self.request.user, ActivityVerb.PRODUCT_DELETED, target_label=instance.name)
@@ -313,17 +377,24 @@ class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
 class AdminProductFileListCreateView(generics.ListCreateAPIView):
     """Multi-variant file upload (Files & Downloads tab) — one row per Revit version."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrPartner]
     serializer_class = ProductFileSerializer
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
-        return ProductFile.objects.filter(product_id=self.kwargs["product_id"])
+        qs = ProductFile.objects.filter(product_id=self.kwargs["product_id"])
+        if not self.request.user.is_staff:
+            qs = qs.filter(product__partner_id=self.request.user.partner_id)
+        return qs
 
     def perform_create(self, serializer):
         from django.core.files.storage import default_storage
+        from django.shortcuts import get_object_or_404
 
-        product = Product.objects.get(pk=self.kwargs["product_id"])
+        product_qs = Product.objects.all()
+        if not self.request.user.is_staff:
+            product_qs = product_qs.filter(partner_id=self.request.user.partner_id)
+        product = get_object_or_404(product_qs, pk=self.kwargs["product_id"])
         uploaded = self.request.FILES.get("file")
         if not uploaded:
             raise ValidationError({"file": "A file is required."})
@@ -337,9 +408,15 @@ class AdminProductFileListCreateView(generics.ListCreateAPIView):
 
 
 class AdminProductFileDetailView(generics.DestroyAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrPartner]
     serializer_class = ProductFileSerializer
     queryset = ProductFile.objects.all()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if not self.request.user.is_staff:
+            qs = qs.filter(product__partner_id=self.request.user.partner_id)
+        return qs
 
     def perform_destroy(self, instance):
         from django.core.files.storage import default_storage
@@ -354,7 +431,7 @@ class AdminProductMediaUploadView(APIView):
     this stores it in R2's public-media bucket and hands back a permanent URL
     plus the auto-detected media type, so nothing about it needs to be typed."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrPartner]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, product_id):
@@ -371,7 +448,10 @@ class AdminProductMediaUploadView(APIView):
                 {"detail": "Media uploads need Cloudflare R2 storage configured on the server first."}
             )
 
-        if not Product.objects.filter(pk=product_id).exists():
+        product_qs = Product.objects.filter(pk=product_id)
+        if not request.user.is_staff:
+            product_qs = product_qs.filter(partner_id=request.user.partner_id)
+        if not product_qs.exists():
             raise ValidationError({"detail": "Product not found."})
 
         uploaded = request.FILES.get("file")
@@ -392,15 +472,18 @@ class AdminProductMediaUploadView(APIView):
 
 
 class AdminOptionsView(APIView):
-    """Select options for the product form (categories, partners, tags, enums)."""
+    """Select options for the product form (categories, partners, tags, enums).
+    A partner-linked caller never sees the `partners` list — their product form
+    hides the partner picker entirely and auto-scopes to their own org, so
+    handing them every other partner's name here would be a pure data leak."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrPartner]
 
     def get(self, request):
         return Response(
             {
                 "categories": list(Category.objects.values("id", "name")),
-                "partners": list(Partner.objects.values("id", "name")),
+                "partners": list(Partner.objects.values("id", "name")) if request.user.is_staff else [],
                 "tags": list(Tag.objects.values("id", "name")),
                 "types": [{"value": v, "label": l} for v, l in Product._meta.get_field("type").choices],
             }
@@ -458,14 +541,19 @@ class AdminTagViewSet(viewsets.ModelViewSet):
 
 class PartnerSerializer(ProductCountMixin, serializers.ModelSerializer):
     product_count = serializers.SerializerMethodField()
+    owner_email = serializers.SerializerMethodField()
 
     class Meta:
         model = Partner
         fields = [
             "id", "name", "slug", "tagline", "bio", "logo_url", "website", "is_verified",
-            "product_count",
+            "product_count", "owner_email",
         ]
         read_only_fields = ["slug"]
+
+    def get_owner_email(self, obj):
+        member = obj.team_members.first()
+        return member.email if member else ""
 
 
 class AdminPartnerViewSet(viewsets.ModelViewSet):
@@ -474,6 +562,34 @@ class AdminPartnerViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Partner.objects.annotate(product_count=Count("products", distinct=True))
+
+    @action(detail=True, methods=["post"], url_path="set-login")
+    def set_login(self, request, pk=None):
+        """Issue (or re-link) this partner's self-service login. No email
+        infrastructure exists in this app — the generated/entered password is
+        returned exactly once here for the admin to relay to the partner
+        manually, and is never retrievable again after this response."""
+        User = get_user_model()
+        partner = self.get_object()
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            raise ValidationError({"email": "An email is required."})
+        password = request.data.get("password") or secrets.token_urlsafe(12)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
+            user.set_password(password)
+            user.partner = partner
+            user.must_change_password = True
+            user.save(update_fields=["password", "partner", "must_change_password"])
+        else:
+            # Same create_user(...) pattern as RegisterSerializer (accounts/serializers.py)
+            # for correct password hashing — this just skips the public-signup path.
+            user = User.objects.create_user(
+                username=email, email=email, password=password, partner=partner, must_change_password=True,
+            )
+
+        return Response({"email": user.email, "password": password}, status=201)
 
 
 class CollectionSerializer(ProductCountMixin, serializers.ModelSerializer):

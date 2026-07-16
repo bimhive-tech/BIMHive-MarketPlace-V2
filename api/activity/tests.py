@@ -75,7 +75,9 @@ def test_claiming_a_free_product_is_logged(free_product):
 
 
 def test_posting_a_review_is_logged(free_product):
-    _, client = _login()
+    user, client = _login()
+    sku = LicensedProduct.objects.get(code=free_product.product_code)
+    ProductPurchase.objects.create(user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID)
     client.post(
         f"/api/products/{free_product.slug}/reviews",
         data={"rating": 5, "title": "Great", "body": "Good stuff"},
@@ -180,6 +182,8 @@ def test_activity_list_filters_by_actor_and_verb(staff_client, free_product):
     user_a, client_a = _login("alice@example.com")
     user_b, client_b = _login("bob@example.com")
     client_a.post("/api/account/claim-free", data={"slug": free_product.slug}, content_type="application/json")
+    sku = LicensedProduct.objects.get(code=free_product.product_code)
+    ProductPurchase.objects.create(user=user_b, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID)
     client_b.post(
         f"/api/products/{free_product.slug}/reviews",
         data={"rating": 4, "title": "Fine", "body": "It's fine"},

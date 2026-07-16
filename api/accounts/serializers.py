@@ -14,15 +14,25 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = ["company", "job_title", "bio", "avatar_url", "account_type"]
 
 
+class UserPartnerSerializer(serializers.Serializer):
+    """Minimal partner summary attached to /api/auth/me — enough for the frontend
+    to know a user has partner-portal access without a second round trip."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+
+
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
     full_name = serializers.SerializerMethodField()
+    partner = UserPartnerSerializer(read_only=True)
 
     class Meta:
         model = User
         fields = [
             "id", "username", "email", "first_name", "last_name", "full_name",
-            "is_staff", "date_joined", "profile",
+            "is_staff", "date_joined", "profile", "partner", "must_change_password",
         ]
 
     def get_full_name(self, obj):

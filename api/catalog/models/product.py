@@ -97,6 +97,9 @@ class Product(TimeStamped):
     )
     is_featured = models.BooleanField(default=False)
     published_at = models.DateTimeField(null=True, blank=True)
+    rejection_note = models.TextField(
+        blank=True, help_text="Shown to the submitting partner when status is set to Rejected."
+    )
 
     # ── SEO ──
     seo_title = models.CharField(max_length=180, blank=True)

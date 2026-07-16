@@ -24,6 +24,8 @@ export interface User {
     avatar_url: string;
     account_type: string;
   } | null;
+  partner: { id: number; name: string; slug: string } | null;
+  must_change_password: boolean;
 }
 
 export interface Category {
