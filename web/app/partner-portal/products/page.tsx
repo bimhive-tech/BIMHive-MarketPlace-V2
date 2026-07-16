@@ -38,8 +38,10 @@ export default function PartnerProductsPage() {
 
   useEffect(() => {
     setRows(null);
-    // Auto-scoped to the caller's own partner server-side (see IsStaffOrPartner).
-    getAdminProducts(tab).then(setRows).catch(() => setRows([]));
+    // asPartner=true scopes to the caller's own partner even when they're
+    // also staff (see catalog.admin_api._effective_partner_id) — otherwise a
+    // staff+partner account would see every partner's products here.
+    getAdminProducts(tab, true).then(setRows).catch(() => setRows([]));
   }, [tab]);
 
   return (

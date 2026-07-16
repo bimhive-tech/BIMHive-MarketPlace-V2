@@ -195,28 +195,39 @@ export interface AdminOptions {
 }
 
 export const getAdminOptions = () => getJSON<AdminOptions>("/api/admin/options");
-export const getAdminProducts = (status = "all") =>
-  getJSON<AdminProductRow[]>(`/api/admin/products?status=${status}`);
-export const getAdminProduct = (id: number) => getJSON<AdminProductDetail>(`/api/admin/products/${id}`);
-export const createProduct = (payload: Record<string, unknown>) =>
-  request<AdminProductDetail>("/api/admin/products", "POST", payload);
-export const updateProduct = (id: number, payload: Record<string, unknown>) =>
-  request<AdminProductDetail>(`/api/admin/products/${id}`, "PATCH", payload);
-export const deleteProduct = (id: number) => request<void>(`/api/admin/products/${id}`, "DELETE");
+// `asPartner` scopes a staff+partner caller to only their own partner's
+// products — the partner-portal always passes it, so the same account can
+// still see every partner's products unfiltered in the admin portal (see
+// catalog.admin_api._effective_partner_id).
+export const getAdminProducts = (status = "all", asPartner = false) =>
+  getJSON<AdminProductRow[]>(`/api/admin/products?status=${status}${asPartner ? "&mine=1" : ""}`);
+export const getAdminProduct = (id: number, asPartner = false) =>
+  getJSON<AdminProductDetail>(`/api/admin/products/${id}${asPartner ? "?mine=1" : ""}`);
+export const createProduct = (payload: Record<string, unknown>, asPartner = false) =>
+  request<AdminProductDetail>(`/api/admin/products${asPartner ? "?mine=1" : ""}`, "POST", payload);
+export const updateProduct = (id: number, payload: Record<string, unknown>, asPartner = false) =>
+  request<AdminProductDetail>(`/api/admin/products/${id}${asPartner ? "?mine=1" : ""}`, "PATCH", payload);
+export const deleteProduct = (id: number, asPartner = false) =>
+  request<void>(`/api/admin/products/${id}${asPartner ? "?mine=1" : ""}`, "DELETE");
 
-export const uploadProductFile = (productId: number, form: FormData) =>
-  request<AdminProductFile>(`/api/admin/products/${productId}/files`, "POST", form, true);
-export const deleteProductFile = (fileId: number) =>
-  request<void>(`/api/admin/products/files/${fileId}`, "DELETE");
+export const uploadProductFile = (productId: number, form: FormData, asPartner = false) =>
+  request<AdminProductFile>(`/api/admin/products/${productId}/files${asPartner ? "?mine=1" : ""}`, "POST", form, true);
+export const deleteProductFile = (fileId: number, asPartner = false) =>
+  request<void>(`/api/admin/products/files/${fileId}${asPartner ? "?mine=1" : ""}`, "DELETE");
 
 export interface UploadedMedia {
   url: string;
   media_type: "image" | "video";
 }
-export const uploadProductMedia = (productId: number, file: File) => {
+export const uploadProductMedia = (productId: number, file: File, asPartner = false) => {
   const form = new FormData();
   form.append("file", file);
-  return request<UploadedMedia>(`/api/admin/products/${productId}/media-upload`, "POST", form, true);
+  return request<UploadedMedia>(
+    `/api/admin/products/${productId}/media-upload${asPartner ? "?mine=1" : ""}`,
+    "POST",
+    form,
+    true,
+  );
 };
 
 // ── Taxonomy: Categories / Tags / Partners / Collections ──

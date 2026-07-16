@@ -34,9 +34,9 @@ export default function PartnerDashboard() {
   const [sales, setSales] = useState<PartnerSalesSummary | null>(null);
 
   useEffect(() => {
-    // The backend auto-scopes this to the caller's own partner for a
-    // non-staff user (see IsStaffOrPartner + AdminProductListCreateView).
-    getAdminProducts("all").then(setProducts).catch(() => setProducts([]));
+    // asPartner=true scopes to the caller's own partner even when they're
+    // also staff (see catalog.admin_api._effective_partner_id).
+    getAdminProducts("all", true).then(setProducts).catch(() => setProducts([]));
     getPartnerSales()
       .then(setSales)
       .catch(() => setSales({ total_revenue: "0", order_count: 0, orders: [] }));

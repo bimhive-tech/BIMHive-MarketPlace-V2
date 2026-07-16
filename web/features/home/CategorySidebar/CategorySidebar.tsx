@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { Button } from "@/components/Button/Button";
 import { Icon, type IconName } from "@/components/Icon/Icon";
+import { SellPromo } from "@/features/home/CategorySidebar/SellPromo";
 import type { Category } from "@/lib/types";
 
 import styles from "./CategorySidebar.module.css";
@@ -38,13 +38,7 @@ export function CategorySidebar({ categories }: { categories: Category[] }) {
         ))}
       </ul>
 
-      <div className={styles.sellCard}>
-        <h3 className={styles.sellTitle}>Sell on BIMHIVE</h3>
-        <p className={styles.sellText}>Reach thousands of AEC professionals.</p>
-        <Button href="/sell" variant="secondary" fullWidth>
-          Become a Seller
-        </Button>
-      </div>
+      <SellPromo />
     </aside>
   );
 }

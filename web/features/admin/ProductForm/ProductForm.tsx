@@ -86,7 +86,8 @@ interface ProductFormProps {
 
 export function ProductForm({ productId, mode = "admin", partnerName }: ProductFormProps) {
   const router = useRouter();
-  const basePath = mode === "partner" ? "/partner-portal" : "/admin-portal";
+  const asPartner = mode === "partner";
+  const basePath = asPartner ? "/partner-portal" : "/admin-portal";
   const isEdit = productId != null;
   const [options, setOptions] = useState<AdminOptions | null>(null);
   const [tab, setTab] = useState<TabId>("info");
@@ -120,7 +121,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
 
   useEffect(() => {
     if (!isEdit) return;
-    getAdminProduct(productId!)
+    getAdminProduct(productId!, asPartner)
       .then((p) => {
         setForm({
           name: p.name,
@@ -219,9 +220,9 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
     setSaving(true);
     try {
       if (savedId != null) {
-        await updateProduct(savedId, buildPayload(status));
+        await updateProduct(savedId, buildPayload(status), asPartner);
       } else {
-        const created = await createProduct(buildPayload(status));
+        const created = await createProduct(buildPayload(status), asPartner);
         router.push(`${basePath}/products/${created.id}/edit`);
         router.refresh();
         return;
@@ -258,7 +259,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
     }
     setError("");
     try {
-      const created = await createProduct(buildPayload("draft"));
+      const created = await createProduct(buildPayload("draft"), asPartner);
       setSavedId(created.id);
       return created.id;
     } catch (err) {
@@ -273,7 +274,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
     if (!confirmed) return;
     setDeleting(true);
     try {
-      await deleteProduct(savedId);
+      await deleteProduct(savedId, asPartner);
       router.push(`${basePath}/products`);
       router.refresh();
     } catch {
@@ -450,7 +451,13 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           )}
 
           {tab === "media" && (
-            <MediaTab media={media} setMedia={setMedia} productId={savedId} ensureSaved={ensureSaved} />
+            <MediaTab
+              media={media}
+              setMedia={setMedia}
+              productId={savedId}
+              ensureSaved={ensureSaved}
+              asPartner={asPartner}
+            />
           )}
 
           {tab === "pricing" && (
@@ -491,7 +498,13 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           )}
 
           {tab === "files" && (
-            <FilesTab productId={savedId} files={files} setFiles={setFiles} ensureSaved={ensureSaved} />
+            <FilesTab
+              productId={savedId}
+              files={files}
+              setFiles={setFiles}
+              ensureSaved={ensureSaved}
+              asPartner={asPartner}
+            />
           )}
 
           {tab === "compatibility" && (

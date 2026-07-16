@@ -8,19 +8,17 @@ import { EmailCard } from "@/features/account/EmailCard/EmailCard";
 import { PasswordCard } from "@/features/account/PasswordCard/PasswordCard";
 import { ProfileForm } from "@/features/account/ProfileForm/ProfileForm";
 import { QuickLinksCard } from "@/features/account/QuickLinksCard/QuickLinksCard";
-import { SellerCard } from "@/features/account/SellerCard/SellerCard";
+import { SellerTab } from "@/features/account/SellerTab/SellerTab";
 import { me } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 import styles from "./page.module.css";
 
-type Tab = "info" | "preferences" | "connected";
+type Tab = "info" | "preferences" | "connected" | "seller";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "info", label: "Profile Information" },
-  { id: "preferences", label: "Preferences" },
-  { id: "connected", label: "Connected Accounts" },
-];
+function sellerTabLabel(user: User): string {
+  return user.partner ? "Partner" : "Become a Seller";
+}
 
 export default function ProfilePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -31,6 +29,13 @@ export default function ProfilePage() {
   }, []);
 
   if (!user) return <div className={styles.loading}>Loading your profile…</div>;
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "info", label: "Profile Information" },
+    { id: "preferences", label: "Preferences" },
+    { id: "connected", label: "Connected Accounts" },
+    { id: "seller", label: sellerTabLabel(user) },
+  ];
 
   return (
     <div className={styles.page}>
@@ -62,7 +67,6 @@ export default function ProfilePage() {
           </div>
           <div className={styles.side}>
             <AccountSummaryCard user={user} />
-            <SellerCard user={user} />
             <QuickLinksCard />
             <DeleteAccountCard />
           </div>
@@ -76,6 +80,8 @@ export default function ProfilePage() {
       {tab === "connected" && (
         <p className={styles.comingSoon}>Connected accounts (Google, Microsoft SSO) are coming soon.</p>
       )}
+
+      {tab === "seller" && <SellerTab user={user} />}
     </div>
   );
 }

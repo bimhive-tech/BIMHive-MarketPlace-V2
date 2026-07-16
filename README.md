@@ -75,17 +75,20 @@ payment flow until Stripe/PayPal are wired).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
 **Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses`,
 `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
-job title/bio, change email, change password, delete account, plus a Seller card linking to
-`/sell` or `/partner-portal` depending on application status).
-**Become a seller**: `/sell` (marketing landing page), `/sell/apply` (auth-gated application form —
-company name + logo upload). Submitting creates a `Partner` in "pending" status linked to the
-user's account; BIMHive staff approve or reject it from the admin Partners page.
-**Partner portal** (auth-gated to users with a linked `Partner`, shared sidebar shell):
-`/partner-portal` (dashboard: product + revenue stats, recent sales), `/partner-portal/products`
-(list/create/edit — partners can only save draft or submit for review, never self-publish),
+job title/bio, change email, change password, delete account, plus a "Become a Seller"/"Partner"
+tab whose label and content track the account's seller-application state).
+**Become a seller**: `/sell` (marketing landing page — its sidebar promo on the homepage hides
+itself once the visitor already has a seller application), `/sell/apply` (auth-gated application
+form — company name + logo upload). Submitting creates a `Partner` in "pending" status linked to
+the user's account; BIMHive staff approve or reject it from the admin Partners page.
+**Partner portal** (auth-gated to users with a linked `Partner`, own full-screen chrome — no
+storefront header/footer): `/partner-portal` (dashboard: product + revenue stats, recent sales),
+`/partner-portal/products` (list/create/edit — scoped to the caller's own partner even for a
+staff+partner account, and partners can only save draft or submit for review, never self-publish),
 `/partner-portal/sales` (read-only order history for their own products, no customer PII),
-`/partner-portal/profile` (edit company tagline/bio/logo/website; always reachable, shows the
-application's pending/rejected status + rejection note). Everything except Partner Profile is
+`/partner-portal/profile` (edit company tagline/bio/website + logo — a real image upload with
+removal, not a URL field; no logo falls back to an initials avatar everywhere the partner's
+identity is shown, e.g. a product's "Published by" card). Everything except Partner Profile is
 hidden/gated until the seller application is approved.
 **Admin portal** (staff-gated, separate from Django's `/admin`): `/admin-portal` (dashboard),
 `/admin-portal/products` (list/create/edit, full form incl. media/features/changelog/compatibility/

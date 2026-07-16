@@ -5,7 +5,7 @@ application/sales have no staff equivalent, so they live here instead."""
 from django.db.models import Sum
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +13,25 @@ from rest_framework.views import APIView
 from catalog.models import Partner
 from catalog.permissions import IsApprovedPartner, IsPartnerUser
 from licensing.models import ProductPurchase
+
+
+def _upload_partner_logo(user_id, uploaded) -> str:
+    """Stores a partner logo in R2's public-media bucket and returns its URL.
+    Shared by the apply flow and the profile editor so there's one upload
+    path (and one set of validation rules) for a partner logo, ever."""
+    from django.conf import settings
+    from django.core.files.storage import storages
+
+    if not (settings.R2_ACCESS_KEY_ID and settings.R2_SECRET_ACCESS_KEY and settings.R2_BUCKET_NAME):
+        raise ValidationError(
+            {"detail": "Logo uploads need Cloudflare R2 storage configured on the server first."}
+        )
+    content_type = uploaded.content_type or ""
+    if not content_type.startswith("image/"):
+        raise ValidationError({"logo": "Only image files are supported."})
+    public_storage = storages["public_media"]
+    key = public_storage.save(f"partner_logos/{user_id}/{uploaded.name}", uploaded)
+    return public_storage.url(key)
 
 
 class PartnerProfileSerializer(serializers.ModelSerializer):
@@ -25,8 +44,10 @@ class PartnerProfileSerializer(serializers.ModelSerializer):
         # Name/slug affect URLs and public listings elsewhere — admin-only via the
         # existing AdminPartnerViewSet. is_verified is BIMHive's call, not the
         # partner's own. status/rejection_note are staff-set outcomes of the
-        # application review, read-only here for the same reason.
-        read_only_fields = ["id", "name", "slug", "is_verified", "status", "rejection_note"]
+        # application review, read-only here for the same reason. logo_url is
+        # only ever set through the upload/remove handling in the view below —
+        # never a freeform URL a partner can type in (see PartnerProfileView.patch).
+        read_only_fields = ["id", "name", "slug", "is_verified", "status", "rejection_note", "logo_url"]
 
 
 class PartnerProfileView(APIView):
@@ -35,12 +56,19 @@ class PartnerProfileView(APIView):
     can still see why and fix their info."""
 
     permission_classes = [IsPartnerUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
         return Response(PartnerProfileSerializer(request.user.partner).data)
 
     def patch(self, request):
-        serializer = PartnerProfileSerializer(request.user.partner, data=request.data, partial=True)
+        partner = request.user.partner
+        uploaded = request.FILES.get("logo")
+        if uploaded:
+            partner.logo_url = _upload_partner_logo(request.user.id, uploaded)
+        elif str(request.data.get("remove_logo", "")).lower() in ("1", "true"):
+            partner.logo_url = ""
+        serializer = PartnerProfileSerializer(partner, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
@@ -70,19 +98,7 @@ class BecomeSellerView(APIView):
         logo_url = ""
         uploaded = request.FILES.get("logo")
         if uploaded:
-            from django.conf import settings
-            from django.core.files.storage import storages
-
-            if not (settings.R2_ACCESS_KEY_ID and settings.R2_SECRET_ACCESS_KEY and settings.R2_BUCKET_NAME):
-                raise ValidationError(
-                    {"detail": "Logo uploads need Cloudflare R2 storage configured on the server first."}
-                )
-            content_type = uploaded.content_type or ""
-            if not content_type.startswith("image/"):
-                raise ValidationError({"logo": "Only image files are supported."})
-            public_storage = storages["public_media"]
-            key = public_storage.save(f"partner_logos/{request.user.id}/{uploaded.name}", uploaded)
-            logo_url = public_storage.url(key)
+            logo_url = _upload_partner_logo(request.user.id, uploaded)
 
         partner = Partner.objects.create(name=company_name, logo_url=logo_url)
         request.user.partner = partner

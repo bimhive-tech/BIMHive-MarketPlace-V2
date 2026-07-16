@@ -12,9 +12,10 @@ interface MediaTabProps {
   setMedia: (updater: (list: AdminProductMedia[]) => AdminProductMedia[]) => void;
   productId?: number;
   ensureSaved: () => Promise<number | null>;
+  asPartner?: boolean;
 }
 
-export function MediaTab({ media, setMedia, productId, ensureSaved }: MediaTabProps) {
+export function MediaTab({ media, setMedia, productId, ensureSaved, asPartner = false }: MediaTabProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -47,7 +48,7 @@ export function MediaTab({ media, setMedia, productId, ensureSaved }: MediaTabPr
     try {
       const id = productId ?? (await ensureSaved());
       if (!id) return;
-      const uploaded = await uploadProductMedia(id, file);
+      const uploaded = await uploadProductMedia(id, file, asPartner);
       setMedia((list) => [
         ...list,
         {

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
+import { PartnerAvatar } from "@/components/PartnerAvatar/PartnerAvatar";
 import { Pill } from "@/components/Pill/Pill";
 import { getPartnerProfile, updatePartnerProfile, type PartnerProfile } from "@/lib/partnerApi";
 
@@ -12,8 +13,11 @@ export default function PartnerProfilePage() {
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [tagline, setTagline] = useState("");
   const [bio, setBio] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
   const [website, setWebsite] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [removeLogo, setRemoveLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -24,19 +28,36 @@ export default function PartnerProfilePage() {
         setProfile(p);
         setTagline(p.tagline);
         setBio(p.bio);
-        setLogoUrl(p.logo_url);
         setWebsite(p.website);
       })
       .catch(() => setError("Could not load your partner profile."));
   }, []);
+
+  function onPickLogo(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+    setRemoveLogo(false);
+  }
+
+  function onRemoveLogo() {
+    setLogoFile(null);
+    setLogoPreview("");
+    setRemoveLogo(true);
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSaving(true);
     try {
-      const updated = await updatePartnerProfile({ tagline, bio, logo_url: logoUrl, website });
+      const updated = await updatePartnerProfile({ tagline, bio, website, logo: logoFile, removeLogo });
       setProfile(updated);
+      setLogoFile(null);
+      setLogoPreview("");
+      setRemoveLogo(false);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2200);
     } catch {
@@ -50,6 +71,7 @@ export default function PartnerProfilePage() {
 
   const STATUS_TONE = { pending: "warning", approved: "success", rejected: "error" } as const;
   const STATUS_LABEL = { pending: "Pending Review", approved: "Approved", rejected: "Rejected" } as const;
+  const effectiveLogoUrl = logoPreview || (removeLogo ? "" : profile.logo_url);
 
   return (
     <div className={styles.page}>
@@ -103,15 +125,22 @@ export default function PartnerProfilePage() {
           />
         </label>
 
-        <label className={styles.field}>
-          Logo URL
-          <input
-            className={styles.input}
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-            placeholder="https://…"
-          />
-        </label>
+        <div className={styles.field}>
+          Logo
+          <div className={styles.logoRow}>
+            <PartnerAvatar name={profile.name} logoUrl={effectiveLogoUrl} size={56} />
+            <input ref={fileInputRef} type="file" accept="image/*" className={styles.hiddenFileInput} onChange={onPickLogo} />
+            <button type="button" className={styles.uploadBtn} onClick={() => fileInputRef.current?.click()}>
+              <Icon name="upload" size={14} /> {effectiveLogoUrl ? "Change Logo" : "Upload Logo"}
+            </button>
+            {effectiveLogoUrl && (
+              <button type="button" className={styles.removeBtn} onClick={onRemoveLogo}>
+                Remove
+              </button>
+            )}
+          </div>
+          <span className={styles.hint}>Optional — without one, customers see your initials instead.</span>
+        </div>
 
         <label className={styles.field}>
           Website

@@ -61,8 +61,25 @@ export interface PartnerProfile {
 }
 
 export const getPartnerProfile = () => request<PartnerProfile>("/api/partner/profile", "GET");
-export const updatePartnerProfile = (data: Partial<PartnerProfile>) =>
-  request<PartnerProfile>("/api/partner/profile", "PATCH", data);
+
+export interface PartnerProfileUpdate {
+  tagline: string;
+  bio: string;
+  website: string;
+  /** A newly picked logo file to upload — omit to leave the logo unchanged. */
+  logo?: File | null;
+  /** True to clear the existing logo (falls back to the initials avatar). */
+  removeLogo?: boolean;
+}
+export const updatePartnerProfile = (data: PartnerProfileUpdate) => {
+  const form = new FormData();
+  form.append("tagline", data.tagline);
+  form.append("bio", data.bio);
+  form.append("website", data.website);
+  if (data.logo) form.append("logo", data.logo);
+  if (data.removeLogo) form.append("remove_logo", "1");
+  return request<PartnerProfile>("/api/partner/profile", "PATCH", form, true);
+};
 
 export const applyToBecomeSeller = (companyName: string, logo: File | null) => {
   const form = new FormData();

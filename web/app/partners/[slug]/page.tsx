@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
+import { PartnerAvatar } from "@/components/PartnerAvatar/PartnerAvatar";
 import { ProductCard } from "@/components/ProductCard/ProductCard";
 import { getPartner, getProducts } from "@/lib/api";
 
@@ -32,9 +33,7 @@ export default async function PartnerProfilePage({ params }: PageProps) {
       <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Catalog", href: "/catalog" }, { label: partner.name }]} />
 
       <header className={styles.head}>
-        <span className={styles.avatar}>
-          <Icon name="library" size={28} />
-        </span>
+        <PartnerAvatar name={partner.name} logoUrl={partner.logo_url} size={56} />
         <div>
           <p className={styles.name}>
             {partner.name}

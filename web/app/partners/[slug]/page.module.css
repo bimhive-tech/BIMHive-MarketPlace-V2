@@ -8,17 +8,6 @@
   margin-bottom: var(--space-5);
 }
 
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-lg);
-  background: var(--gold-100);
-  color: var(--gold-700);
-  flex-shrink: 0;
-}
-
 .name {
   display: flex;
   align-items: center;

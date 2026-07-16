@@ -1,0 +1,19 @@
+.avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--gold-100);
+  color: var(--gold-700);
+}
+
+.img {
+  object-fit: cover;
+}
+
+.initials {
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.02em;
+}

@@ -31,6 +31,21 @@ from catalog.models.product import ProductStatus
 from catalog.permissions import IsStaffOrPartner
 
 
+def _effective_partner_id(request):
+    """The partner a caller is scoped to for this request, or None for an
+    unrestricted view. Always set for a non-staff partner-linked user — that's
+    the only view they have. A staff user who's *also* partner-linked keeps
+    the full, unrestricted admin view by default, and is only scoped to their
+    own partner when they explicitly signal they're browsing the partner
+    portal (?mine=1) — otherwise the same account could see every partner's
+    products while using their own company's dashboard."""
+    if request is None or request.user.partner_id is None:
+        return None
+    if not request.user.is_staff:
+        return request.user.partner_id
+    return request.user.partner_id if request.query_params.get("mine") == "1" else None
+
+
 # ─────────────────────────────────────────────────────────────
 # Product — list row (compact, for the table)
 # ─────────────────────────────────────────────────────────────
@@ -137,8 +152,10 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _is_partner_caller(request):
-        """True for a self-service partner request, as opposed to BIMHive staff."""
-        return bool(request and not request.user.is_staff and request.user.partner_id is not None)
+        """True when this request is scoped to a partner (self-service, or
+        staff explicitly browsing the partner portal — see
+        _effective_partner_id) rather than BIMHive's unrestricted admin view."""
+        return _effective_partner_id(request) is not None
 
     def validate_product_code(self, value):
         value = (value or "").strip()
@@ -337,10 +354,9 @@ class AdminProductListCreateView(generics.ListCreateAPIView):
         qs = super().get_queryset() if self.request.method != "GET" else Product.objects.select_related(
             "category", "partner"
         )
-        # A partner-linked (non-staff) caller only ever sees their own products —
-        # staff keep the unrestricted view across every partner.
-        if not self.request.user.is_staff:
-            qs = qs.filter(partner_id=self.request.user.partner_id)
+        partner_id = _effective_partner_id(self.request)
+        if partner_id is not None:
+            qs = qs.filter(partner_id=partner_id)
         status_filter = self.request.query_params.get("status")
         if status_filter and status_filter != "all":
             qs = qs.filter(status=status_filter)
@@ -361,8 +377,9 @@ class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
         qs = super().get_queryset()
         # 404s (not 403) on another partner's product id via the normal
         # get_object() lookup below — doesn't confirm the id even exists.
-        if not self.request.user.is_staff:
-            qs = qs.filter(partner_id=self.request.user.partner_id)
+        partner_id = _effective_partner_id(self.request)
+        if partner_id is not None:
+            qs = qs.filter(partner_id=partner_id)
         return qs
 
     def perform_destroy(self, instance):
@@ -379,8 +396,9 @@ class AdminProductFileListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = ProductFile.objects.filter(product_id=self.kwargs["product_id"])
-        if not self.request.user.is_staff:
-            qs = qs.filter(product__partner_id=self.request.user.partner_id)
+        partner_id = _effective_partner_id(self.request)
+        if partner_id is not None:
+            qs = qs.filter(product__partner_id=partner_id)
         return qs
 
     def perform_create(self, serializer):
@@ -388,8 +406,9 @@ class AdminProductFileListCreateView(generics.ListCreateAPIView):
         from django.shortcuts import get_object_or_404
 
         product_qs = Product.objects.all()
-        if not self.request.user.is_staff:
-            product_qs = product_qs.filter(partner_id=self.request.user.partner_id)
+        partner_id = _effective_partner_id(self.request)
+        if partner_id is not None:
+            product_qs = product_qs.filter(partner_id=partner_id)
         product = get_object_or_404(product_qs, pk=self.kwargs["product_id"])
         uploaded = self.request.FILES.get("file")
         if not uploaded:
@@ -410,8 +429,9 @@ class AdminProductFileDetailView(generics.DestroyAPIView):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if not self.request.user.is_staff:
-            qs = qs.filter(product__partner_id=self.request.user.partner_id)
+        partner_id = _effective_partner_id(self.request)
+        if partner_id is not None:
+            qs = qs.filter(product__partner_id=partner_id)
         return qs
 
     def perform_destroy(self, instance):
@@ -445,8 +465,9 @@ class AdminProductMediaUploadView(APIView):
             )
 
         product_qs = Product.objects.filter(pk=product_id)
-        if not request.user.is_staff:
-            product_qs = product_qs.filter(partner_id=request.user.partner_id)
+        partner_id = _effective_partner_id(request)
+        if partner_id is not None:
+            product_qs = product_qs.filter(partner_id=partner_id)
         if not product_qs.exists():
             raise ValidationError({"detail": "Product not found."})
 

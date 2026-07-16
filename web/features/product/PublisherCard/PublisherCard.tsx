@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Icon } from "@/components/Icon/Icon";
+import { PartnerAvatar } from "@/components/PartnerAvatar/PartnerAvatar";
 import { Pill } from "@/components/Pill/Pill";
 import type { ProductDetail } from "@/lib/types";
 
@@ -16,9 +17,13 @@ export function PublisherCard({ product }: { product: ProductDetail }) {
   return (
     <div className={styles.card}>
       <div className={styles.publisher}>
-        <span className={styles.avatar}>
-          <Icon name="library" size={22} />
-        </span>
+        {partner ? (
+          <PartnerAvatar name={partner.name} logoUrl={partner.logo_url} size={44} />
+        ) : (
+          <span className={styles.avatar}>
+            <Icon name="library" size={22} />
+          </span>
+        )}
         <div>
           <p className={styles.pubLabel}>Published by</p>
           <p className={styles.pubName}>

@@ -12,6 +12,7 @@ interface FilesTabProps {
   files: AdminProductFile[];
   setFiles: (updater: (list: AdminProductFile[]) => AdminProductFile[]) => void;
   ensureSaved: () => Promise<number | null>;
+  asPartner?: boolean;
 }
 
 function formatSize(bytes: number): string {
@@ -20,7 +21,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FilesTab({ productId, files, setFiles, ensureSaved }: FilesTabProps) {
+export function FilesTab({ productId, files, setFiles, ensureSaved, asPartner = false }: FilesTabProps) {
   const [revitVersion, setRevitVersion] = useState("2025");
   const [versionLabel, setVersionLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -42,7 +43,7 @@ export function FilesTab({ productId, files, setFiles, ensureSaved }: FilesTabPr
       form.append("version_label", versionLabel.trim());
       form.append("is_current", "true");
       form.append("file", file);
-      const created = await uploadProductFile(id, form);
+      const created = await uploadProductFile(id, form, asPartner);
       setFiles((list) => [created, ...list]);
       setVersionLabel("");
       setFile(null);
@@ -54,7 +55,7 @@ export function FilesTab({ productId, files, setFiles, ensureSaved }: FilesTabPr
   }
 
   async function onDelete(fileId: number) {
-    await deleteProductFile(fileId);
+    await deleteProductFile(fileId, asPartner);
     setFiles((list) => list.filter((f) => f.id !== fileId));
   }
 

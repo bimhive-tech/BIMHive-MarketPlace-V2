@@ -54,6 +54,18 @@ def staff_client(client):
     return client
 
 
+@pytest.fixture
+def staff_partner_client(client, partner_a):
+    # A staff member who *also* has their own approved seller application —
+    # e.g. testing the partner portal with their own admin account.
+    user = User.objects.create_user(
+        username="staffpartner@x.com", email="staffpartner@x.com", password="x",
+        is_staff=True, partner=partner_a,
+    )
+    client.force_login(user)
+    return client
+
+
 def _base_payload(category, **overrides):
     payload = {
         "name": "Partner Tool", "short_description": "s", "description": "d",
@@ -284,6 +296,70 @@ def test_staff_still_sees_all_partners_products(staff_client, partner_a, partner
 
 def test_staff_can_still_create_without_a_partner(staff_client, category):
     resp = staff_client.post(
+        "/api/admin/products", _base_payload(category), content_type="application/json"
+    )
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["partner"] is None
+
+
+# ── A staff member who is ALSO a partner: unrestricted by default, scoped to
+# their own partner only when ?mine=1 signals they're in the partner portal ──
+def test_staff_partner_sees_everything_without_mine_param(
+    staff_partner_client, partner_a, partner_b, category
+):
+    Product.objects.create(name="A's", short_description="s", description="d", category=category, partner=partner_a)
+    Product.objects.create(name="B's", short_description="s", description="d", category=category, partner=partner_b)
+    resp = staff_partner_client.get("/api/admin/products")
+    names = {row["name"] for row in resp.json()}
+    assert {"A's", "B's"} <= names
+
+
+def test_staff_partner_is_scoped_to_own_partner_with_mine_param(
+    staff_partner_client, partner_a, partner_b, category
+):
+    Product.objects.create(name="A's", short_description="s", description="d", category=category, partner=partner_a)
+    Product.objects.create(name="B's", short_description="s", description="d", category=category, partner=partner_b)
+    resp = staff_partner_client.get("/api/admin/products?mine=1")
+    names = [row["name"] for row in resp.json()]
+    assert names == ["A's"]
+
+
+def test_staff_partner_detail_404s_on_another_partners_product_with_mine_param(
+    staff_partner_client, partner_b, category
+):
+    other = Product.objects.create(
+        name="Not mine", short_description="s", description="d", category=category, partner=partner_b
+    )
+    resp = staff_partner_client.get(f"/api/admin/products/{other.id}?mine=1")
+    assert resp.status_code == 404
+
+
+def test_staff_partner_create_with_mine_param_is_force_scoped_to_own_partner(
+    staff_partner_client, partner_a, category
+):
+    resp = staff_partner_client.post(
+        "/api/admin/products?mine=1", _base_payload(category), content_type="application/json"
+    )
+    assert resp.status_code == 201, resp.json()
+    product = Product.objects.get(pk=resp.json()["id"])
+    assert product.partner_id == partner_a.id
+
+
+def test_staff_partner_with_mine_param_also_cannot_self_publish(staff_partner_client, category):
+    # Wearing the partner hat (?mine=1) applies the same review gate a
+    # non-staff partner is held to — otherwise a staff+partner account could
+    # use their own dashboard to bypass human review entirely.
+    resp = staff_partner_client.post(
+        "/api/admin/products?mine=1", _base_payload(category, status="published"), content_type="application/json"
+    )
+    assert resp.status_code == 400
+    assert "status" in resp.json()
+
+
+def test_staff_partner_create_without_mine_param_is_not_force_scoped(staff_partner_client, category):
+    # Without ?mine=1, the same account acts as plain staff — no forced
+    # partner attribution, matching test_staff_can_still_create_without_a_partner.
+    resp = staff_partner_client.post(
         "/api/admin/products", _base_payload(category), content_type="application/json"
     )
     assert resp.status_code == 201, resp.json()
