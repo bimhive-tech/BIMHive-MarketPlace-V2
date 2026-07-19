@@ -225,7 +225,7 @@ export function PluginBuildCard({ build, destinationOptions, asPartner, onChange
             className={styles.input}
             value={resourceSubpath}
             onChange={(e) => setResourceSubpath(e.target.value)}
-            placeholder="optional subfolder\file.ext"
+            placeholder="Leave blank — only for a subfolder, e.g. lib"
           />
           <input
             type="file"
@@ -233,6 +233,12 @@ export function PluginBuildCard({ build, destinationOptions, asPartner, onChange
             onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)}
           />
         </div>
+        <p className={styles.hint}>
+          Leave that box empty for the normal case — the file lands directly in the folder below,
+          keeping its own name. Only type something there for a subfolder (e.g. <code>lib</code>).
+          Never type a full path or drive letter (like <code>C:\...</code>) — it won&apos;t exist on
+          the customer&apos;s machine.
+        </p>
         {activeHint && <p className={styles.hint}>{activeHint}</p>}
         <button type="button" className={styles.addBtn} disabled={addingResource} onClick={onAddResource}>
           <Icon name="plus" size={14} /> {addingResource ? "Adding…" : "Add File"}
