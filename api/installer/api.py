@@ -202,6 +202,23 @@ class PluginBuildTriggerView(APIView):
         return Response(PluginBuildSerializer(result).data)
 
 
+class PluginBuildDownloadView(APIView):
+    """GET /api/admin/plugin-builds/<id>/download — lets staff/partner grab
+    the built .msi directly, without going through the customer purchase/
+    entitlement flow. Needed to test a build (including an unpublished
+    draft product) before it's ever purchasable."""
+
+    permission_classes = [IsStaffOrPartner]
+
+    def get(self, request, pk):
+        from django.http import HttpResponseRedirect
+
+        build = get_object_or_404(_build_queryset(request), pk=pk)
+        if build.status != PluginBuild.Status.READY or not build.built_msi_storage_key:
+            raise ValidationError({"detail": "This build hasn't produced an installer yet."})
+        return HttpResponseRedirect(default_storage.url(build.built_msi_storage_key))
+
+
 class PluginBuildDestinationOptionsView(APIView):
     """GET /api/admin/plugin-builds/destination-options — the two valid
     destination-path roots + their real on-disk hint text, so the frontend

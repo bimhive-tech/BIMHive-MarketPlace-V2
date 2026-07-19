@@ -127,7 +127,15 @@ Partners/staff no longer hand-build `.msi` installers with a separate desktop to
      can't be mixed component-by-component).
 3. Click **Build Installer** — the backend generates a WiX v5 source file and shells out to the
    `wix` CLI (see Prerequisites) to produce a real `.msi`, then wires it into the product's normal
-   downloads automatically.
+   downloads automatically. Deliberately a manual, one-time-per-version step rather than something
+   that runs per customer purchase — the `.msi` is generic (identical for every buyer of that
+   product+Revit-year, no per-customer data baked in), so rebuilding it on every purchase would
+   produce byte-identical output while adding latency and a fresh chance for WiX to fail on a
+   customer's live checkout instead of once during setup.
+4. Once a build reaches "ready," a **Download** link appears next to the button — staff/partner can
+   grab the `.msi` directly (`GET /api/admin/plugin-builds/<id>/download`) to test it, including for
+   an unpublished draft product, without needing a real purchase to go through the customer
+   entitlement flow.
 
 When a customer downloads a build produced this way, `/api/account/downloads/<id>/get` zips the
 `.msi` together with a `<productCode>.key` file containing their own license key (already issued at
@@ -195,7 +203,9 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   `DELETE /api/admin/plugin-builds/<id>/resources/<id>`, `POST /api/admin/plugin-builds/<id>/build`
   (runs the WiX packaging pipeline synchronously and returns status + build log),
   `GET /api/admin/plugin-builds/destination-options` (the `{ADDIN_DIR}`/`{INSTALL_DIR}` tokens +
-  their real on-disk hint text — single source of truth shared with the frontend).
+  their real on-disk hint text — single source of truth shared with the frontend),
+  `GET /api/admin/plugin-builds/<id>/download` (grab a ready build's `.msi` directly, no purchase
+  needed — for testing, including an unpublished product).
 - License codes (staff): `GET|POST /api/admin/license-codes` (list/generate, filterable by
   `?product=`/`?status=`), `POST /api/admin/license-codes/<id>/revoke` (only while unredeemed).
 - Account: `POST /api/account/licenses/machines/<id>/reactivate` (release a machine binding so the

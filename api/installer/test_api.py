@@ -166,3 +166,34 @@ def test_destination_options_lists_both_tokens(partner_a_client):
     assert resp.status_code == 200
     tokens = {row["token"] for row in resp.json()}
     assert tokens == {"{ADDIN_DIR}", "{INSTALL_DIR}"}
+
+
+# ── Direct download (staff/partner testing a build, no purchase needed) ──
+def test_owner_can_download_a_ready_build(partner_a_client, product_a):
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+
+    msi_key = default_storage.save(f"test/{product_a.id}/plugin.msi", ContentFile(b"fake msi bytes"))
+    build = PluginBuild.objects.create(
+        product=product_a, revit_year="2025", status=PluginBuild.Status.READY, built_msi_storage_key=msi_key,
+    )
+    resp = partner_a_client.get(f"/api/admin/plugin-builds/{build.id}/download")
+    assert resp.status_code == 302
+
+
+def test_cannot_download_a_build_that_isnt_ready(partner_a_client, product_a):
+    build = PluginBuild.objects.create(product=product_a, revit_year="2025", status=PluginBuild.Status.DRAFT)
+    resp = partner_a_client.get(f"/api/admin/plugin-builds/{build.id}/download")
+    assert resp.status_code == 400
+
+
+def test_another_partners_build_is_not_downloadable(partner_a_client, product_b):
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+
+    msi_key = default_storage.save(f"test/{product_b.id}/plugin.msi", ContentFile(b"fake msi bytes"))
+    build = PluginBuild.objects.create(
+        product=product_b, revit_year="2025", status=PluginBuild.Status.READY, built_msi_storage_key=msi_key,
+    )
+    resp = partner_a_client.get(f"/api/admin/plugin-builds/{build.id}/download")
+    assert resp.status_code == 404

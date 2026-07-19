@@ -275,6 +275,15 @@ export function PluginBuildCard({ build, destinationOptions, asPartner, onChange
         <button type="button" className={styles.primaryBtn} disabled={!canBuild} onClick={onBuild}>
           {building ? "Building…" : "Build Installer"}
         </button>
+        {build.status === "ready" && (
+          <a
+            className={styles.secondaryBtn}
+            href={`/api/admin/plugin-builds/${build.id}/download`}
+            title="Download the built .msi directly, to test before (or without) publishing"
+          >
+            <Icon name="download" size={14} /> Download
+          </a>
+        )}
         {build.built_at && (
           <span className={styles.fileMeta}>
             Last built {new Date(build.built_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
