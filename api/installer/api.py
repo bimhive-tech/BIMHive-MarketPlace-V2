@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from catalog.admin_api import _effective_partner_id
 from catalog.models import Product
+from catalog.models.product import ProductType
 from catalog.permissions import IsStaffOrPartner
 from installer.builder import build_plugin_installer
 from installer.models import PluginBuild, PluginResourceFile
@@ -73,6 +74,8 @@ class PluginBuildListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         product = get_object_or_404(_product_queryset(self.request), pk=self.kwargs["product_id"])
+        if product.type != ProductType.PLUGIN:
+            raise ValidationError({"product": "Installer builds are only available for Revit Plugin products."})
         revit_year = (self.request.data.get("revit_year") or "").strip()
         if not revit_year:
             raise ValidationError({"revit_year": "A Revit year is required."})

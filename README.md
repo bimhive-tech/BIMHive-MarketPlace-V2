@@ -110,6 +110,12 @@ Installer Build tab is available to partners on their own products in `/partner-
 
 ## Auto-generated installers
 
+Only relevant to **Revit Plugin** products (`Product.type == "plugin"`) — for any other product
+type (Dynamo Script, Template, BIM Library, Service, Other) the tab doesn't show at all, and
+Files & Downloads is the only delivery mechanism. Switching a product's Product Type dropdown
+(Pricing & License tab) live shows/hides the Installer Build tab without needing to save first;
+the backend rejects a build for a non-plugin product either way (`installer/api.py`).
+
 Partners/staff no longer hand-build `.msi` installers with a separate desktop tool. On the
 **Installer Build** tab of a product's edit page:
 1. Upload the compiled `.dll` and `.addin` manifest for each Revit year you support.

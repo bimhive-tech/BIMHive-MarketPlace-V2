@@ -33,6 +33,8 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "media", label: "Media & Previews" },
   { id: "pricing", label: "Pricing & License" },
   { id: "files", label: "Files & Downloads" },
+  // Only shown for Revit Plugin products — see the `type === "plugin"` filter
+  // below. Every other product type just uses Files & Downloads directly.
   { id: "installer", label: "Installer Build" },
   { id: "compatibility", label: "Compatibility" },
   { id: "documentation", label: "Documentation" },
@@ -158,6 +160,14 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  const visibleTabs = TABS.filter((t) => t.id !== "installer" || form.type === "plugin");
+
+  // If the product type changes away from Plugin while the now-hidden
+  // Installer Build tab is active, land somewhere still visible.
+  useEffect(() => {
+    if (tab === "installer" && form.type !== "plugin") setTab("files");
+  }, [form.type, tab]);
 
   function setFeature(i: number, key: keyof AdminProductFeature, value: string) {
     setFeatures((list) => list.map((f, idx) => (idx === i ? { ...f, [key]: value } : f)));
@@ -322,7 +332,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       <div className={styles.layout}>
         <div className={styles.formCol}>
           <div className={styles.tabs} role="tablist">
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <button
                 key={t.id}
                 role="tab"

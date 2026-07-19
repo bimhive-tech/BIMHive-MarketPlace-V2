@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from catalog.models import Category, Partner, Product
+from catalog.models.product import ProductType
 from installer.models import PluginBuild, PluginResourceFile
 
 pytestmark = pytest.mark.django_db
@@ -44,6 +45,14 @@ def product_b(category, partner_b):
     return Product.objects.create(
         name="B's Plugin", product_code="b-plugin", category=category, partner=partner_b,
         short_description="s", description="d",
+    )
+
+
+@pytest.fixture
+def script_product(category, partner_a):
+    return Product.objects.create(
+        name="A's Script", product_code="a-script", category=category, partner=partner_a,
+        type=ProductType.SCRIPT, short_description="s", description="d",
     )
 
 
@@ -95,6 +104,12 @@ def test_cannot_create_a_duplicate_revit_year_for_the_same_product(partner_a_cli
 def test_anonymous_cannot_reach_the_plugin_build_api(client, product_a):
     resp = client.get(f"/api/admin/products/{product_a.id}/plugin-builds")
     assert resp.status_code in (401, 403)
+
+
+def test_cannot_create_a_build_for_a_non_plugin_product(partner_a_client, script_product):
+    resp = partner_a_client.post(f"/api/admin/products/{script_product.id}/plugin-builds", {"revit_year": "2025"})
+    assert resp.status_code == 400
+    assert "product" in resp.json()
 
 
 # ── Uploads ──
