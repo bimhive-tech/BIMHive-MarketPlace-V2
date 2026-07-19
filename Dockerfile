@@ -35,10 +35,15 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 3: runtime — Python + Node together, nothing else ──
 FROM python:3.12-slim AS runtime
-# libicu72: the .NET runtime (needed below for the WiX toolchain) hard-crashes
-# on startup without ICU globalization data — python:3.12-slim (Debian
-# bookworm) doesn't ship it by default.
-RUN apt-get update && apt-get install -y --no-install-recommends curl libpq5 libicu72 \
+# The .NET runtime (needed below for the WiX toolchain) hard-crashes on
+# startup without ICU globalization data, which python:3.12-slim doesn't ship.
+# The package is versioned (libicu72, libicu76, ...) and tracks whatever
+# Debian release the "slim" tag currently resolves to, so resolve the name
+# dynamically instead of pinning a version that breaks on the next base-image
+# bump (already happened once: bookworm's libicu72 doesn't exist on trixie).
+RUN apt-get update \
+    && ICU_PKG="$(apt-cache search --names-only '^libicu[0-9]+$' | sort -V | tail -n1 | cut -d' ' -f1)" \
+    && apt-get install -y --no-install-recommends curl libpq5 "$ICU_PKG" \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
