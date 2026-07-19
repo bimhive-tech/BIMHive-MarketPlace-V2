@@ -54,6 +54,7 @@ export interface AccountOrder {
 export const getAccountOrders = () => getJSON<AccountOrder[]>("/api/account/orders");
 
 export interface AccountMachine {
+  id: string;
   fingerprint_preview: string;
   status: string;
   last_seen_at: string;
@@ -71,6 +72,8 @@ export interface AccountLicense {
   machines: AccountMachine[];
 }
 export const getAccountLicenses = () => getJSON<AccountLicense[]>("/api/account/licenses");
+export const reactivateLicense = (machineId: string) =>
+  writeJSON<AccountLicense>(`/api/account/licenses/machines/${machineId}/reactivate`, "POST");
 
 export interface AccountDownloadFile {
   id: number;

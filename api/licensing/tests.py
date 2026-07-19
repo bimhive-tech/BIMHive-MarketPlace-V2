@@ -169,7 +169,52 @@ def test_activate_rate_limited(product):
 
 
 def test_response_has_exact_top_level_keys(product):
+    # "signature" is a deliberate, additive extension (see
+    # licensing.api_views._signed_response / LICENSE_SIGNING_KEY) — an
+    # HMAC over the decision fields so a network-level tamper of a genuine
+    # response can't just flip "authorized" without also forging a
+    # signature it has no key for. Old, already-shipped clients ignore
+    # unknown JSON fields, so this stays additive to the byte-compatible
+    # contract rather than breaking it.
     body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
-    assert set(body.keys()) == {
-        "authorized", "status", "message", "startedAt", "expiresAt", "remainingSeconds"
-    }
+    required = {"authorized", "status", "message", "startedAt", "expiresAt", "remainingSeconds"}
+    assert required <= body.keys()
+    assert body.keys() - required <= {"signature"}
+
+
+# ── Response signing (Phase 4 — see licensing/api_views.py::_signed_response) ──
+SIGNING_KEY = "test-signing-key"
+
+
+@pytest.fixture
+def _signing(settings):
+    settings.LICENSE_SIGNING_KEY = SIGNING_KEY
+
+
+def _expected_signature(body):
+    import hmac
+
+    canonical = "|".join(
+        str(body.get(f, "")) for f in ("authorized", "status", "startedAt", "expiresAt", "remainingSeconds")
+    )
+    return hmac.new(SIGNING_KEY.encode(), canonical.encode(), hashlib.sha256).hexdigest()
+
+
+def test_response_includes_a_valid_signature_when_signing_key_is_configured(product, _signing):
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
+    assert "signature" in body
+    assert body["signature"] == _expected_signature(body)
+
+
+def test_signature_reflects_the_actual_decision_not_a_constant(product, _signing):
+    active_body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
+    bad_request_body = _activate(Client(), machineFingerprintHash=FP).json()  # missing productCode
+    assert active_body["status"] == "active"
+    assert bad_request_body["status"] == "bad_request"
+    assert active_body["signature"] != bad_request_body["signature"]
+
+
+def test_no_signature_field_when_signing_key_is_not_configured(product, settings):
+    settings.LICENSE_SIGNING_KEY = ""
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
+    assert "signature" not in body

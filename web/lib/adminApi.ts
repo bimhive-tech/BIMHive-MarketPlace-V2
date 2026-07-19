@@ -401,3 +401,86 @@ export const getAdminActivity = (params?: {
   const qs = new URLSearchParams(clean).toString();
   return getJSON<AdminActivityEntry[]>(`/api/admin/activity${qs ? `?${qs}` : ""}`);
 };
+
+// ── Plugin builds (auto-generated installers — see /api-docs or installer/README) ──
+export interface PluginResourceFile {
+  id: string;
+  kind: "resource" | "dependency";
+  original_filename: string;
+  destination_path: string;
+  sort_order: number;
+}
+export interface PluginBuild {
+  id: string;
+  product: number;
+  product_name: string;
+  revit_year: string;
+  plugin_version: string;
+  dll_filename: string;
+  addin_filename: string;
+  status: "draft" | "building" | "ready" | "failed";
+  scope: "perUser" | "perMachine";
+  built_at: string | null;
+  build_log: string;
+  resource_files: PluginResourceFile[];
+  created_at: string;
+  updated_at: string;
+}
+export interface DestinationOption {
+  token: string;
+  scope: string;
+  label: string;
+  hint: string;
+}
+
+const mineParam = (asPartner: boolean, hasQuery = false) => (asPartner ? `${hasQuery ? "&" : "?"}mine=1` : "");
+
+export const getPluginBuilds = (productId: number, asPartner = false) =>
+  getJSON<PluginBuild[]>(`/api/admin/products/${productId}/plugin-builds${mineParam(asPartner)}`);
+export const createPluginBuild = (productId: number, revitYear: string, asPartner = false) =>
+  request<PluginBuild>(
+    `/api/admin/products/${productId}/plugin-builds${mineParam(asPartner)}`,
+    "POST",
+    { revit_year: revitYear },
+  );
+export const updatePluginBuild = (id: string, payload: { plugin_version?: string }, asPartner = false) =>
+  request<PluginBuild>(`/api/admin/plugin-builds/${id}${mineParam(asPartner)}`, "PATCH", payload);
+export const deletePluginBuild = (id: string, asPartner = false) =>
+  request<void>(`/api/admin/plugin-builds/${id}${mineParam(asPartner)}`, "DELETE");
+export const uploadPluginDll = (id: string, file: File, asPartner = false) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<PluginBuild>(`/api/admin/plugin-builds/${id}/dll${mineParam(asPartner)}`, "POST", form, true);
+};
+export const uploadPluginAddin = (id: string, file: File, asPartner = false) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<PluginBuild>(`/api/admin/plugin-builds/${id}/addin${mineParam(asPartner)}`, "POST", form, true);
+};
+export const uploadPluginResource = (
+  id: string,
+  file: File,
+  destinationPath: string,
+  kind: "resource" | "dependency",
+  asPartner = false,
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("destination_path", destinationPath);
+  form.append("kind", kind);
+  return request<PluginResourceFile>(
+    `/api/admin/plugin-builds/${id}/resources${mineParam(asPartner)}`,
+    "POST",
+    form,
+    true,
+  );
+};
+export const deletePluginResource = (buildId: string, resourceId: string, asPartner = false) =>
+  request<void>(
+    `/api/admin/plugin-builds/${buildId}/resources/${resourceId}${mineParam(asPartner)}`,
+    "DELETE",
+  );
+export const triggerPluginBuild = (id: string, asPartner = false) =>
+  request<PluginBuild>(`/api/admin/plugin-builds/${id}/build${mineParam(asPartner)}`, "POST");
+export const getDestinationOptions = () =>
+  getJSON<DestinationOption[]>("/api/admin/plugin-builds/destination-options");

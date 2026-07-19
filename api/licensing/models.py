@@ -128,7 +128,10 @@ class ProductPurchase(models.Model):
 
     @property
     def bound_machine_license(self):
-        return self.machine_licenses.order_by("first_seen_at", "id").first()
+        # "released" machines (see services.release_machine_binding) are
+        # deliberately excluded — that status exists specifically so a freed
+        # binding stops blocking the next activation attempt from a new PC.
+        return self.machine_licenses.exclude(status="released").order_by("first_seen_at", "id").first()
 
     def save(self, *args, **kwargs):
         if not self.license_key:

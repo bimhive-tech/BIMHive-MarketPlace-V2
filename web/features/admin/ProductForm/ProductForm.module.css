@@ -465,6 +465,44 @@
   flex-shrink: 0;
 }
 
+/* ── Installer Build tab ── */
+.buildCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.buildHeaderRow,
+.buildActionsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.addYearRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.buildLog {
+  background: var(--surface-50);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xs);
+  font-family: monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 @media (max-width: 960px) {
   .layout {
     grid-template-columns: 1fr;

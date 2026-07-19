@@ -3,6 +3,9 @@ Customer-facing account API — "my orders / my licenses / my downloads"
 (mounted under /api/account/). Everything here is scoped to request.user; this is
 the read side of the same ProductPurchase/MachineLicense data the admin API manages.
 """
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import generics, serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -11,7 +14,14 @@ from rest_framework.views import APIView
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
-from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
+from licensing.models import LicenseEvent, LicensedProduct, MachineLicense, ProductPurchase
+from licensing.services import release_machine_binding
+
+# A customer can move their license to a new machine at most this often,
+# self-service — more frequent than this needs a support ticket. Chosen to
+# comfortably cover "I got a new PC" without enabling casual license sharing
+# via repeated reactivation.
+REACTIVATION_COOLDOWN_DAYS = 90
 
 
 class AccountOrderSerializer(serializers.ModelSerializer):
@@ -43,7 +53,7 @@ class AccountMachineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MachineLicense
-        fields = ["fingerprint_preview", "status", "last_seen_at", "install_count", "plugin_version"]
+        fields = ["id", "fingerprint_preview", "status", "last_seen_at", "install_count", "plugin_version"]
 
     def get_fingerprint_preview(self, obj):
         h = obj.machine_fingerprint_hash or ""
@@ -74,6 +84,55 @@ class AccountLicenseListView(generics.ListAPIView):
             .prefetch_related("machine_licenses")
             .order_by("-requested_at")
         )
+
+
+class ReactivateLicenseView(APIView):
+    """Self-service "this isn't my computer anymore" — releases a paid
+    purchase's current machine binding so the next activation (from a new
+    PC) binds fresh instead of being denied forever. Rate-limited via the
+    LicenseEvent audit trail rather than a separate counter field, mirroring
+    how the rest of this app treats LicenseEvent as the source of truth for
+    "did X happen recently"."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, machine_license_id):
+        machine_license = (
+            MachineLicense.objects.select_related("purchase", "product")
+            .filter(pk=machine_license_id, purchase__user=request.user)
+            .first()
+        )
+        if not machine_license:
+            raise ValidationError({"detail": "License not found."})
+        if not machine_license.purchase_id or not machine_license.purchase.is_license_active:
+            raise ValidationError({"detail": "This license isn't currently active."})
+        if machine_license.status == "released":
+            raise ValidationError(
+                {"detail": "This device is already released — install on your new machine to finish."}
+            )
+
+        cooldown_start = timezone.now() - timedelta(days=REACTIVATION_COOLDOWN_DAYS)
+        recent_reactivation = LicenseEvent.objects.filter(
+            product=machine_license.product,
+            event_type="machine_released",
+            payload__purchaseId=str(machine_license.purchase_id),
+            event_time__gte=cooldown_start,
+        ).exists()
+        if recent_reactivation:
+            raise ValidationError(
+                {
+                    "detail": (
+                        f"You can only reactivate a license once every {REACTIVATION_COOLDOWN_DAYS} days. "
+                        "Contact support if you need this sooner."
+                    )
+                }
+            )
+
+        release_machine_binding(machine_license)
+        purchase = ProductPurchase.objects.select_related("product", "product__product").prefetch_related(
+            "machine_licenses"
+        ).get(pk=machine_license.purchase_id)
+        return Response(AccountLicenseSerializer(purchase).data)
 
 
 class AccountDownloadFileSerializer(serializers.Serializer):
@@ -136,16 +195,20 @@ class AccountDownloadListView(generics.ListAPIView):
 
 
 class AccountDownloadFileView(APIView):
-    """Re-checks entitlement, logs the download, then redirects to a freshly
-    signed R2 URL. This is the only point in the download flow that Django
-    actually sees — everything after the redirect goes straight to R2."""
+    """Re-checks entitlement, logs the download, then either redirects to a
+    freshly signed R2 URL (a manually-uploaded file — unchanged legacy
+    behavior) or, for a file the auto-installer pipeline built (see
+    installer.builder), streams back a ZIP containing the installer plus a
+    `<productCode>.key` file holding the purchaser's own license key — so
+    the plugin's first run can auto-import it instead of the customer
+    copy-pasting a key by hand."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, file_id):
         from django.core.files.storage import default_storage
         from django.db.models import F
-        from django.http import HttpResponseRedirect
+        from django.http import HttpResponse, HttpResponseRedirect
 
         from catalog.models import Product, ProductFile
 
@@ -153,12 +216,12 @@ class AccountDownloadFileView(APIView):
         if not file or not file.storage_key:
             raise ValidationError({"detail": "File not found."})
 
-        owns_it = ProductPurchase.objects.filter(
+        purchase = ProductPurchase.objects.filter(
             user=request.user,
             product__product=file.product,
             payment_status=ProductPurchase.PaymentStatus.PAID,
-        ).exists()
-        if not owns_it:
+        ).first()
+        if not purchase:
             raise ValidationError({"detail": "You don't have access to this file."})
 
         log_activity(
@@ -171,7 +234,51 @@ class AccountDownloadFileView(APIView):
         # detail view already displays this field, it just never had anything
         # incrementing it before this endpoint existed.
         Product.objects.filter(pk=file.product_id).update(download_count=F("download_count") + 1)
+
+        auto_build = _matching_plugin_build(file)
+        if auto_build:
+            return _zip_installer_with_license_key(file, auto_build, purchase)
         return HttpResponseRedirect(default_storage.url(file.storage_key))
+
+
+def _matching_plugin_build(file):
+    from installer.models import PluginBuild
+
+    return PluginBuild.objects.filter(
+        product=file.product,
+        revit_year=file.revit_version,
+        status=PluginBuild.Status.READY,
+        built_msi_storage_key=file.storage_key,
+    ).first()
+
+
+def _zip_installer_with_license_key(file, auto_build, purchase):
+    import io
+    import zipfile
+
+    from django.core.files.storage import default_storage
+    from django.http import HttpResponse
+
+    zip_buffer = io.BytesIO()
+    msi_name = auto_build.built_msi_storage_key.rsplit("/", 1)[-1]
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        with default_storage.open(auto_build.built_msi_storage_key, "rb") as msi_file:
+            archive.writestr(msi_name, msi_file.read())
+        # LicLoader (the installed plugin's activation shim) checks for a
+        # same-name .key file next to itself in %AppData%\BIMHive\Licenses\
+        # on first run before falling back to a manual prompt — see
+        # installer-generator-reference project notes.
+        archive.writestr(f"{file.product.product_code}.key", purchase.license_key)
+        archive.writestr(
+            "README.txt",
+            f"1. Run {msi_name} to install {file.product.name}.\n"
+            f"2. Keep {file.product.product_code}.key in this folder until the first Revit launch "
+            "after installing — the plugin reads it automatically to activate your license.\n",
+        )
+    zip_buffer.seek(0)
+    response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = f'attachment; filename="{file.product.slug}-{file.revit_version}.zip"'
+    return response
 
 
 class ClaimFreeProductView(APIView):

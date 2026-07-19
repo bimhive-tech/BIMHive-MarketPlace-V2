@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon/Icon";
 import { CompatibilityTab } from "@/features/admin/ProductForm/CompatibilityTab";
 import { DocumentationTab } from "@/features/admin/ProductForm/DocumentationTab";
 import { FilesTab } from "@/features/admin/ProductForm/FilesTab";
+import { InstallerBuildTab } from "@/features/admin/ProductForm/InstallerBuildTab";
 import { MediaTab } from "@/features/admin/ProductForm/MediaTab";
 import {
   AdminApiError,
@@ -26,12 +27,13 @@ import {
 
 import styles from "./ProductForm.module.css";
 
-type TabId = "info" | "media" | "pricing" | "files" | "compatibility" | "documentation" | "seo";
+type TabId = "info" | "media" | "pricing" | "files" | "installer" | "compatibility" | "documentation" | "seo";
 const TABS: { id: TabId; label: string }[] = [
   { id: "info", label: "Product Information" },
   { id: "media", label: "Media & Previews" },
   { id: "pricing", label: "Pricing & License" },
   { id: "files", label: "Files & Downloads" },
+  { id: "installer", label: "Installer Build" },
   { id: "compatibility", label: "Compatibility" },
   { id: "documentation", label: "Documentation" },
   { id: "seo", label: "SEO & Settings" },
@@ -505,6 +507,10 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
               ensureSaved={ensureSaved}
               asPartner={asPartner}
             />
+          )}
+
+          {tab === "installer" && (
+            <InstallerBuildTab productId={savedId} ensureSaved={ensureSaved} asPartner={asPartner} />
           )}
 
           {tab === "compatibility" && (

@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "reviews",
     "licensing",
     "activity",
+    "installer",
 ]
 
 MIDDLEWARE = [
@@ -181,6 +182,22 @@ CORS_ALLOW_CREDENTIALS = True
 # ─────────────────────────────────────────────────────────────
 LICENSE_PEPPER = env("LICENSE_PEPPER", default="")
 LEGACY_LICENSE_DATABASE_URL = env("LEGACY_LICENSE_DATABASE_URL", default="")
+# HMAC-signs the /api/license/activate response so a tampered loader has to
+# forge a signature, not just a boolean — additive field, doesn't touch the
+# byte-compatible v1 contract. Separate from LICENSE_PEPPER (different threat
+# model: pepper protects stored fingerprints at rest, this protects a
+# response in transit).
+LICENSE_SIGNING_KEY = env("LICENSE_SIGNING_KEY", default="")
+
+# ─────────────────────────────────────────────────────────────
+# Auto-generated plugin installers (see installer/)
+# ─────────────────────────────────────────────────────────────
+# Resolved via PATH by default — matches installing WiX as a dotnet global
+# tool (`dotnet tool install --global wix`), the same toolchain the legacy
+# InstallerGenerator uses, just invoked headlessly instead of from its GUI.
+WIX_EXECUTABLE = env("WIX_EXECUTABLE", default="wix")
+INSTALLER_BUILD_TIMEOUT_SECONDS = env.int("INSTALLER_BUILD_TIMEOUT_SECONDS", default=180)
+INSTALLER_MANUFACTURER = env("INSTALLER_MANUFACTURER", default="BIMHive")
 
 # ─────────────────────────────────────────────────────────────
 # Object storage (Cloudflare R2 / MinIO). Wired in a later task.

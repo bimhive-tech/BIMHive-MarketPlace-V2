@@ -7,11 +7,17 @@ from licensing.account_api import (
     AccountLicenseListView,
     AccountOrderListView,
     ClaimFreeProductView,
+    ReactivateLicenseView,
 )
 
 urlpatterns = [
     path("orders", AccountOrderListView.as_view(), name="account-orders"),
     path("licenses", AccountLicenseListView.as_view(), name="account-licenses"),
+    path(
+        "licenses/machines/<uuid:machine_license_id>/reactivate",
+        ReactivateLicenseView.as_view(),
+        name="account-license-reactivate",
+    ),
     path("downloads", AccountDownloadListView.as_view(), name="account-downloads"),
     path("downloads/<int:file_id>/get", AccountDownloadFileView.as_view(), name="account-download-file"),
     path("claim-free", ClaimFreeProductView.as_view(), name="account-claim-free"),

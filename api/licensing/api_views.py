@@ -9,6 +9,7 @@ Endpoints (registered in config/urls.py, no trailing slash):
   POST /api/license/activate
 """
 import hashlib
+import hmac
 import json
 from datetime import timedelta
 
@@ -49,7 +50,7 @@ def _rate_limited(request, bucket, limit=30, window=60):
 
 
 def _too_many_requests():
-    return JsonResponse(
+    return _signed_response(
         {
             "authorized": False,
             "status": "rate_limited",
@@ -68,6 +69,36 @@ def _iso_utc(value):
 
 def _hash_hex(value):
     return hashlib.sha256((value or "").encode("utf-8")).hexdigest().upper()
+
+
+# ─────────────────────────────────────────────────────────────
+# Response signing (additive — see installer-generator-reference project
+# notes, phase 4). A tampered/patched loader can still fabricate its own
+# "authorized: true" locally without ever calling the server, so this isn't
+# a silver bullet — but it means a network-level tamper of a genuine
+# response (or a naive replay against a different request) requires forging
+# an HMAC it doesn't have the key for, not just editing a JSON boolean.
+# Purely additive: existing fields/shape are untouched, so an already-shipped
+# plugin that doesn't know about "signature" keeps working unmodified.
+# ─────────────────────────────────────────────────────────────
+_SIGNED_FIELDS = ("authorized", "status", "startedAt", "expiresAt", "remainingSeconds")
+
+
+def _sign_payload(payload: dict) -> str:
+    # Deliberately NOT json.dumps(payload) — JSON key ordering/whitespace
+    # isn't guaranteed identical across languages, which would make
+    # independent re-implementations of verification fragile. A fixed,
+    # pipe-delimited field order avoids that ambiguity.
+    canonical = "|".join(str(payload.get(field, "")) for field in _SIGNED_FIELDS)
+    return hmac.new(
+        settings.LICENSE_SIGNING_KEY.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+
+def _signed_response(payload: dict, status: int = 200) -> JsonResponse:
+    if settings.LICENSE_SIGNING_KEY:
+        payload = {**payload, "signature": _sign_payload(payload)}
+    return JsonResponse(payload, status=status)
 
 
 def _json_body(request):
@@ -89,7 +120,7 @@ def _log_event(product, machine_hash, event_type, payload, machine_license=None,
 
 
 def _denied_purchase_response(machine_license, purchase):
-    return JsonResponse(
+    return _signed_response(
         {
             "authorized": False,
             "status": purchase.denial_status,
@@ -102,7 +133,7 @@ def _denied_purchase_response(machine_license, purchase):
 
 
 def _bound_machine_denied_response(machine_license):
-    return JsonResponse(
+    return _signed_response(
         {
             "authorized": False,
             "status": "blocked",
@@ -148,7 +179,7 @@ def license_activate_api(request):
         return _too_many_requests()
     body = _json_body(request)
     if body is None:
-        return JsonResponse(
+        return _signed_response(
             {"authorized": False, "status": "bad_request", "message": "Invalid request.", "remainingSeconds": 0},
             status=400,
         )
@@ -156,12 +187,12 @@ def license_activate_api(request):
     product_code = (body.get("productCode") or "").strip()
     machine_fingerprint_hash = (body.get("machineFingerprintHash") or "").strip()
     if not product_code:
-        return JsonResponse(
+        return _signed_response(
             {"authorized": False, "status": "bad_request", "message": "Product code is required.", "remainingSeconds": 0},
             status=400,
         )
     if not machine_fingerprint_hash:
-        return JsonResponse(
+        return _signed_response(
             {"authorized": False, "status": "bad_request", "message": "Machine fingerprint hash is required.", "remainingSeconds": 0},
             status=400,
         )
@@ -171,7 +202,7 @@ def license_activate_api(request):
     try:
         product = LicensedProduct.objects.get(code=product_code, is_active=True)
     except LicensedProduct.DoesNotExist:
-        return JsonResponse(
+        return _signed_response(
             {"authorized": False, "status": "blocked", "message": "Access denied. Product is inactive.", "remainingSeconds": 0}
         )
 
@@ -238,7 +269,7 @@ def license_activate_api(request):
 
     if machine_license and machine_license.status == "blocked" and not purchase_backed_block:
         _log_event(product, protected_hash, "blocked", {"reason": "manually_blocked"}, machine_license=machine_license, event_time=now)
-        return JsonResponse(
+        return _signed_response(
             {
                 "authorized": False,
                 "status": "blocked",
@@ -330,7 +361,7 @@ def license_activate_api(request):
             machine_license=machine_license,
             event_time=now,
         )
-        return JsonResponse(
+        return _signed_response(
             {
                 "authorized": True,
                 "status": "paid",
@@ -371,7 +402,7 @@ def license_activate_api(request):
             event_time=now,
         )
         remaining = max(0, int((expires_at - now).total_seconds()))
-        return JsonResponse(
+        return _signed_response(
             {
                 "authorized": True,
                 "status": "active",
@@ -397,7 +428,7 @@ def license_activate_api(request):
         machine_license.last_seen_at = now
         machine_license.save(update_fields=["status", "last_seen_at"])
         _log_event(product, protected_hash, "expired", {"reason": "trial_finished"}, machine_license=machine_license, event_time=now)
-        return JsonResponse(
+        return _signed_response(
             {
                 "authorized": False,
                 "status": "expired",
@@ -410,7 +441,7 @@ def license_activate_api(request):
 
     _log_event(product, protected_hash, "recheck", {"reason": "still_active"}, machine_license=machine_license, event_time=now)
     remaining = max(0, int((machine_license.expires_at - now).total_seconds()))
-    return JsonResponse(
+    return _signed_response(
         {
             "authorized": True,
             "status": "active",

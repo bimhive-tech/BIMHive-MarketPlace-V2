@@ -18,6 +18,12 @@ rules, and [`style.md`](style.md) + [`design/`](design/) for the design system.
 - Node.js 22+ and npm 10+
 - Python 3.13 (backend) — 3.14 is not yet supported by the Django/psycopg wheels
 - Docker (for local Postgres + MinIO)
+- .NET SDK 9+ and the WiX v5 CLI, only if you're building/testing the auto-generated installer
+  pipeline (`installer/`):
+  ```bash
+  dotnet tool install --global wix --version 5.0.2   # v7+ requires accepting a paid maintenance fee — avoid it
+  wix extension add -g WixToolset.UI.wixext/5.0.2
+  ```
 
 ---
 
@@ -62,7 +68,7 @@ groups: Django core, `DATABASE_URL`, Cloudflare R2, licensing (`LICENSE_PEPPER`)
 
 ```
 /web      Next.js frontend (routes, components, features, styles/tokens, lib/api)
-/api      Django backend (catalog, licensing, accounts, reviews)
+/api      Django backend (catalog, licensing, accounts, reviews, installer)
 /infra    docker-compose (Postgres + MinIO), deploy config
 design/   brand assets + UI mockups (design source of truth)
 ```
@@ -73,7 +79,9 @@ design/   brand assets + UI mockups (design source of truth)
 **Cart**: `/cart` (real, localStorage-backed), `/checkout` (honest "coming soon" stub — no fake
 payment flow until Stripe/PayPal are wired).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
-**Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses`,
+**Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses` (license
+keys, bound machines, and a "this isn't my computer anymore" self-service reactivation that frees
+a machine binding so the license can activate on a new PC — rate-limited to once every 90 days),
 `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
 job title/bio, change email, change password, delete account, plus a "Become a Seller"/"Partner"
 tab whose label and content track the account's seller-application state).
@@ -92,10 +100,36 @@ identity is shown, e.g. a product's "Published by" card). Everything except Part
 hidden/gated until the seller application is approved.
 **Admin portal** (staff-gated, separate from Django's `/admin`): `/admin-portal` (dashboard),
 `/admin-portal/products` (list/create/edit, full form incl. media/features/changelog/compatibility/
-files), `/admin-portal/{orders,customers,reviews,licenses}`, `/admin-portal/{categories,tags,
-partners,collections}` (taxonomy CRUD — Partners includes a Pending/Approved/Rejected review queue
-for seller applications), `/admin-portal/settings` (live system status),
-`/admin-portal/settings/{users,roles}` (role-based staff access).
+files/**Installer Build** — upload a compiled `.dll` + `.addin` manifest per Revit year plus any
+resource/dependency files, and BIMHive packages them into a real signed `.msi` automatically; see
+"Auto-generated installers" below), `/admin-portal/{orders,customers,reviews,licenses}`,
+`/admin-portal/{categories,tags,partners,collections}` (taxonomy CRUD — Partners includes a
+Pending/Approved/Rejected review queue for seller applications), `/admin-portal/settings` (live
+system status), `/admin-portal/settings/{users,roles}` (role-based staff access). The same
+Installer Build tab is available to partners on their own products in `/partner-portal/products`.
+
+## Auto-generated installers
+
+Partners/staff no longer hand-build `.msi` installers with a separate desktop tool. On the
+**Installer Build** tab of a product's edit page:
+1. Upload the compiled `.dll` and `.addin` manifest for each Revit year you support.
+2. Optionally add resource/dependency files, each with a destination:
+   - `{ADDIN_DIR}` — per-user, no install prompt, lands in `%APPDATA%\Autodesk\Revit\Addins\<year>\`.
+   - `{INSTALL_DIR}` — machine-wide, lands in `%ProgramFiles%\BIMHive\<Plugin Name>\`; using this at
+     all makes the whole installer per-machine (Windows Installer scope is package-level, so it
+     can't be mixed component-by-component).
+3. Click **Build Installer** — the backend generates a WiX v5 source file and shells out to the
+   `wix` CLI (see Prerequisites) to produce a real `.msi`, then wires it into the product's normal
+   downloads automatically.
+
+When a customer downloads a build produced this way, `/api/account/downloads/<id>/get` zips the
+`.msi` together with a `<productCode>.key` file containing their own license key (already issued at
+purchase time), instead of a bare redirect — no copy-pasting a key by hand. A manually-uploaded
+product file (not built by this pipeline) keeps the old plain-redirect behavior.
+
+See `installer/` (models, `wxs_generator.py`, `builder.py`, `api.py`) — and the project's licensing
+reference notes for the legacy tool this replaces and why (unstable `UpgradeCode`/`Version` per
+build, unsigned client-trusted activation response).
 
 ## API endpoints
 
@@ -113,7 +147,19 @@ for seller applications), `/admin-portal/settings` (live system status),
   application status), `GET /api/partner/sales` (approved partners only — own orders/revenue, no
   customer PII). Product/file/media CRUD is shared with staff via the `/api/admin/products*` routes
   (`IsStaffOrPartner` scopes a non-staff caller to their own approved partner automatically).
+- Installer builds (staff/partner, same `?mine=1` scoping as products): `GET|POST
+  /api/admin/products/<id>/plugin-builds`, `GET|PATCH|DELETE /api/admin/plugin-builds/<id>`,
+  file uploads at `/api/admin/plugin-builds/<id>/{dll,addin,resources}`,
+  `DELETE /api/admin/plugin-builds/<id>/resources/<id>`, `POST /api/admin/plugin-builds/<id>/build`
+  (runs the WiX packaging pipeline synchronously and returns status + build log),
+  `GET /api/admin/plugin-builds/destination-options` (the `{ADDIN_DIR}`/`{INSTALL_DIR}` tokens +
+  their real on-disk hint text — single source of truth shared with the frontend).
+- Account: `POST /api/account/licenses/machines/<id>/reactivate` (release a machine binding so the
+  license can activate on a new PC — self-service, rate-limited).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
+  — the response now additionally includes a `signature` field (HMAC over the decision fields,
+  keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped
+  plugins that don't read it are unaffected.
 
 ## Admin / test access
 
@@ -127,6 +173,9 @@ A staff user is seeded for local admin access: `admin@bimhive.ai` / `BimHiveAdmi
 ```bash
 cd api && pytest          # includes golden-master tests for the license API contract
 ```
+
+`installer/test_builder.py` runs real WiX builds (no mocking) end to end — needs the WiX CLI on
+PATH (see Prerequisites). The rest of the suite doesn't touch WiX and runs anywhere.
 
 ---
 

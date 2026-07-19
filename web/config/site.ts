@@ -108,6 +108,11 @@ export const SELL_BENEFITS: { icon: IconName; title: string; text: string }[] = 
 
 export const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 
+/** Revit years the auto-generated installer pipeline can target — update this
+ * one list each time a new Revit version ships; nothing else references a
+ * hardcoded year. */
+export const SUPPORTED_REVIT_YEARS = ["2023", "2024", "2025", "2026", "2027"] as const;
+
 export function formatPrice(amount: number | string, currency = "USD"): string {
   const value = typeof amount === "string" ? parseFloat(amount) : amount;
   if (!value || value <= 0) return "Free";

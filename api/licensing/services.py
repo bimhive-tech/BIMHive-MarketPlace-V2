@@ -79,6 +79,26 @@ def revoke_purchase_access(purchase, status=None, reason=None, event_time=None):
     return purchase
 
 
+def release_machine_binding(machine_license, event_time=None):
+    """Frees a paid purchase's machine binding — self-service "I got a new
+    PC" reactivation (see licensing/account_api.py::ReactivateLicenseView).
+    The next activation call with a different fingerprint then binds fresh
+    instead of being denied forever by the old one (bound_machine_license
+    excludes "released" machines — see ProductPurchase.bound_machine_license)."""
+    event_time = event_time or timezone.now()
+    machine_license.status = "released"
+    machine_license.last_seen_at = event_time
+    machine_license.save(update_fields=["status", "last_seen_at"])
+    log_license_event(
+        machine_license.product,
+        machine_license,
+        "machine_released",
+        {"purchaseId": str(machine_license.purchase_id) if machine_license.purchase_id else None},
+        event_time=event_time,
+    )
+    return machine_license
+
+
 def restore_purchase_access(purchase, event_time=None):
     """Re-activate a purchase (e.g. after a webhook confirms payment) and its machines."""
     event_time = event_time or timezone.now()
