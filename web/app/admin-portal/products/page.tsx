@@ -9,6 +9,7 @@ import { Pill } from "@/components/Pill/Pill";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { WireframeThumb } from "@/components/WireframeThumb/WireframeThumb";
 import { formatPrice } from "@/config/site";
+import { ProductRowActions } from "@/features/admin/ProductRowActions/ProductRowActions";
 import { getAdminProducts, type AdminProductRow } from "@/lib/adminApi";
 
 import styles from "./products.module.css";
@@ -126,13 +127,11 @@ export default function AdminProductsPage() {
                 </td>
                 <td className={styles.muted}>{formatDate(row.updated_at)}</td>
                 <td>
-                  <Link
-                    href={`/admin-portal/products/${row.id}/edit`}
-                    className={styles.editLink}
-                    aria-label={`Edit ${row.name}`}
-                  >
-                    <Icon name="edit" size={16} />
-                  </Link>
+                  <ProductRowActions
+                    productId={row.id}
+                    editHref={`/admin-portal/products/${row.id}/edit`}
+                    isPlugin={row.type === "plugin"}
+                  />
                 </td>
               </tr>
             ))}

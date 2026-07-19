@@ -135,7 +135,9 @@ Partners/staff no longer hand-build `.msi` installers with a separate desktop to
 4. Once a build reaches "ready," a **Download** link appears next to the button — staff/partner can
    grab the `.msi` directly (`GET /api/admin/plugin-builds/<id>/download`) to test it, including for
    an unpublished draft product, without needing a real purchase to go through the customer
-   entitlement flow.
+   entitlement flow. The same download is also reachable from the products list's **"..." menu**
+   (per row, next to Edit) — it fetches that product's builds lazily on open and lists every ready
+   Revit-year build, so you don't have to open the edit page just to grab a build.
 
 When a customer downloads a build produced this way, `/api/account/downloads/<id>/get` zips the
 `.msi` together with a `<productCode>.key` file containing their own license key (already issued at
