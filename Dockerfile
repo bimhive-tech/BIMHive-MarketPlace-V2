@@ -35,7 +35,10 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 3: runtime — Python + Node together, nothing else ──
 FROM python:3.12-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends curl libpq5 \
+# libicu72: the .NET runtime (needed below for the WiX toolchain) hard-crashes
+# on startup without ICU globalization data — python:3.12-slim (Debian
+# bookworm) doesn't ship it by default.
+RUN apt-get update && apt-get install -y --no-install-recommends curl libpq5 libicu72 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
