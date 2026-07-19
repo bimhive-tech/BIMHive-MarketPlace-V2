@@ -26,6 +26,9 @@ class ActivityVerb(models.TextChoices):
     LICENSE_EXTENDED = "license_extended", "Extended a license"
     ORDER_STATUS_CHANGED = "order_status_changed", "Changed an order's status"
     ORDER_SEATS_CHANGED = "order_seats_changed", "Changed an order's seat count"
+    LICENSE_CODE_CREATED = "license_code_created", "Generated a license code"
+    LICENSE_CODE_REVOKED = "license_code_revoked", "Revoked a license code"
+    REDEEMED_LICENSE_CODE = "redeemed_license_code", "Redeemed a license code"
 
 
 class ActivityLog(models.Model):

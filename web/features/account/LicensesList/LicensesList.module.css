@@ -105,6 +105,67 @@
   font-size: var(--fs-sm);
 }
 
+.success {
+  padding: var(--space-3) var(--space-4);
+  background: var(--success-bg);
+  color: var(--success-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+}
+
+.redeemCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface-0);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.redeemTitle {
+  font-weight: var(--fw-semibold);
+  color: var(--color-heading);
+}
+
+.redeemRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.redeemInput {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono, monospace);
+  text-transform: uppercase;
+}
+.redeemInput:focus {
+  outline: none;
+  border-color: var(--gold-500);
+  box-shadow: 0 0 0 3px var(--gold-100);
+}
+
+.redeemBtn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+.redeemBtn:hover {
+  background: var(--color-primary-hover);
+}
+.redeemBtn:disabled {
+  opacity: 0.6;
+}
+
 @media (max-width: 640px) {
   .head {
     flex-direction: column;

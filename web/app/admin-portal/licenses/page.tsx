@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
+import { LicenseCodesPanel } from "@/features/admin/LicenseCodesPanel/LicenseCodesPanel";
 import {
   extendLicense,
   getAdminLicenses,
@@ -22,11 +23,17 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "neutral"> =
   cancelled: "error",
 };
 
+const TABS = [
+  { key: "activations", label: "Activations" },
+  { key: "codes", label: "License Codes" },
+] as const;
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function AdminLicensesPage() {
+  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("activations");
   const [rows, setRows] = useState<AdminLicense[] | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -81,102 +88,122 @@ export default function AdminLicensesPage() {
         <div>
           <h1 className={styles.title}>Licenses</h1>
           <p className={styles.sub}>
-            Look up an activation, see its fingerprint and trial state, and revoke, restore, or
-            extend it.
+            Look up an activation, see its fingerprint and trial state, revoke/restore/extend it, or
+            generate a redeemable code for a specific product.
           </p>
         </div>
       </header>
 
-      <div className={styles.toolbar}>
-        <input
-          className={styles.searchInput}
-          placeholder="Search by product, email, or license key…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select className={styles.select} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="active">Active</option>
-          <option value="paid">Paid</option>
-          <option value="expired">Expired</option>
-          <option value="blocked">Blocked</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+      <div className={styles.tabs} role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            className={`${styles.tab} ${tab === t.key ? styles.tabActive : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>User</th>
-              <th>Fingerprint</th>
-              <th>Seats</th>
-              <th>Status</th>
-              <th>Started</th>
-              <th>Expires</th>
-              <th>Installs</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows?.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <strong>{row.product_name}</strong>
-                  <div className={`${styles.muted} ${styles.mono}`}>{row.product_code}</div>
-                </td>
-                <td className={styles.muted}>{row.user_email || "—"}</td>
-                <td className={styles.mono}>{row.fingerprint_preview}</td>
-                <td className={styles.muted}>{row.seats}</td>
-                <td>
-                  <Pill tone={STATUS_TONE[row.status] ?? "neutral"}>{row.status}</Pill>
-                </td>
-                <td className={styles.muted}>{formatDate(row.started_at)}</td>
-                <td className={styles.muted}>{formatDate(row.expires_at)}</td>
-                <td className={styles.muted}>{row.install_count}</td>
-                <td>
-                  <div className={styles.actionRow}>
-                    {row.status === "blocked" || row.status === "expired" ? (
-                      <button
-                        className={styles.actionBtn}
-                        disabled={busyId === row.id}
-                        onClick={() => onRestore(row.id)}
-                      >
-                        Restore
-                      </button>
-                    ) : (
-                      <button
-                        className={styles.actionBtn}
-                        disabled={busyId === row.id}
-                        onClick={() => onRevoke(row.id)}
-                      >
-                        Revoke
-                      </button>
-                    )}
-                    <button
-                      className={styles.iconBtn}
-                      aria-label="Extend"
-                      disabled={busyId === row.id}
-                      onClick={() => onExtend(row.id)}
-                    >
-                      <Icon name="refresh" size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {tab === "codes" ? (
+        <LicenseCodesPanel />
+      ) : (
+        <>
+          <div className={styles.toolbar}>
+            <input
+              className={styles.searchInput}
+              placeholder="Search by product, email, or license key…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select className={styles.select} value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="paid">Paid</option>
+              <option value="expired">Expired</option>
+              <option value="blocked">Blocked</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
 
-        {rows === null && <p className={styles.state}>Loading licenses…</p>}
-        {rows?.length === 0 && <p className={styles.state}>No licenses match this filter.</p>}
-      </div>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>User</th>
+                  <th>Fingerprint</th>
+                  <th>Seats</th>
+                  <th>Status</th>
+                  <th>Started</th>
+                  <th>Expires</th>
+                  <th>Installs</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows?.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <strong>{row.product_name}</strong>
+                      <div className={`${styles.muted} ${styles.mono}`}>{row.product_code}</div>
+                    </td>
+                    <td className={styles.muted}>{row.user_email || "—"}</td>
+                    <td className={styles.mono}>{row.fingerprint_preview}</td>
+                    <td className={styles.muted}>{row.seats}</td>
+                    <td>
+                      <Pill tone={STATUS_TONE[row.status] ?? "neutral"}>{row.status}</Pill>
+                    </td>
+                    <td className={styles.muted}>{formatDate(row.started_at)}</td>
+                    <td className={styles.muted}>{formatDate(row.expires_at)}</td>
+                    <td className={styles.muted}>{row.install_count}</td>
+                    <td>
+                      <div className={styles.actionRow}>
+                        {row.status === "blocked" || row.status === "expired" ? (
+                          <button
+                            className={styles.actionBtn}
+                            disabled={busyId === row.id}
+                            onClick={() => onRestore(row.id)}
+                          >
+                            Restore
+                          </button>
+                        ) : (
+                          <button
+                            className={styles.actionBtn}
+                            disabled={busyId === row.id}
+                            onClick={() => onRevoke(row.id)}
+                          >
+                            Revoke
+                          </button>
+                        )}
+                        <button
+                          className={styles.iconBtn}
+                          aria-label="Extend"
+                          disabled={busyId === row.id}
+                          onClick={() => onExtend(row.id)}
+                        >
+                          <Icon name="refresh" size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-      {rows && rows.length > 0 && (
-        <p className={styles.count}>
-          Showing {rows.length} {rows.length === 1 ? "license" : "licenses"}
-        </p>
+            {rows === null && <p className={styles.state}>Loading licenses…</p>}
+            {rows?.length === 0 && <p className={styles.state}>No licenses match this filter.</p>}
+          </div>
+
+          {rows && rows.length > 0 && (
+            <p className={styles.count}>
+              Showing {rows.length} {rows.length === 1 ? "license" : "licenses"}
+            </p>
+          )}
+        </>
       )}
     </div>
   );

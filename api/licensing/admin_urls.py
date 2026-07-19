@@ -2,6 +2,8 @@
 from django.urls import path
 
 from licensing.admin_api import (
+    AdminLicenseCodeListCreateView,
+    AdminLicenseCodeRevokeView,
     AdminLicenseExtendView,
     AdminLicenseListView,
     AdminLicenseOptionsView,
@@ -21,4 +23,6 @@ urlpatterns = [
     path("orders", AdminOrderListView.as_view(), name="admin-orders"),
     path("orders/<uuid:pk>/status", AdminOrderStatusView.as_view(), name="admin-order-status"),
     path("orders/<uuid:pk>/seats", AdminOrderSeatsView.as_view(), name="admin-order-seats"),
+    path("license-codes", AdminLicenseCodeListCreateView.as_view(), name="admin-license-codes"),
+    path("license-codes/<uuid:pk>/revoke", AdminLicenseCodeRevokeView.as_view(), name="admin-license-code-revoke"),
 ]

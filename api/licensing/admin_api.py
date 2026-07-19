@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
-from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
+from licensing.models import LicenseCode, LicensedProduct, MachineLicense, ProductPurchase
 from licensing.services import restore_purchase_access, revoke_purchase_access
 
 
@@ -109,9 +109,21 @@ class AdminLicenseExtendView(APIView):
             raise ValidationError({"days": "A whole number of days is required."})
         if days <= 0:
             raise ValidationError({"days": "Must be a positive number of days."})
-        license_obj = MachineLicense.objects.get(pk=pk)
-        license_obj.expires_at = license_obj.expires_at + timedelta(days=days)
-        license_obj.last_seen_at = timezone.now()
+        license_obj = MachineLicense.objects.select_related("purchase").get(pk=pk)
+        now = timezone.now()
+        if license_obj.purchase_id and license_obj.purchase.expires_at:
+            # A time-limited purchase (LicenseCode redemption) re-stamps every
+            # machine's expires_at to purchase.expires_at on each activation
+            # (see api_views.py) — extending the raw machine date alone would
+            # get silently overwritten on the next activation call. Extend the
+            # purchase-level date instead, which is what's actually enforced.
+            purchase = license_obj.purchase
+            purchase.expires_at = purchase.expires_at + timedelta(days=days)
+            purchase.save(update_fields=["expires_at", "updated_at"])
+            license_obj.expires_at = purchase.expires_at
+        else:
+            license_obj.expires_at = license_obj.expires_at + timedelta(days=days)
+        license_obj.last_seen_at = now
         license_obj.save(update_fields=["expires_at", "last_seen_at"])
         log_activity(
             request.user,
@@ -216,3 +228,59 @@ class AdminLicenseOptionsView(APIView):
                 ),
             }
         )
+
+
+# ─────────────────────────────────────────────────────────────
+# License codes — staff-generated, redeemable, single-product codes
+# ─────────────────────────────────────────────────────────────
+class AdminLicenseCodeSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_code = serializers.CharField(source="product.code", read_only=True)
+    redeemed_by_email = serializers.CharField(source="redeemed_by.email", read_only=True, default="")
+
+    class Meta:
+        model = LicenseCode
+        fields = [
+            "id", "code", "product", "product_name", "product_code", "seats", "duration_days",
+            "status", "note", "redeemed_by_email", "created_at", "redeemed_at",
+        ]
+        read_only_fields = ["id", "code", "status", "created_at", "redeemed_at"]
+
+
+class AdminLicenseCodeListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAdminUser]
+    serializer_class = AdminLicenseCodeSerializer
+
+    def get_queryset(self):
+        qs = LicenseCode.objects.select_related("product", "redeemed_by").order_by("-created_at")
+        if product_id := self.request.query_params.get("product"):
+            qs = qs.filter(product_id=product_id)
+        if status := self.request.query_params.get("status"):
+            if status != "all":
+                qs = qs.filter(status=status)
+        return qs
+
+    def perform_create(self, serializer):
+        code = serializer.save(created_by=self.request.user)
+        log_activity(
+            self.request.user,
+            ActivityVerb.LICENSE_CODE_CREATED,
+            target_label=code.product.name,
+            metadata={"seats": code.seats, "duration_days": code.duration_days},
+        )
+
+
+class AdminLicenseCodeRevokeView(APIView):
+    """Invalidate an unredeemed code so it can no longer be used — does not
+    touch anything already redeemed (revoke the resulting order instead)."""
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, pk):
+        code = LicenseCode.objects.select_related("product").get(pk=pk)
+        if code.status != LicenseCode.Status.UNREDEEMED:
+            raise ValidationError({"detail": "Only an unredeemed code can be revoked."})
+        code.status = LicenseCode.Status.REVOKED
+        code.save(update_fields=["status"])
+        log_activity(request.user, ActivityVerb.LICENSE_CODE_REVOKED, target_label=code.product.name)
+        return Response(AdminLicenseCodeSerializer(code).data)

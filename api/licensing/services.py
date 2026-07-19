@@ -4,10 +4,15 @@ Ported from v1 without the Plugin-sync coupling — activation SKUs are managed 
 the admin / legacy import, not synced from a separate Plugin model.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.utils import timezone
 
-from licensing.models import LicenseEvent, LicensedProduct, ProductPurchase
+from licensing.models import LicenseCode, LicenseEvent, LicensedProduct, ProductPurchase
+
+
+class LicenseCodeError(Exception):
+    """Raised with a user-facing message when a code can't be redeemed."""
 
 
 def sync_license_sku(product):
@@ -107,7 +112,10 @@ def restore_purchase_access(purchase, event_time=None):
         purchase.payment_status = ProductPurchase.PaymentStatus.PAID
         purchase.save(update_fields=["payment_status", "paid_at", "updated_at"])
 
-    paid_expires_at = event_time + timedelta(days=365 * 100)
+    # A time-limited purchase (e.g. from a LicenseCode redemption) keeps its
+    # own expiry on restore instead of being reset to "forever" — only an
+    # untimed (expires_at=None) purchase gets the effectively-perpetual date.
+    paid_expires_at = purchase.expires_at or (event_time + timedelta(days=365 * 100))
     for machine_license in purchase.machine_licenses.select_related("product"):
         machine_license.status = "paid"
         machine_license.user = purchase.user
@@ -121,4 +129,70 @@ def restore_purchase_access(purchase, event_time=None):
             {"purchaseId": str(purchase.pk), "paymentStatus": purchase.payment_status},
             event_time=event_time,
         )
+    return purchase
+
+
+def redeem_license_code(code, user, event_time=None):
+    """Redeem a staff-issued LicenseCode into a real ProductPurchase for
+    `user` — the account-connected upgrade of the old installer-generator's
+    manually-issued keys. Raises LicenseCodeError with a user-facing message
+    on any invalid state. The resulting purchase goes through the exact same
+    activation/seat enforcement as a normal purchase; nothing downstream
+    needs to know it came from a redeemed code rather than checkout."""
+    event_time = event_time or timezone.now()
+    try:
+        license_code = LicenseCode.objects.select_related("product").get(code__iexact=code.strip())
+    except LicenseCode.DoesNotExist:
+        raise LicenseCodeError("That code doesn't exist.")
+
+    if license_code.status != LicenseCode.Status.UNREDEEMED:
+        raise LicenseCodeError("That code has already been used or is no longer valid.")
+
+    existing = ProductPurchase.objects.filter(user=user, product=license_code.product).first()
+    if existing and existing.is_license_active:
+        raise LicenseCodeError("You already have an active license for this product.")
+
+    expires_at = (
+        event_time + timedelta(days=license_code.duration_days) if license_code.duration_days else None
+    )
+
+    if existing:
+        purchase = existing
+        # Reset any stale bindings from a previous (expired/cancelled) grant
+        # so this redemption starts with its own full, clean seat pool.
+        for machine_license in purchase.machine_licenses.exclude(status="released"):
+            machine_license.status = "released"
+            machine_license.last_seen_at = event_time
+            machine_license.save(update_fields=["status", "last_seen_at"])
+        purchase.payment_status = ProductPurchase.PaymentStatus.PAID
+        purchase.seats = license_code.seats
+        purchase.expires_at = expires_at
+        purchase.save()
+    else:
+        purchase = ProductPurchase.objects.create(
+            user=user,
+            product=license_code.product,
+            payment_status=ProductPurchase.PaymentStatus.PAID,
+            seats=license_code.seats,
+            expires_at=expires_at,
+        )
+
+    # A redeemed code is a comp/grant, not a real transaction — force $0
+    # regardless of the product's list price. ProductPurchase.save() backfills
+    # a zero/falsy amount from product.price on every save (right for a normal
+    # purchase, wrong here), and re-runs that backfill even when called with
+    # update_fields=["amount"] — update_fields only limits the SQL columns
+    # written, not which lines of the overridden save() execute. A queryset
+    # .update() bypasses save() entirely, so it's the only way to make this
+    # stick. Sales/Orders revenue reporting sums `amount` for paid purchases,
+    # so this isn't cosmetic — a stale price would inflate real numbers.
+    ProductPurchase.objects.filter(pk=purchase.pk).update(amount=Decimal("0.00"))
+    purchase.amount = Decimal("0.00")
+
+    license_code.status = LicenseCode.Status.REDEEMED
+    license_code.redeemed_by = user
+    license_code.redeemed_purchase = purchase
+    license_code.redeemed_at = event_time
+    license_code.save(update_fields=["status", "redeemed_by", "redeemed_purchase", "redeemed_at"])
+
     return purchase

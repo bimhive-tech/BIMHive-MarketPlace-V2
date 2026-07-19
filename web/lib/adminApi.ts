@@ -342,6 +342,50 @@ export const setOrderStatus = (id: string, action: "restore" | "revoke" | "refun
 export const setOrderSeats = (id: string, seats: number) =>
   request<AdminOrder>(`/api/admin/orders/${id}/seats`, "POST", { seats });
 
+// ── License codes ──
+export interface AdminLicenseCode {
+  id: string;
+  code: string;
+  product: string;
+  product_name: string;
+  product_code: string;
+  seats: number;
+  duration_days: number | null;
+  status: "unredeemed" | "redeemed" | "revoked";
+  note: string;
+  redeemed_by_email: string;
+  created_at: string;
+  redeemed_at: string | null;
+}
+export interface NewAdminLicenseCode {
+  product: string;
+  seats: number;
+  duration_days: number | null;
+  note: string;
+}
+export const getAdminLicenseCodes = (params?: { product?: string; status?: string }) => {
+  const qs = new URLSearchParams(
+    Object.entries(params ?? {}).reduce<Record<string, string>>((acc, [k, v]) => {
+      if (v !== undefined) acc[k] = String(v);
+      return acc;
+    }, {}),
+  ).toString();
+  return getJSON<AdminLicenseCode[]>(`/api/admin/license-codes${qs ? `?${qs}` : ""}`);
+};
+export const createAdminLicenseCode = (payload: NewAdminLicenseCode) =>
+  request<AdminLicenseCode>("/api/admin/license-codes", "POST", payload);
+export const revokeAdminLicenseCode = (id: string) =>
+  request<AdminLicenseCode>(`/api/admin/license-codes/${id}/revoke`, "POST");
+
+export interface AdminLicenseProductOption {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+}
+export const getAdminLicenseOptions = () =>
+  getJSON<{ products: AdminLicenseProductOption[] }>("/api/admin/licenses/options");
+
 // ── Users / Customers / Roles ──
 export interface AdminUser {
   id: number;

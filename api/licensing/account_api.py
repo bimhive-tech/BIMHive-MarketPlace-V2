@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from licensing.models import LicenseEvent, LicensedProduct, MachineLicense, ProductPurchase
-from licensing.services import release_machine_binding
+from licensing.services import LicenseCodeError, redeem_license_code, release_machine_binding
 
 # A customer can move their license to a new machine at most this often,
 # self-service — more frequent than this needs a support ticket. Chosen to
@@ -69,7 +69,7 @@ class AccountLicenseSerializer(serializers.ModelSerializer):
         model = ProductPurchase
         fields = [
             "id", "product_name", "product_code", "payment_status", "license_key",
-            "seats", "requested_at", "paid_at", "machines",
+            "seats", "expires_at", "requested_at", "paid_at", "machines",
         ]
 
 
@@ -133,6 +133,32 @@ class ReactivateLicenseView(APIView):
             "machine_licenses"
         ).get(pk=machine_license.purchase_id)
         return Response(AccountLicenseSerializer(purchase).data)
+
+
+class RedeemLicenseCodeView(APIView):
+    """Redeem a staff-issued LicenseCode (see admin_api.py's Generate Code
+    action) into a real license on the caller's own account — the
+    self-service half of the "upgrade the old license key" feature; staff
+    generate the code, the customer redeems it themselves, no manual
+    admin step in between."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code = (request.data.get("code") or "").strip()
+        if not code:
+            raise ValidationError({"code": "A license code is required."})
+        try:
+            purchase = redeem_license_code(code, request.user)
+        except LicenseCodeError as exc:
+            raise ValidationError({"code": str(exc)}) from exc
+        log_activity(request.user, ActivityVerb.REDEEMED_LICENSE_CODE, target_label=purchase.product.name)
+        purchase = (
+            ProductPurchase.objects.select_related("product", "product__product")
+            .prefetch_related("machine_licenses")
+            .get(pk=purchase.pk)
+        )
+        return Response(AccountLicenseSerializer(purchase).data, status=201)
 
 
 class AccountDownloadFileSerializer(serializers.Serializer):

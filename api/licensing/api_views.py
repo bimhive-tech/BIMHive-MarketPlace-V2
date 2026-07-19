@@ -328,7 +328,10 @@ def license_activate_api(request):
             )
             return _no_seats_denied_response(reference_machine)
 
-        paid_expires_at = now + timedelta(days=365 * 100)
+        # A LicenseCode-redeemed purchase carries its own expiry; a normal
+        # (perpetual) purchase has expires_at=None and gets the effectively-
+        # forever date, same as before this field existed.
+        paid_expires_at = paid_purchase.expires_at or (now + timedelta(days=365 * 100))
         if machine_license is None:
             machine_license = MachineLicense.objects.create(
                 product=product,

@@ -86,6 +86,10 @@ class ProductPurchase(models.Model):
     # purchase rows — see ProductPurchase.available_seats and
     # licensing/api_views.py's activation seat check).
     seats = models.PositiveIntegerField(default=1)
+    # Null = perpetual (the default for a normal purchase). Set when this
+    # purchase came from a time-limited LicenseCode redemption — the whole
+    # purchase expires at this instant, not just one machine's binding.
+    expires_at = models.DateTimeField(null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=8, default="USD")
     license_key = models.CharField(max_length=64, unique=True, blank=True)
@@ -111,11 +115,17 @@ class ProductPurchase(models.Model):
         return f"{self.user} -> {self.product.code} ({self.payment_status})"
 
     @property
+    def is_expired(self):
+        return bool(self.expires_at and self.expires_at <= timezone.now())
+
+    @property
     def is_license_active(self):
-        return self.payment_status == self.PaymentStatus.PAID
+        return self.payment_status == self.PaymentStatus.PAID and not self.is_expired
 
     @property
     def denial_status(self):
+        if self.is_expired:
+            return "expired"
         if self.payment_status in {
             self.PaymentStatus.CANCELLED,
             self.PaymentStatus.REFUNDED,
@@ -125,6 +135,8 @@ class ProductPurchase(models.Model):
 
     @property
     def denial_message(self):
+        if self.is_expired:
+            return "Access denied. This license has expired."
         if self.payment_status == self.PaymentStatus.REFUNDED:
             return "Access denied. This license has been refunded."
         if self.payment_status in {self.PaymentStatus.REVOKED, self.PaymentStatus.CANCELLED}:
@@ -159,6 +171,63 @@ class ProductPurchase(models.Model):
             self.paid_at = timezone.now()
         if self.payment_status not in {self.PaymentStatus.PAID, self.PaymentStatus.REFUNDED}:
             self.paid_at = None
+        super().save(*args, **kwargs)
+
+
+def generate_redeem_code():
+    return "-".join(["GIFT"] + [secrets.token_hex(2).upper() for _ in range(3)])
+
+
+class LicenseCode(models.Model):
+    """A staff-generated, single-use code for one specific product that
+    grants a real (non-trial) license to whichever account redeems it —
+    the "upgrade" of the old installer-generator's manually-issued keys:
+    still admin-controlled per-product and per-duration, but now redeemed
+    through the account system instead of baked into a specific binary.
+    Redeeming one creates/activates the redeemer's normal ProductPurchase
+    for that product, so it goes through the exact same seat/activation
+    enforcement as anything bought through checkout."""
+
+    class Status(models.TextChoices):
+        UNREDEEMED = "unredeemed", "Unredeemed"
+        REDEEMED = "redeemed", "Redeemed"
+        REVOKED = "revoked", "Revoked"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=64, unique=True, blank=True)
+    product = models.ForeignKey(LicensedProduct, on_delete=models.CASCADE, related_name="license_codes")
+    seats = models.PositiveIntegerField(default=1)
+    # Null = lifetime — mirrors ProductPurchase.expires_at, copied onto the
+    # purchase at redemption time (duration counts from redemption, not
+    # from when the code was generated).
+    duration_days = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.UNREDEEMED, db_index=True)
+    note = models.CharField(max_length=200, blank=True, help_text="Staff-only note, e.g. who this was issued to and why.")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="license_codes_created",
+        null=True, blank=True,
+    )
+    redeemed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="license_codes_redeemed",
+        null=True, blank=True,
+    )
+    redeemed_purchase = models.ForeignKey(
+        ProductPurchase, on_delete=models.SET_NULL, related_name="source_license_code",
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "license_codes"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.code} [{self.status}]"
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = generate_redeem_code()
         super().save(*args, **kwargs)
 
 

@@ -156,6 +156,22 @@ flow yet (see the Orders admin page), so today `seats` is set by staff via the u
 `/admin-portal/orders` — once real checkout exists, a quantity-N purchase should set this field
 directly instead of creating N separate purchase rows.
 
+## License codes: redeemable, account-connected replacement for the old key files
+
+The upgrade of the legacy installer-generator's manually-issued license keys (which were baked
+directly into a specific compiled loader DLL per machine — see the licensing reference notes) into
+something self-service and connected to a real account. On the **License Codes** tab of
+`/admin-portal/licenses`, staff pick one specific product, a seat count, and a duration (or
+"Lifetime"), and generate a single-use code. That code can be handed to anyone; whoever redeems it
+— entered on `/account/licenses` while logged into their own account — gets a real `ProductPurchase`
+for that product with the seats/duration the code specified, going through the exact same
+seat-aware activation enforcement as anything bought through checkout (see "Seats" above). A
+time-limited redemption (`duration_days` set) actually expires: `ProductPurchase.expires_at` caps
+the whole purchase, and `/api/license/activate` returns `status: "expired"` once it passes — staff
+can extend a time-limited purchase's date via the existing Extend action on `/admin-portal/licenses`.
+A redeemed code always records `amount: 0` regardless of the product's list price, since it's a
+comp/grant, not a real transaction — Sales/Orders revenue reporting isn't inflated by it.
+
 ## API endpoints
 
 - Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
@@ -180,8 +196,11 @@ directly instead of creating N separate purchase rows.
   (runs the WiX packaging pipeline synchronously and returns status + build log),
   `GET /api/admin/plugin-builds/destination-options` (the `{ADDIN_DIR}`/`{INSTALL_DIR}` tokens +
   their real on-disk hint text — single source of truth shared with the frontend).
+- License codes (staff): `GET|POST /api/admin/license-codes` (list/generate, filterable by
+  `?product=`/`?status=`), `POST /api/admin/license-codes/<id>/revoke` (only while unredeemed).
 - Account: `POST /api/account/licenses/machines/<id>/reactivate` (release a machine binding so the
-  license can activate on a new PC — self-service, rate-limited).
+  license can activate on a new PC — self-service, rate-limited), `POST /api/account/licenses/redeem`
+  (redeem a staff-generated license code onto the caller's own account — see "License codes" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped

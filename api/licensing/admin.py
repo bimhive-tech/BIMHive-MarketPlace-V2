@@ -5,7 +5,7 @@ something v1 could only do by hand-editing the DB (REBUILD_PROMPT admin requirem
 """
 from django.contrib import admin
 
-from licensing.models import LicensedProduct, LicenseEvent, MachineLicense, ProductPurchase
+from licensing.models import LicenseCode, LicensedProduct, LicenseEvent, MachineLicense, ProductPurchase
 
 
 @admin.register(LicensedProduct)
@@ -17,10 +17,18 @@ class LicensedProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductPurchase)
 class ProductPurchaseAdmin(admin.ModelAdmin):
-    list_display = ("license_key", "user", "product", "payment_status", "amount", "paid_at")
+    list_display = ("license_key", "user", "product", "payment_status", "seats", "expires_at", "amount", "paid_at")
     list_filter = ("payment_status",)
     search_fields = ("license_key", "user__email", "product__code")
     readonly_fields = ("created_at", "updated_at", "requested_at")
+
+
+@admin.register(LicenseCode)
+class LicenseCodeAdmin(admin.ModelAdmin):
+    list_display = ("code", "product", "seats", "duration_days", "status", "redeemed_by", "created_at")
+    list_filter = ("status", "product")
+    search_fields = ("code", "product__code", "redeemed_by__email", "note")
+    readonly_fields = ("code", "created_at", "redeemed_at", "redeemed_by", "redeemed_purchase")
 
 
 @admin.register(MachineLicense)
