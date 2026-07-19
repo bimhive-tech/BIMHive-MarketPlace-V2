@@ -111,6 +111,7 @@ export default function AdminLicensesPage() {
               <th>Product</th>
               <th>User</th>
               <th>Fingerprint</th>
+              <th>Seats</th>
               <th>Status</th>
               <th>Started</th>
               <th>Expires</th>
@@ -127,6 +128,7 @@ export default function AdminLicensesPage() {
                 </td>
                 <td className={styles.muted}>{row.user_email || "—"}</td>
                 <td className={styles.mono}>{row.fingerprint_preview}</td>
+                <td className={styles.muted}>{row.seats}</td>
                 <td>
                   <Pill tone={STATUS_TONE[row.status] ?? "neutral"}>{row.status}</Pill>
                 </td>

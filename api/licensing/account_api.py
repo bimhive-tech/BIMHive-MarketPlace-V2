@@ -69,7 +69,7 @@ class AccountLicenseSerializer(serializers.ModelSerializer):
         model = ProductPurchase
         fields = [
             "id", "product_name", "product_code", "payment_status", "license_key",
-            "requested_at", "paid_at", "machines",
+            "seats", "requested_at", "paid_at", "machines",
         ]
 
 

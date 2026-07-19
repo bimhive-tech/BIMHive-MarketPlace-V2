@@ -8,6 +8,7 @@ from licensing.admin_api import (
     AdminLicenseRestoreView,
     AdminLicenseRevokeView,
     AdminOrderListView,
+    AdminOrderSeatsView,
     AdminOrderStatusView,
 )
 
@@ -19,4 +20,5 @@ urlpatterns = [
     path("licenses/<uuid:pk>/extend", AdminLicenseExtendView.as_view(), name="admin-license-extend"),
     path("orders", AdminOrderListView.as_view(), name="admin-orders"),
     path("orders/<uuid:pk>/status", AdminOrderStatusView.as_view(), name="admin-order-status"),
+    path("orders/<uuid:pk>/seats", AdminOrderSeatsView.as_view(), name="admin-order-seats"),
 ]

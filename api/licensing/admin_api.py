@@ -28,12 +28,13 @@ class AdminMachineLicenseSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
     user_email = serializers.CharField(source="user.email", read_only=True, default="")
     license_key = serializers.CharField(source="purchase.license_key", read_only=True, default="")
+    seats = serializers.IntegerField(source="purchase.seats", read_only=True, default=1)
     fingerprint_preview = serializers.SerializerMethodField()
 
     class Meta:
         model = MachineLicense
         fields = [
-            "id", "product_code", "product_name", "user_email", "license_key",
+            "id", "product_code", "product_name", "user_email", "license_key", "seats",
             "fingerprint_preview", "fingerprint_version", "status", "started_at",
             "expires_at", "first_seen_at", "last_seen_at", "install_count", "plugin_version",
         ]
@@ -132,10 +133,11 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductPurchase
         fields = [
-            "id", "product_name", "product_code", "user_email", "license_key", "amount",
+            "id", "product_name", "product_code", "user_email", "license_key", "seats", "amount",
             "currency", "payment_status", "company_name", "contact_email", "requested_at",
             "paid_at",
         ]
+        read_only_fields = ["seats"]  # set via AdminOrderSeatsView, not a plain field update
 
 
 class AdminOrderListView(generics.ListAPIView):
@@ -172,6 +174,33 @@ class AdminOrderStatusView(APIView):
             ActivityVerb.ORDER_STATUS_CHANGED,
             target_label=purchase.product.name,
             metadata={"action": action, "new_status": purchase.payment_status},
+        )
+        return Response(AdminOrderSerializer(purchase).data)
+
+
+class AdminOrderSeatsView(APIView):
+    """Set how many machines a purchase may have bound at once. There's no
+    checkout flow yet (see AdminOrdersPage's empty-state copy), so this is
+    currently the only way a "buy N licenses" purchase gets more than 1 seat."""
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, pk):
+        seats = request.data.get("seats")
+        try:
+            seats = int(seats)
+        except (TypeError, ValueError):
+            raise ValidationError({"seats": "A whole number of seats is required."})
+        if seats < 1:
+            raise ValidationError({"seats": "Must be at least 1."})
+        purchase = ProductPurchase.objects.select_related("product", "user").get(pk=pk)
+        purchase.seats = seats
+        purchase.save(update_fields=["seats", "updated_at"])
+        log_activity(
+            request.user,
+            ActivityVerb.ORDER_SEATS_CHANGED,
+            target_label=purchase.product.name,
+            metadata={"seats": seats},
         )
         return Response(AdminOrderSerializer(purchase).data)
 

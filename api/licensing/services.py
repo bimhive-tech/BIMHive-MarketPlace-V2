@@ -80,11 +80,12 @@ def revoke_purchase_access(purchase, status=None, reason=None, event_time=None):
 
 
 def release_machine_binding(machine_license, event_time=None):
-    """Frees a paid purchase's machine binding — self-service "I got a new
-    PC" reactivation (see licensing/account_api.py::ReactivateLicenseView).
-    The next activation call with a different fingerprint then binds fresh
-    instead of being denied forever by the old one (bound_machine_license
-    excludes "released" machines — see ProductPurchase.bound_machine_license)."""
+    """Frees one seat of a paid purchase — self-service "I got a new PC"
+    reactivation (see licensing/account_api.py::ReactivateLicenseView). The
+    next activation call with a different fingerprint can then take that seat
+    instead of being denied forever by the old one (active_machine_licenses
+    excludes "released" machines — see ProductPurchase.active_machine_licenses
+    / has_seat_for)."""
     event_time = event_time or timezone.now()
     machine_license.status = "released"
     machine_license.last_seen_at = event_time

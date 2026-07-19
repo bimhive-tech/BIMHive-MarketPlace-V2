@@ -143,6 +143,47 @@ def test_paid_license_bound_to_other_machine_is_blocked(product, django_user_mod
     assert body["authorized"] is False and body["status"] == "blocked"
 
 
+def test_paid_license_with_seats_allows_that_many_concurrent_machines(product, django_user_model):
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    purchase = ProductPurchase.objects.create(
+        user=user, product=product, payment_status=ProductPurchase.PaymentStatus.PAID, seats=3
+    )
+    for fp in ("MACHINE-A", "MACHINE-B", "MACHINE-C"):
+        body = _activate(
+            Client(), productCode=product.code, machineFingerprintHash=fp, licenseKey=purchase.license_key
+        ).json()
+        assert body["authorized"] is True and body["status"] == "paid"
+    assert MachineLicense.objects.filter(purchase=purchase).count() == 3
+
+
+def test_paid_license_denies_activation_beyond_its_seat_count(product, django_user_model):
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    purchase = ProductPurchase.objects.create(
+        user=user, product=product, payment_status=ProductPurchase.PaymentStatus.PAID, seats=2
+    )
+    for fp in ("MACHINE-A", "MACHINE-B"):
+        _activate(Client(), productCode=product.code, machineFingerprintHash=fp, licenseKey=purchase.license_key)
+    body = _activate(
+        Client(), productCode=product.code, machineFingerprintHash="MACHINE-C", licenseKey=purchase.license_key
+    ).json()
+    assert body["authorized"] is False and body["status"] == "blocked"
+
+
+def test_repeat_activation_from_an_already_bound_machine_does_not_need_a_free_seat(product, django_user_model):
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    purchase = ProductPurchase.objects.create(
+        user=user, product=product, payment_status=ProductPurchase.PaymentStatus.PAID, seats=1
+    )
+    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=purchase.license_key)
+    # Same machine, same single-seat purchase, activating again (e.g. plugin
+    # restart) — must succeed, not be treated as a second machine wanting a seat.
+    body = _activate(
+        Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=purchase.license_key
+    ).json()
+    assert body["authorized"] is True and body["status"] == "paid"
+    assert MachineLicense.objects.filter(purchase=purchase).count() == 1
+
+
 def test_manually_blocked_machine_denied(product):
     _activate(Client(), productCode=product.code, machineFingerprintHash=FP)
     ml = MachineLicense.objects.get(product=product)

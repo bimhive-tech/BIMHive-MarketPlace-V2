@@ -132,12 +132,12 @@ def _denied_purchase_response(machine_license, purchase):
     )
 
 
-def _bound_machine_denied_response(machine_license):
+def _no_seats_denied_response(machine_license):
     return _signed_response(
         {
             "authorized": False,
             "status": "blocked",
-            "message": "This license key is already activated on another machine.",
+            "message": "This license key has no available seats left. Free up a machine from your account, or buy another seat.",
             "startedAt": _iso_utc(machine_license.started_at) if machine_license else None,
             "expiresAt": _iso_utc(machine_license.expires_at) if machine_license else None,
             "remainingSeconds": 0,
@@ -303,25 +303,30 @@ def license_activate_api(request):
         return _denied_purchase_response(machine_license, invalid_purchase)
 
     if paid_purchase:
-        bound_machine_license = paid_purchase.bound_machine_license
-        if bound_machine_license and bound_machine_license.machine_fingerprint_hash != protected_hash:
+        # `has_seat_for` is True either because this exact machine already
+        # holds one of the purchase's seats (a repeat/heartbeat activation —
+        # doesn't consume a new one) or because a seat is still free. A
+        # purchase with seats=1 behaves exactly like the old single-machine
+        # rule; seats>1 lets that many distinct machines stay bound at once.
+        if not paid_purchase.has_seat_for(protected_hash):
             if machine_license and machine_license.purchase_id == paid_purchase.pk:
                 machine_license.status = "blocked"
                 machine_license.last_seen_at = now
                 machine_license.save(update_fields=["status", "last_seen_at"])
+            reference_machine = machine_license or paid_purchase.active_machine_licenses.first()
             _log_event(
                 product,
                 protected_hash,
-                "paid_activation_denied_machine_mismatch",
+                "paid_activation_denied_no_seats_available",
                 {
                     "licenseKey": paid_purchase.license_key,
                     "purchaseId": str(paid_purchase.pk),
-                    "boundMachineLicenseId": str(bound_machine_license.pk),
+                    "seats": paid_purchase.seats,
                 },
                 machine_license=machine_license,
                 event_time=now,
             )
-            return _bound_machine_denied_response(machine_license or bound_machine_license)
+            return _no_seats_denied_response(reference_machine)
 
         paid_expires_at = now + timedelta(days=365 * 100)
         if machine_license is None:

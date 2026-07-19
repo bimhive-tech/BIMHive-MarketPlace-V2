@@ -81,6 +81,11 @@ export function LicensesList() {
               <Icon name="lock" size={14} /> {license.license_key || "No key issued"}
             </span>
             <span>Purchased {formatDate(license.paid_at ?? license.requested_at)}</span>
+            {license.seats > 1 && (
+              <span>
+                {license.machines.filter((m) => m.status !== "released").length} of {license.seats} seats active
+              </span>
+            )}
           </div>
 
           {license.machines.length > 0 && (

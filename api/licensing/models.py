@@ -81,6 +81,11 @@ class ProductPurchase(models.Model):
     payment_status = models.CharField(
         max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING, db_index=True
     )
+    # How many machines this one purchase may have bound at once (a "buy 3
+    # licenses" checkout sets this to 3 instead of creating 3 separate
+    # purchase rows — see ProductPurchase.available_seats and
+    # licensing/api_views.py's activation seat check).
+    seats = models.PositiveIntegerField(default=1)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=8, default="USD")
     license_key = models.CharField(max_length=64, unique=True, blank=True)
@@ -127,11 +132,21 @@ class ProductPurchase(models.Model):
         return "Access denied. This license is not active."
 
     @property
-    def bound_machine_license(self):
+    def active_machine_licenses(self):
         # "released" machines (see services.release_machine_binding) are
         # deliberately excluded — that status exists specifically so a freed
-        # binding stops blocking the next activation attempt from a new PC.
-        return self.machine_licenses.exclude(status="released").order_by("first_seen_at", "id").first()
+        # binding frees up a seat for the next activation attempt from a new PC.
+        return self.machine_licenses.exclude(status="released").order_by("first_seen_at", "id")
+
+    def has_seat_for(self, machine_fingerprint_hash):
+        """True if `machine_fingerprint_hash` already holds one of this
+        purchase's seats, or if an unused seat is available for it to take.
+        `seats` machines may be bound concurrently — see
+        licensing/api_views.py's activation seat check."""
+        active = list(self.active_machine_licenses)
+        if any(m.machine_fingerprint_hash == machine_fingerprint_hash for m in active):
+            return True
+        return len(active) < self.seats
 
     def save(self, *args, **kwargs):
         if not self.license_key:

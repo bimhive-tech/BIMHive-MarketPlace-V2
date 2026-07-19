@@ -80,8 +80,9 @@ design/   brand assets + UI mockups (design source of truth)
 payment flow until Stripe/PayPal are wired).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
 **Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses` (license
-keys, bound machines, and a "this isn't my computer anymore" self-service reactivation that frees
-a machine binding so the license can activate on a new PC — rate-limited to once every 90 days),
+keys, bound machines, a seat-usage indicator when a purchase allows more than one machine, and a
+"this isn't my computer anymore" self-service reactivation that frees one machine binding so the
+license can activate on a new PC — rate-limited to once every 90 days per machine),
 `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
 job title/bio, change email, change password, delete account, plus a "Become a Seller"/"Partner"
 tab whose label and content track the account's seller-application state).
@@ -137,6 +138,24 @@ See `installer/` (models, `wxs_generator.py`, `builder.py`, `api.py`) — and th
 reference notes for the legacy tool this replaces and why (unstable `UpgradeCode`/`Version` per
 build, unsigned client-trusted activation response).
 
+## Seats: why sharing an installer doesn't share the license
+
+The `.msi` an installer build produces is generic — the same file for every buyer of that product
+and Revit year. What actually gates use is `/api/license/activate`: the first machine to activate a
+purchase's license key binds to it, and every other machine trying that same key gets refused
+outright, even with the installer and key file in hand. Freeing a binding for a new PC only happens
+through the account holder's own "this isn't my computer anymore" reactivation (rate-limited,
+90 days) — handing the installer to someone else doesn't do it.
+
+A single `ProductPurchase` can allow more than one machine at once via `seats`
+(`ProductPurchase.seats`, default 1) — buying "3 licenses" of a product means 3 concurrently-bound
+machines under one purchase and one key, not 3 separate downloads. `ProductPurchase.has_seat_for()`
+is the check: an already-bound machine always re-validates fine (a plugin restart doesn't cost a
+seat), a new machine only binds if fewer than `seats` are currently active. There's no checkout
+flow yet (see the Orders admin page), so today `seats` is set by staff via the users icon button on
+`/admin-portal/orders` — once real checkout exists, a quantity-N purchase should set this field
+directly instead of creating N separate purchase rows.
+
 ## API endpoints
 
 - Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
@@ -145,9 +164,10 @@ build, unsigned client-trusted activation response).
   `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
   CRUD at `/api/admin/{categories,tags,partners,collections,roles}`; `GET /api/admin/{licenses,orders,
   users,customers,reviews}` plus their action routes (revoke/restore/extend a license, set an order's
-  status, update a user's role). A product's `product_code` auto-syncs to its licensing SKU on save
-  (see `catalog/signals.py`) — creating/editing/publishing a product is immediately reflected in what
-  the activation API will authorize.
+  status, update a user's role, `POST /api/admin/orders/<id>/seats` to set how many machines a
+  purchase may bind at once — see "Seats" above). A product's `product_code` auto-syncs to its
+  licensing SKU on save (see `catalog/signals.py`) — creating/editing/publishing a product is
+  immediately reflected in what the activation API will authorize.
 - Partner self-service (auth-gated): `POST /api/partner/apply` (become a seller — company name +
   optional logo, creates a pending `Partner`), `GET|PATCH /api/partner/profile` (reachable at any
   application status), `GET /api/partner/sales` (approved partners only — own orders/revenue, no

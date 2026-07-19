@@ -297,6 +297,7 @@ export interface AdminLicense {
   product_name: string;
   user_email: string;
   license_key: string;
+  seats: number;
   fingerprint_preview: string;
   fingerprint_version: string;
   status: string;
@@ -325,6 +326,7 @@ export interface AdminOrder {
   product_code: string;
   user_email: string;
   license_key: string;
+  seats: number;
   amount: string;
   currency: string;
   payment_status: string;
@@ -337,6 +339,8 @@ export const getAdminOrders = (status = "all") =>
   getJSON<AdminOrder[]>(`/api/admin/orders?status=${status}`);
 export const setOrderStatus = (id: string, action: "restore" | "revoke" | "refund") =>
   request<AdminOrder>(`/api/admin/orders/${id}/status`, "POST", { action });
+export const setOrderSeats = (id: string, seats: number) =>
+  request<AdminOrder>(`/api/admin/orders/${id}/seats`, "POST", { seats });
 
 // ── Users / Customers / Roles ──
 export interface AdminUser {

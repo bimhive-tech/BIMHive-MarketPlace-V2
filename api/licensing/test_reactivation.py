@@ -80,6 +80,31 @@ def test_after_reactivation_a_new_machine_can_activate(buyer_client, settings):
     assert new_machine.status == "paid"
 
 
+def test_reactivating_one_seat_of_a_multi_seat_purchase_only_frees_that_one(sku):
+    user = User.objects.create_user(username="buyer2@x.com", email="buyer2@x.com", password="x")
+    purchase = ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID, seats=2,
+    )
+    machine_a = MachineLicense.objects.create(
+        product=sku, user=user, purchase=purchase, machine_fingerprint_hash="HASH-A",
+        status="paid", started_at=timezone.now(), expires_at=timezone.now() + timedelta(days=36500),
+    )
+    machine_b = MachineLicense.objects.create(
+        product=sku, user=user, purchase=purchase, machine_fingerprint_hash="HASH-B",
+        status="paid", started_at=timezone.now(), expires_at=timezone.now() + timedelta(days=36500),
+    )
+    client = Client()
+    client.force_login(user)
+
+    resp = client.post(f"/api/account/licenses/machines/{machine_a.id}/reactivate")
+    assert resp.status_code == 200, resp.json()
+
+    machine_a.refresh_from_db()
+    machine_b.refresh_from_db()
+    assert machine_a.status == "released"
+    assert machine_b.status == "paid"  # untouched — releasing one seat doesn't touch the other
+
+
 def test_cannot_reactivate_someone_elses_license(buyer_client):
     _, _, _, machine = buyer_client
     other = User.objects.create_user(username="other@x.com", email="other@x.com", password="x")

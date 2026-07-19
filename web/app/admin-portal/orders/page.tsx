@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import { formatPrice } from "@/config/site";
-import { getAdminOrders, setOrderStatus, type AdminOrder } from "@/lib/adminApi";
+import { getAdminOrders, setOrderSeats, setOrderStatus, type AdminOrder } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
 
@@ -50,6 +51,18 @@ export default function AdminOrdersPage() {
     }
   }
 
+  async function onSetSeats(id: string, currentSeats: number) {
+    const seats = window.prompt("How many machines may this license activate at once?", String(currentSeats));
+    if (!seats) return;
+    setBusyId(id);
+    try {
+      const updated = await setOrderSeats(id, Number(seats));
+      setRows((list) => list?.map((r) => (r.id === id ? updated : r)) ?? null);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.head}>
@@ -80,6 +93,7 @@ export default function AdminOrdersPage() {
               <th>License Key</th>
               <th>Product</th>
               <th>Customer</th>
+              <th>Seats</th>
               <th>Amount</th>
               <th>Status</th>
               <th>Requested</th>
@@ -95,6 +109,7 @@ export default function AdminOrdersPage() {
                   <strong>{row.product_name}</strong>
                 </td>
                 <td className={styles.muted}>{row.user_email}</td>
+                <td className={styles.muted}>{row.seats}</td>
                 <td>{formatPrice(row.amount, row.currency)}</td>
                 <td>
                   <Pill tone={STATUS_TONE[row.payment_status] ?? "neutral"}>{row.payment_status}</Pill>
@@ -121,6 +136,14 @@ export default function AdminOrdersPage() {
                         Refund
                       </button>
                     )}
+                    <button
+                      className={styles.iconBtn}
+                      aria-label="Set seats"
+                      disabled={busyId === row.id}
+                      onClick={() => onSetSeats(row.id, row.seats)}
+                    >
+                      <Icon name="users" size={16} />
+                    </button>
                   </div>
                 </td>
               </tr>
