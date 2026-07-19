@@ -68,7 +68,7 @@ export function InstallerBuildTab({ productId, ensureSaved, asPartner = false }:
   }
 
   async function onRemoveBuild(buildId: string) {
-    if (!window.confirm("Remove this Revit-year build? Any uploaded files and the built installer are deleted.")) {
+    if (!window.confirm("Remove this Revit-year build? The uploaded .dll, .addin, and resource files are deleted.")) {
       return;
     }
     await deletePluginBuild(buildId, asPartner);
@@ -80,8 +80,9 @@ export function InstallerBuildTab({ productId, ensureSaved, asPartner = false }:
       <p className={styles.label}>Installer Builds</p>
       <p className={styles.hint}>
         Upload the compiled .dll and .addin manifest for each Revit year you support, plus any
-        resources or dependencies. BIMHive packages these into a real Windows installer
-        automatically — no separate installer-building tool needed.
+        resources or dependencies. BIMHive generates the real Windows installer on the spot when a
+        customer downloads it (or when you test-download it from the products list) — no separate
+        installer-building tool, and no build step here.
       </p>
 
       {!productId && (

@@ -7,7 +7,6 @@ import { Pill } from "@/components/Pill/Pill";
 import {
   AdminApiError,
   deletePluginResource,
-  triggerPluginBuild,
   updatePluginBuild,
   uploadPluginAddin,
   uploadPluginDll,
@@ -18,19 +17,6 @@ import {
 
 import styles from "./ProductForm.module.css";
 
-const STATUS_TONE: Record<string, "success" | "warning" | "error" | "neutral"> = {
-  ready: "success",
-  building: "warning",
-  failed: "error",
-  draft: "neutral",
-};
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 interface PluginBuildCardProps {
   build: PluginBuild;
   destinationOptions: DestinationOption[];
@@ -39,14 +25,16 @@ interface PluginBuildCardProps {
   onRemove: () => void;
 }
 
+/** Upload-only — no build step lives here. The installer is generated live
+ * elsewhere (a customer's download, or staff/partner's Download Installer
+ * action on the products list), never cached ahead of time, so there's
+ * nothing to "build" or check the status of from this form. */
 export function PluginBuildCard({ build, destinationOptions, asPartner, onChange, onRemove }: PluginBuildCardProps) {
   const dllInputRef = useRef<HTMLInputElement>(null);
   const addinInputRef = useRef<HTMLInputElement>(null);
   const [version, setVersion] = useState(build.plugin_version);
   const [uploadingDll, setUploadingDll] = useState(false);
   const [uploadingAddin, setUploadingAddin] = useState(false);
-  const [building, setBuilding] = useState(false);
-  const [showLog, setShowLog] = useState(false);
   const [error, setError] = useState("");
 
   const [resourceFile, setResourceFile] = useState<File | null>(null);
@@ -112,7 +100,6 @@ export function PluginBuildCard({ build, destinationOptions, asPartner, onChange
       await uploadPluginResource(build.id, resourceFile, destinationPath, resourceKind, asPartner);
       onChange({
         ...build,
-        status: "draft",
         resource_files: [
           ...build.resource_files,
           {
@@ -137,33 +124,16 @@ export function PluginBuildCard({ build, destinationOptions, asPartner, onChange
     await deletePluginResource(build.id, resourceId, asPartner);
     onChange({
       ...build,
-      status: "draft",
       resource_files: build.resource_files.filter((r) => r.id !== resourceId),
     });
   }
 
-  async function onBuild() {
-    setError("");
-    setBuilding(true);
-    try {
-      const result = await triggerPluginBuild(build.id, asPartner);
-      onChange(result);
-      setShowLog(result.status === "failed");
-    } catch (err) {
-      setError(err instanceof AdminApiError ? err.detail : "Could not start the build.");
-    } finally {
-      setBuilding(false);
-    }
-  }
-
   const activeHint = destinationOptions.find((o) => o.token === resourceToken)?.hint;
-  const canBuild = Boolean(build.dll_filename && build.addin_filename) && !building;
 
   return (
     <div className={`${styles.fileRow} ${styles.buildCard}`}>
       <div className={styles.buildHeaderRow}>
         <strong>Revit {build.revit_year}</strong>
-        <Pill tone={STATUS_TONE[build.status] ?? "neutral"}>{build.status}</Pill>
         <Pill tone="neutral">{build.scope === "perMachine" ? "Program Files (admin)" : "Per-user"}</Pill>
         <span className={styles.spacer} />
         <button type="button" className={styles.iconBtn} aria-label="Remove this Revit-year build" onClick={onRemove}>
@@ -271,32 +241,10 @@ export function PluginBuildCard({ build, destinationOptions, asPartner, onChange
 
       {error && <p className={styles.error}>{error}</p>}
 
-      <div className={styles.buildActionsRow}>
-        <button type="button" className={styles.primaryBtn} disabled={!canBuild} onClick={onBuild}>
-          {building ? "Building…" : "Build Installer"}
-        </button>
-        {build.status === "ready" && (
-          <a
-            className={styles.secondaryBtn}
-            href={`/api/admin/plugin-builds/${build.id}/download`}
-            title="Download the built .msi directly, to test before (or without) publishing"
-          >
-            <Icon name="download" size={14} /> Download
-          </a>
-        )}
-        {build.built_at && (
-          <span className={styles.fileMeta}>
-            Last built {new Date(build.built_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
-          </span>
-        )}
-        {build.build_log && (
-          <button type="button" className={styles.secondaryBtn} onClick={() => setShowLog((v) => !v)}>
-            {showLog ? "Hide Log" : "View Log"}
-          </button>
-        )}
-      </div>
-
-      {showLog && build.build_log && <pre className={styles.buildLog}>{build.build_log}</pre>}
+      <p className={styles.hint}>
+        The installer is generated on the spot when a customer downloads it, or from the "..." menu
+        on the products list — nothing is built or stored here.
+      </p>
     </div>
   );
 }

@@ -17,9 +17,17 @@ from catalog.admin_api import _effective_partner_id
 from catalog.models import Product
 from catalog.models.product import ProductType
 from catalog.permissions import IsStaffOrPartner
-from installer.builder import build_plugin_installer
+from installer.builder import generate_installer_bytes
 from installer.models import PluginBuild, PluginResourceFile
 from installer.paths import DESTINATION_TOKENS, InvalidDestinationPath, parse_destination_path
+from installer.wxs_generator import resolve_scope
+
+
+def _resync_scope(build):
+    """Keeps build.scope accurate the moment resources change, without ever
+    invoking WiX — resolve_scope is a pure function of the resource list."""
+    build.scope = resolve_scope(list(build.resource_files.all()))
+    build.save(update_fields=["scope", "updated_at"])
 
 
 def _product_queryset(request):
@@ -52,12 +60,11 @@ class PluginBuildSerializer(serializers.ModelSerializer):
         model = PluginBuild
         fields = [
             "id", "product", "product_name", "revit_year", "plugin_version",
-            "dll_filename", "addin_filename", "status", "scope", "built_at",
-            "build_log", "resource_files", "created_at", "updated_at",
+            "dll_filename", "addin_filename", "scope", "resource_files", "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "product", "product_name", "dll_filename", "addin_filename", "status",
-            "scope", "built_at", "build_log", "resource_files", "created_at", "updated_at",
+            "id", "product", "product_name", "dll_filename", "addin_filename",
+            "scope", "resource_files", "created_at", "updated_at",
         ]
 
 
@@ -109,8 +116,7 @@ class PluginBuildDllUploadView(APIView):
         key = default_storage.save(f"plugin_builds/{build.product_id}/{build.revit_year}/dll/{uploaded.name}", uploaded)
         build.dll_storage_key = key
         build.dll_filename = uploaded.name
-        build.status = PluginBuild.Status.DRAFT
-        build.save(update_fields=["dll_storage_key", "dll_filename", "status", "updated_at"])
+        build.save(update_fields=["dll_storage_key", "dll_filename", "updated_at"])
         return Response(PluginBuildSerializer(build).data)
 
 
@@ -130,8 +136,7 @@ class PluginBuildAddinUploadView(APIView):
         )
         build.addin_storage_key = key
         build.addin_filename = uploaded.name
-        build.status = PluginBuild.Status.DRAFT
-        build.save(update_fields=["addin_storage_key", "addin_filename", "status", "updated_at"])
+        build.save(update_fields=["addin_storage_key", "addin_filename", "updated_at"])
         return Response(PluginBuildSerializer(build).data)
 
 
@@ -169,8 +174,7 @@ class PluginResourceListCreateView(APIView):
             destination_path=destination_path,
             sort_order=build.resource_files.count(),
         )
-        build.status = PluginBuild.Status.DRAFT
-        build.save(update_fields=["status", "updated_at"])
+        _resync_scope(build)
         return Response(PluginResourceFileSerializer(resource).data, status=201)
 
 
@@ -183,40 +187,28 @@ class PluginResourceDetailView(APIView):
         if resource.storage_key and default_storage.exists(resource.storage_key):
             default_storage.delete(resource.storage_key)
         resource.delete()
-        build.status = PluginBuild.Status.DRAFT
-        build.save(update_fields=["status", "updated_at"])
+        _resync_scope(build)
         return Response(status=204)
 
 
-class PluginBuildTriggerView(APIView):
-    """POST /api/admin/plugin-builds/<id>/build — runs the WiX packaging
-    pipeline synchronously (see installer.builder) and returns the outcome.
-    There's no background task queue in this project; a build is short
-    enough to run inline on the request within INSTALLER_BUILD_TIMEOUT_SECONDS."""
-
-    permission_classes = [IsStaffOrPartner]
-
-    def post(self, request, pk):
-        build = get_object_or_404(_build_queryset(request), pk=pk)
-        result = build_plugin_installer(build)
-        return Response(PluginBuildSerializer(result).data)
-
-
 class PluginBuildDownloadView(APIView):
-    """GET /api/admin/plugin-builds/<id>/download — lets staff/partner grab
-    the built .msi directly, without going through the customer purchase/
-    entitlement flow. Needed to test a build (including an unpublished
-    draft product) before it's ever purchasable."""
+    """GET /api/admin/plugin-builds/<id>/download — generates the .msi live
+    and streams it back directly. Nothing is cached or persisted — this is
+    staff/partner's way to test a build (including on an unpublished draft
+    product) without a real purchase, and every click is a fresh build."""
 
     permission_classes = [IsStaffOrPartner]
 
     def get(self, request, pk):
-        from django.http import HttpResponseRedirect
+        from django.http import HttpResponse
 
         build = get_object_or_404(_build_queryset(request), pk=pk)
-        if build.status != PluginBuild.Status.READY or not build.built_msi_storage_key:
-            raise ValidationError({"detail": "This build hasn't produced an installer yet."})
-        return HttpResponseRedirect(default_storage.url(build.built_msi_storage_key))
+        success, log, msi_bytes, msi_name = generate_installer_bytes(build)
+        if not success:
+            raise ValidationError({"detail": log})
+        response = HttpResponse(msi_bytes, content_type="application/x-msi")
+        response["Content-Disposition"] = f'attachment; filename="{msi_name}"'
+        return response
 
 
 class PluginBuildDestinationOptionsView(APIView):

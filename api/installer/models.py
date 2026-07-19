@@ -16,14 +16,13 @@ from installer.paths import InvalidDestinationPath, parse_destination_path
 
 
 class PluginBuild(models.Model):
-    """One buildable installer target: a single (product, Revit year) pair.
-    A product with files for 2024, 2025, and 2026 has three of these."""
-
-    class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        BUILDING = "building", "Building"
-        READY = "ready", "Ready"
-        FAILED = "failed", "Failed"
+    """One buildable installer target: a single (product, Revit year) pair —
+    purely a container for the raw uploaded inputs (dll, addin, resources).
+    There is deliberately no cached/persisted .msi here: the installer is
+    generated on demand, live, at the moment someone actually needs the file
+    (a customer downloading, or staff/partner testing from the products
+    list) — see installer/builder.py::generate_installer_bytes. Nothing
+    about the result is stored ahead of time."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="plugin_builds")
@@ -35,21 +34,17 @@ class PluginBuild(models.Model):
     addin_storage_key = models.CharField(max_length=400, blank=True)
     addin_filename = models.CharField(max_length=255, blank=True)
 
-    # Persisted once on first build and reused on every rebuild. Windows
-    # Installer needs a STABLE UpgradeCode across versions of the same
-    # (product, Revit year) to detect upgrades — a fresh GUID per build (the
-    # legacy generator's bug) makes every rebuild an unrelated side-by-side
-    # install instead of a clean upgrade.
+    # Persisted once and reused on every generation. Windows Installer needs
+    # a STABLE UpgradeCode across versions of the same (product, Revit year)
+    # to detect upgrades — a fresh GUID every time (the legacy generator's
+    # bug) makes every install an unrelated side-by-side copy instead of a
+    # clean upgrade.
     upgrade_code = models.UUIDField(default=uuid.uuid4, editable=False)
-    # "perUser" | "perMachine" — derived from resource destinations at build
-    # time (see wix_builder.resolve_scope) and stored so the admin UI can
-    # show it without recomputing.
+    # "perUser" | "perMachine" — derived purely from resource destinations
+    # (see wix_generator.resolve_scope) and kept in sync whenever a resource
+    # is added/removed (installer/api.py), so the admin UI reflects it
+    # without ever needing to actually generate an installer first.
     scope = models.CharField(max_length=16, default="perUser")
-
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    built_msi_storage_key = models.CharField(max_length=400, blank=True)
-    build_log = models.TextField(blank=True)
-    built_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -63,7 +58,7 @@ class PluginBuild(models.Model):
         ordering = ["revit_year"]
 
     def __str__(self):
-        return f"{self.product.name} [{self.revit_year}] ({self.status})"
+        return f"{self.product.name} [{self.revit_year}]"
 
     @property
     def is_ready_for_build(self) -> bool:

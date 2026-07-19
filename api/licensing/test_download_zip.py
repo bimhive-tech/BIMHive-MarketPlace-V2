@@ -1,9 +1,10 @@
 """
-Per-download license-key packaging — a file the auto-installer pipeline
-built gets zipped with the purchaser's own license key instead of a bare
-redirect (see licensing/account_api.py::AccountDownloadFileView). A
-manually-uploaded file (no matching PluginBuild) keeps the old redirect
-behavior untouched.
+Per-download license-key packaging — the installer is generated live at
+download time (see installer/builder.py::generate_installer_bytes, called
+from licensing/account_api.py::AccountPluginBuildDownloadView) and zipped
+with the purchaser's own license key. Nothing is pre-built or cached. A
+manually-uploaded file (not a plugin build at all) keeps the old plain
+redirect behavior, served by the separate AccountDownloadFileView.
 """
 import io
 import zipfile
@@ -42,18 +43,17 @@ def buyer_client(category):
     return client, product, purchase
 
 
-def test_auto_built_file_download_is_a_zip_with_the_license_key(buyer_client):
+# Real WiX invocation, same no-mocking philosophy as test_builder.py.
+def test_plugin_build_download_is_a_zip_with_the_license_key(buyer_client):
     client, product, purchase = buyer_client
-    msi_key = default_storage.save(f"test/{product.id}/plugin.msi", ContentFile(b"fake msi bytes"))
-    build = PluginBuild.objects.create(
-        product=product, revit_year="2025", plugin_version="1.0.0",
-        status=PluginBuild.Status.READY, built_msi_storage_key=msi_key,
-    )
-    file = ProductFile.objects.create(
-        product=product, revit_version="2025", version_label="1.0.0", storage_key=msi_key,
-    )
+    build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
+    build.dll_storage_key = default_storage.save(f"test/{product.id}/Plugin.dll", ContentFile(b"fake dll"))
+    build.dll_filename = "Plugin.dll"
+    build.addin_storage_key = default_storage.save(f"test/{product.id}/Plugin.addin", ContentFile(b"<RevitAddIns/>"))
+    build.addin_filename = "Plugin.addin"
+    build.save()
 
-    resp = client.get(f"/api/account/downloads/{file.id}/get")
+    resp = client.get(f"/api/account/downloads/plugin-builds/{build.id}/get")
 
     assert resp.status_code == 200
     assert resp["Content-Type"] == "application/zip"
@@ -62,7 +62,24 @@ def test_auto_built_file_download_is_a_zip_with_the_license_key(buyer_client):
     assert any(name.endswith(".msi") for name in names)
     assert "zip-test.key" in names
     assert archive.read("zip-test.key").decode() == purchase.license_key
-    assert build.id  # sanity: fixture wired correctly
+
+
+def test_plugin_build_download_requires_a_paid_purchase(buyer_client):
+    client, product, purchase = buyer_client
+    purchase.payment_status = ProductPurchase.PaymentStatus.PENDING
+    purchase.save()
+    build = PluginBuild.objects.create(product=product, revit_year="2025")
+
+    resp = client.get(f"/api/account/downloads/plugin-builds/{build.id}/get")
+    assert resp.status_code == 400
+
+
+def test_plugin_build_download_fails_cleanly_without_dll_or_addin(buyer_client):
+    client, product, _ = buyer_client
+    build = PluginBuild.objects.create(product=product, revit_year="2025")
+
+    resp = client.get(f"/api/account/downloads/plugin-builds/{build.id}/get")
+    assert resp.status_code == 400
 
 
 def test_manually_uploaded_file_still_redirects(buyer_client):

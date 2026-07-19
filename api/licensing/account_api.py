@@ -162,7 +162,7 @@ class RedeemLicenseCodeView(APIView):
 
 
 class AccountDownloadFileSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
+    id = serializers.CharField()
     revit_version = serializers.CharField()
     version_label = serializers.CharField()
     is_current = serializers.BooleanField()
@@ -186,9 +186,9 @@ class AccountDownloadSerializer(serializers.ModelSerializer):
         catalog_product = obj.product.product
         if not catalog_product:
             return []
-        return [
+        entries = [
             {
-                "id": f.id,
+                "id": str(f.id),
                 "revit_version": f.revit_version,
                 "version_label": f.version_label,
                 "is_current": f.is_current,
@@ -201,6 +201,24 @@ class AccountDownloadSerializer(serializers.ModelSerializer):
             }
             for f in catalog_product.files.all()
         ]
+        # A Revit-plugin build has no static file at all — it's generated
+        # live on click (see AccountPluginBuildDownloadView) — so it's listed
+        # here as a virtual entry rather than needing a ProductFile row.
+        from installer.models import PluginBuild
+
+        for build in PluginBuild.objects.filter(product=catalog_product):
+            if not build.is_ready_for_build:
+                continue
+            entries.append(
+                {
+                    "id": str(build.id),
+                    "revit_version": build.revit_year,
+                    "version_label": build.plugin_version,
+                    "is_current": True,
+                    "download_url": f"/api/account/downloads/plugin-builds/{build.id}/get",
+                }
+            )
+        return entries
 
 
 class AccountDownloadListView(generics.ListAPIView):
@@ -221,20 +239,18 @@ class AccountDownloadListView(generics.ListAPIView):
 
 
 class AccountDownloadFileView(APIView):
-    """Re-checks entitlement, logs the download, then either redirects to a
-    freshly signed R2 URL (a manually-uploaded file — unchanged legacy
-    behavior) or, for a file the auto-installer pipeline built (see
-    installer.builder), streams back a ZIP containing the installer plus a
-    `<productCode>.key` file holding the purchaser's own license key — so
-    the plugin's first run can auto-import it instead of the customer
-    copy-pasting a key by hand."""
+    """Re-checks entitlement, logs the download, then redirects to a freshly
+    signed R2 URL. Only for manually-uploaded files (scripts, templates,
+    libraries, services) — an auto-installer build is never turned into a
+    ProductFile, it's listed as a virtual entry pointing at
+    AccountPluginBuildDownloadView instead (see AccountDownloadSerializer)."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, file_id):
         from django.core.files.storage import default_storage
         from django.db.models import F
-        from django.http import HttpResponse, HttpResponseRedirect
+        from django.http import HttpResponseRedirect
 
         from catalog.models import Product, ProductFile
 
@@ -261,49 +277,76 @@ class AccountDownloadFileView(APIView):
         # incrementing it before this endpoint existed.
         Product.objects.filter(pk=file.product_id).update(download_count=F("download_count") + 1)
 
-        auto_build = _matching_plugin_build(file)
-        if auto_build:
-            return _zip_installer_with_license_key(file, auto_build, purchase)
         return HttpResponseRedirect(default_storage.url(file.storage_key))
 
 
-def _matching_plugin_build(file):
-    from installer.models import PluginBuild
+class AccountPluginBuildDownloadView(APIView):
+    """Generates the .msi live, right now, for this one request — see
+    installer.builder.generate_installer_bytes. Nothing is cached: every
+    single download re-runs the WiX build and the result is discarded once
+    the response is sent, then zips it with the purchaser's own license key
+    (already issued at purchase time) so the plugin's first run can
+    auto-import it instead of the customer copy-pasting a key by hand."""
 
-    return PluginBuild.objects.filter(
-        product=file.product,
-        revit_year=file.revit_version,
-        status=PluginBuild.Status.READY,
-        built_msi_storage_key=file.storage_key,
-    ).first()
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, build_id):
+        from django.db.models import F
+
+        from catalog.models import Product
+        from installer.builder import generate_installer_bytes
+        from installer.models import PluginBuild
+
+        build = PluginBuild.objects.select_related("product").filter(pk=build_id).first()
+        if not build:
+            raise ValidationError({"detail": "File not found."})
+
+        purchase = ProductPurchase.objects.filter(
+            user=request.user,
+            product__product=build.product,
+            payment_status=ProductPurchase.PaymentStatus.PAID,
+        ).first()
+        if not purchase:
+            raise ValidationError({"detail": "You don't have access to this file."})
+
+        success, log, msi_bytes, msi_name = generate_installer_bytes(build)
+        if not success:
+            raise ValidationError({"detail": "Could not generate the installer. Please contact support."})
+
+        log_activity(
+            request.user,
+            ActivityVerb.DOWNLOADED_FILE,
+            target_label=f"{build.product.name} — {build.plugin_version}",
+            metadata={"revit_version": build.revit_year},
+        )
+        Product.objects.filter(pk=build.product_id).update(download_count=F("download_count") + 1)
+
+        return _zip_installer_bytes_with_license_key(msi_name, msi_bytes, build.product, purchase)
 
 
-def _zip_installer_with_license_key(file, auto_build, purchase):
+def _zip_installer_bytes_with_license_key(msi_name, msi_bytes, product, purchase):
     import io
     import zipfile
 
-    from django.core.files.storage import default_storage
     from django.http import HttpResponse
 
     zip_buffer = io.BytesIO()
-    msi_name = auto_build.built_msi_storage_key.rsplit("/", 1)[-1]
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        with default_storage.open(auto_build.built_msi_storage_key, "rb") as msi_file:
-            archive.writestr(msi_name, msi_file.read())
+        archive.writestr(msi_name, msi_bytes)
         # LicLoader (the installed plugin's activation shim) checks for a
         # same-name .key file next to itself in %AppData%\BIMHive\Licenses\
         # on first run before falling back to a manual prompt — see
         # installer-generator-reference project notes.
-        archive.writestr(f"{file.product.product_code}.key", purchase.license_key)
+        archive.writestr(f"{product.product_code}.key", purchase.license_key)
         archive.writestr(
             "README.txt",
-            f"1. Run {msi_name} to install {file.product.name}.\n"
-            f"2. Keep {file.product.product_code}.key in this folder until the first Revit launch "
+            f"1. Run {msi_name} to install {product.name}.\n"
+            f"2. Keep {product.product_code}.key in this folder until the first Revit launch "
             "after installing — the plugin reads it automatically to activate your license.\n",
         )
     zip_buffer.seek(0)
     response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
-    response["Content-Disposition"] = f'attachment; filename="{file.product.slug}-{file.revit_version}.zip"'
+    response["Content-Disposition"] = f'attachment; filename="{msi_name.rsplit(".", 1)[0]}.zip"'
     return response
 
 

@@ -7,7 +7,6 @@ from installer.api import (
     PluginBuildDllUploadView,
     PluginBuildDownloadView,
     PluginBuildListCreateView,
-    PluginBuildTriggerView,
     PluginResourceDetailView,
     PluginResourceListCreateView,
 )
@@ -24,6 +23,5 @@ urlpatterns = [
         PluginResourceDetailView.as_view(),
         name="plugin-build-resource-detail",
     ),
-    path("plugin-builds/<uuid:pk>/build", PluginBuildTriggerView.as_view(), name="plugin-build-trigger"),
     path("plugin-builds/<uuid:pk>/download", PluginBuildDownloadView.as_view(), name="plugin-build-download"),
 ]

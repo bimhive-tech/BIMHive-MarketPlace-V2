@@ -466,10 +466,7 @@ export interface PluginBuild {
   plugin_version: string;
   dll_filename: string;
   addin_filename: string;
-  status: "draft" | "building" | "ready" | "failed";
   scope: "perUser" | "perMachine";
-  built_at: string | null;
-  build_log: string;
   resource_files: PluginResourceFile[];
   created_at: string;
   updated_at: string;
@@ -528,7 +525,5 @@ export const deletePluginResource = (buildId: string, resourceId: string, asPart
     `/api/admin/plugin-builds/${buildId}/resources/${resourceId}${mineParam(asPartner)}`,
     "DELETE",
   );
-export const triggerPluginBuild = (id: string, asPartner = false) =>
-  request<PluginBuild>(`/api/admin/plugin-builds/${id}/build${mineParam(asPartner)}`, "POST");
 export const getDestinationOptions = () =>
   getJSON<DestinationOption[]>("/api/admin/plugin-builds/destination-options");

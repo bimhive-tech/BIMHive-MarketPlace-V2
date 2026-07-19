@@ -80,7 +80,7 @@ export const redeemLicenseCode = (code: string) =>
   writeJSON<AccountLicense>("/api/account/licenses/redeem", "POST", { code });
 
 export interface AccountDownloadFile {
-  id: number;
+  id: string;
   revit_version: string;
   version_label: string;
   is_current: boolean;

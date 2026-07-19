@@ -6,13 +6,16 @@ because the thing most likely to silently break here is the generated .wxs
 no longer being valid WiX syntax — a mock would never catch that. Slower
 than the rest of the suite (each build takes several seconds); that's the
 right trade for actually proving the pipeline works.
+
+generate_installer_bytes is on-demand and never touches storage — these
+tests assert on the returned bytes directly rather than a saved file.
 """
 import pytest
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
 from catalog.models import Category, Product
-from installer.builder import build_plugin_installer
+from installer.builder import generate_installer_bytes
 from installer.models import PluginBuild, PluginResourceFile
 
 pytestmark = pytest.mark.django_db
@@ -43,21 +46,23 @@ def _stage_dll_and_addin(build):
 
 def test_build_without_dll_or_addin_fails_cleanly(product):
     build = PluginBuild.objects.create(product=product, revit_year="2025")
-    result = build_plugin_installer(build)
-    assert result.status == PluginBuild.Status.FAILED
-    assert "dll" in result.build_log.lower()
+    success, log, msi_bytes, msi_name = generate_installer_bytes(build)
+    assert success is False
+    assert msi_bytes is None
+    assert "dll" in log.lower()
 
 
 def test_peruser_build_produces_a_real_msi(product):
     build = PluginBuild.objects.create(product=product, revit_year="2024", plugin_version="1.0.0")
     _stage_dll_and_addin(build)
 
-    result = build_plugin_installer(build)
+    success, log, msi_bytes, msi_name = generate_installer_bytes(build)
 
-    assert result.status == PluginBuild.Status.READY, result.build_log
-    assert result.scope == "perUser"
-    assert result.built_msi_storage_key
-    assert default_storage.exists(result.built_msi_storage_key)
+    assert success is True, log
+    assert msi_bytes and len(msi_bytes) > 0
+    assert msi_name.endswith(".msi")
+    # Nothing gets persisted anywhere — the whole point of on-demand generation.
+    assert not default_storage.exists(f"plugin_builds/{build.product_id}/{build.revit_year}/{msi_name}")
 
 
 def test_permachine_build_with_a_dependency_produces_a_real_msi(product):
@@ -69,36 +74,22 @@ def test_permachine_build_with_a_dependency_produces_a_real_msi(product):
         destination_path=r"{INSTALL_DIR}\lib\dep.dll", kind="dependency",
     )
 
-    result = build_plugin_installer(build)
+    success, log, msi_bytes, msi_name = generate_installer_bytes(build)
 
-    assert result.status == PluginBuild.Status.READY, result.build_log
-    assert result.scope == "perMachine"
-    assert default_storage.exists(result.built_msi_storage_key)
-
-
-def test_successful_build_syncs_a_product_file(product):
-    build = PluginBuild.objects.create(product=product, revit_year="2026", plugin_version="3.0.0")
-    _stage_dll_and_addin(build)
-
-    build_plugin_installer(build)
-
-    from catalog.models import ProductFile
-
-    product_file = ProductFile.objects.get(product=product, revit_version="2026")
-    assert product_file.version_label == "3.0.0"
-    assert product_file.storage_key == build.built_msi_storage_key
-    assert product_file.is_current is True
+    assert success is True, log
+    assert msi_bytes and len(msi_bytes) > 0
 
 
 def test_rebuild_keeps_the_same_upgrade_code(product):
     build = PluginBuild.objects.create(product=product, revit_year="2027", plugin_version="1.0.0")
     _stage_dll_and_addin(build)
-    build_plugin_installer(build)
+    generate_installer_bytes(build)
     original_upgrade_code = build.upgrade_code
 
     build.plugin_version = "1.0.1"
     build.save()
-    result = build_plugin_installer(build)
+    success, log, msi_bytes, msi_name = generate_installer_bytes(build)
 
-    assert result.status == PluginBuild.Status.READY, result.build_log
-    assert result.upgrade_code == original_upgrade_code
+    assert success is True, log
+    build.refresh_from_db()
+    assert build.upgrade_code == original_upgrade_code

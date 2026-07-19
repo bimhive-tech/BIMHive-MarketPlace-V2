@@ -1,24 +1,22 @@
 """
-Top-level build orchestration: stage this PluginBuild's files into a temp
-directory, generate the .wxs + branding assets, shell out to the WiX CLI,
-and — on success — upload the resulting .msi to object storage and sync it
-into catalog.ProductFile so the existing storefront download flow (already
-entitlement-gated, already logged — see licensing/account_api.py) picks it
-up with zero changes on that side.
+On-demand installer generation: stage this PluginBuild's uploaded files into
+a temp directory, generate the .wxs + branding assets, shell out to the WiX
+CLI, and return the resulting .msi as bytes. Nothing is written to object
+storage — the caller (a customer's live download, or staff/partner testing
+from the products list) gets the freshly-built file directly and it's
+discarded once the temp directory closes. There is deliberately no "build
+once, cache, reuse" step in this project — see installer/models.py.
 """
-import shutil
 import subprocess
+import shutil
 import tempfile
 from pathlib import Path
 
 from django.conf import settings
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
-from django.utils import timezone
 
 from installer.branding import write_branding_assets
 from installer.models import PluginBuild
-from installer.wxs_generator import generate_wxs
+from installer.wxs_generator import generate_wxs, resolve_scope
 
 
 class BuildError(Exception):
@@ -26,6 +24,8 @@ class BuildError(Exception):
 
 
 def _stage_file(storage_key: str, dest: Path) -> None:
+    from django.core.files.storage import default_storage
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     with default_storage.open(storage_key, "rb") as source, open(dest, "wb") as target:
         shutil.copyfileobj(source, target)
@@ -71,24 +71,17 @@ def _run_wix_build(wxs_path: Path, output_msi: Path, staging_dir: Path) -> tuple
     return result.returncode == 0, log
 
 
-def build_plugin_installer(build: PluginBuild) -> PluginBuild:
-    """Runs synchronously — this project has no background task queue, and a
-    plugin installer build (well under the configured timeout in practice)
-    is short enough to run inline on the triggering request. Always leaves
-    the build in a terminal status (ready/failed) with a log, never raises,
-    so the caller can render the outcome directly."""
+def generate_installer_bytes(build: PluginBuild) -> tuple[bool, str, bytes | None, str]:
+    """Generates the .msi right now, in memory, and returns
+    (success, log, msi_bytes, filename). Never raises, never persists
+    anything — every caller (customer download, admin/partner test
+    download) gets a fresh build each time. `build.scope` is kept in sync
+    by installer/api.py whenever a resource is added/removed, so it doesn't
+    need recomputing here for anything other than the .wxs itself."""
     if not build.is_ready_for_build:
-        build.status = PluginBuild.Status.FAILED
-        build.build_log = "Both a .dll and a .addin file are required before building."
-        build.save(update_fields=["status", "build_log", "updated_at"])
-        return build
-
-    build.status = PluginBuild.Status.BUILDING
-    build.save(update_fields=["status", "updated_at"])
+        return False, "Both a .dll and a .addin file are required before building.", None, ""
 
     resource_files = list(build.resource_files.all())
-    from installer.wxs_generator import resolve_scope
-
     scope = resolve_scope(resource_files)
 
     with tempfile.TemporaryDirectory(prefix="bimhive-installer-") as tmp:
@@ -101,51 +94,13 @@ def build_plugin_installer(build: PluginBuild) -> PluginBuild:
             wxs_path.write_text(wxs_source, encoding="utf-8")
 
             slug = build.product.slug or "plugin"
-            output_msi = staging_dir / f"{slug}-{build.revit_year}.msi"
+            msi_name = f"{slug}-{build.revit_year}.msi"
+            output_msi = staging_dir / msi_name
             success, log = _run_wix_build(wxs_path, output_msi, staging_dir)
         except Exception as exc:  # noqa: BLE001 — any staging/IO failure is a build failure, not a 500
-            build.status = PluginBuild.Status.FAILED
-            build.scope = scope
-            build.build_log = f"Build failed before invoking WiX: {exc}"
-            build.save(update_fields=["status", "scope", "build_log", "updated_at"])
-            return build
-
-        build.scope = scope
-        build.build_log = log
+            return False, f"Build failed before invoking WiX: {exc}", None, ""
 
         if not success or not output_msi.exists():
-            build.status = PluginBuild.Status.FAILED
-            build.save(update_fields=["status", "scope", "build_log", "updated_at"])
-            return build
+            return False, log, None, ""
 
-        storage_key = f"plugin_builds/{build.product_id}/{build.revit_year}/{output_msi.name}"
-        with open(output_msi, "rb") as fh:
-            saved_key = default_storage.save(storage_key, ContentFile(fh.read()))
-
-        build.status = PluginBuild.Status.READY
-        build.built_msi_storage_key = saved_key
-        build.built_at = timezone.now()
-        build.save(
-            update_fields=["status", "scope", "build_log", "built_msi_storage_key", "built_at", "updated_at"]
-        )
-        _sync_product_file(build, output_msi.stat().st_size)
-        return build
-
-
-def _sync_product_file(build: PluginBuild, file_size_bytes: int) -> None:
-    """Mirrors licensing.services.sync_license_sku's update_or_create
-    pattern — a successful auto-build becomes the ProductFile the existing,
-    already-entitlement-gated download flow serves, keyed the same way a
-    manually-uploaded file variant would be."""
-    from catalog.models import ProductFile
-
-    ProductFile.objects.update_or_create(
-        product=build.product,
-        revit_version=build.revit_year,
-        version_label=build.plugin_version,
-        defaults={
-            "storage_key": build.built_msi_storage_key,
-            "file_size_bytes": file_size_bytes,
-            "is_current": True,
-        },
-    )
+        return True, log, output_msi.read_bytes(), msi_name
