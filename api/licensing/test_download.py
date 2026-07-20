@@ -1,14 +1,14 @@
 """
-Per-download license-key packaging — the installer is generated live at
-download time (see installer/builder.py::generate_installer_bytes, called
-from licensing/account_api.py::AccountPluginBuildDownloadView) and zipped
-with the purchaser's own license key. Nothing is pre-built or cached. A
-manually-uploaded file (not a plugin build at all) keeps the old plain
-redirect behavior, served by the separate AccountDownloadFileView.
+Customer downloads — the installer is generated live at download time (see
+installer/builder.py::generate_installer_bytes, called from
+licensing/account_api.py::AccountPluginBuildDownloadView) and streamed back
+as a bare .exe. Nothing is pre-built or cached, and no license key is
+attached: the customer types their key into the plugin themselves, copied
+from /account/licenses — the plugin's own first activation call with that
+key is what actually binds it to a machine. A manually-uploaded file (not a
+plugin build at all) keeps the old plain redirect behavior, served by the
+separate AccountDownloadFileView.
 """
-import io
-import zipfile
-
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
@@ -23,6 +23,8 @@ from licensing.models import LicensedProduct, ProductPurchase
 pytestmark = pytest.mark.django_db
 User = get_user_model()
 
+PE_MAGIC = b"MZ"
+
 
 @pytest.fixture
 def category():
@@ -32,11 +34,11 @@ def category():
 @pytest.fixture
 def buyer_client(category):
     product = Product.objects.create(
-        name="Zip Test", product_code="zip-test", category=category,
+        name="Download Test", product_code="download-test", category=category,
         short_description="s", description="d", status=ProductStatus.PUBLISHED,
     )
     sku = LicensedProduct.objects.get(code=product.product_code)
-    user = User.objects.create_user(username="zipbuyer@x.com", email="zipbuyer@x.com", password="x")
+    user = User.objects.create_user(username="buyer@x.com", email="buyer@x.com", password="x")
     purchase = ProductPurchase.objects.create(user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID)
     client = Client()
     client.force_login(user)
@@ -44,7 +46,7 @@ def buyer_client(category):
 
 
 # Real NSIS invocation, same no-mocking philosophy as test_builder.py.
-def test_plugin_build_download_is_a_zip_with_the_license_key(buyer_client):
+def test_plugin_build_download_streams_a_bare_exe_with_no_key_attached(buyer_client):
     client, product, purchase = buyer_client
     build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
     build.dll_storage_key = default_storage.save(f"test/{product.id}/Plugin.dll", ContentFile(b"fake dll"))
@@ -56,12 +58,12 @@ def test_plugin_build_download_is_a_zip_with_the_license_key(buyer_client):
     resp = client.get(f"/api/account/downloads/plugin-builds/{build.id}/get")
 
     assert resp.status_code == 200
-    assert resp["Content-Type"] == "application/zip"
-    archive = zipfile.ZipFile(io.BytesIO(resp.content))
-    names = archive.namelist()
-    assert any(name.endswith(".exe") for name in names)
-    assert "zip-test.key" in names
-    assert archive.read("zip-test.key").decode() == purchase.license_key
+    assert resp["Content-Type"] == "application/vnd.microsoft.portable-executable"
+    assert resp.content.startswith(PE_MAGIC)
+    # No license key anywhere in the response — it's a bare installer.
+    assert purchase.license_key.encode() not in resp.content
+    assert "attachment;" in resp["Content-Disposition"]
+    assert resp["Content-Disposition"].endswith('.exe"')
 
 
 def test_plugin_build_download_requires_a_paid_purchase(buyer_client):

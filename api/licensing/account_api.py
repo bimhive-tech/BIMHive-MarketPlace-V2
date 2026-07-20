@@ -226,14 +226,17 @@ class AccountPluginBuildDownloadView(APIView):
     """Generates the .exe live, right now, for this one request — see
     installer.builder.generate_installer_bytes. Nothing is cached: every
     single download re-runs the NSIS build and the result is discarded once
-    the response is sent, then zips it with the purchaser's own license key
-    (already issued at purchase time) so the plugin's first run can
-    auto-import it instead of the customer copy-pasting a key by hand."""
+    the response is sent. Streams the bare .exe — no license key attached,
+    no auto-import. The plugin only ever gets a key by the customer typing
+    one in themselves (copied from /account/licenses); the very first
+    `/api/license/activate` call that carries a key is what actually binds
+    it to that machine and starts showing its expiry there."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, build_id):
         from django.db.models import F
+        from django.http import HttpResponse
 
         from catalog.models import Product
         from installer.builder import generate_installer_bytes
@@ -263,7 +266,9 @@ class AccountPluginBuildDownloadView(APIView):
         )
         Product.objects.filter(pk=build.product_id).update(download_count=F("download_count") + 1)
 
-        return _zip_installer_bytes_with_license_key(installer_name, installer_bytes, build.product, purchase)
+        response = HttpResponse(installer_bytes, content_type="application/vnd.microsoft.portable-executable")
+        response["Content-Disposition"] = f'attachment; filename="{installer_name}"'
+        return response
 
 
 class AccountPluginBuildTrialDownloadView(APIView):
@@ -311,32 +316,6 @@ class AccountPluginBuildTrialDownloadView(APIView):
         response = HttpResponse(installer_bytes, content_type="application/vnd.microsoft.portable-executable")
         response["Content-Disposition"] = f'attachment; filename="{installer_name}"'
         return response
-
-
-def _zip_installer_bytes_with_license_key(installer_name, installer_bytes, product, purchase):
-    import io
-    import zipfile
-
-    from django.http import HttpResponse
-
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(installer_name, installer_bytes)
-        # LicLoader (the installed plugin's activation shim) checks for a
-        # same-name .key file next to itself in %AppData%\BIMHive\Licenses\
-        # on first run before falling back to a manual prompt — see
-        # installer-generator-reference project notes.
-        archive.writestr(f"{product.product_code}.key", purchase.license_key)
-        archive.writestr(
-            "README.txt",
-            f"1. Run {installer_name} to install {product.name}.\n"
-            f"2. Keep {product.product_code}.key in this folder until the first Revit launch "
-            "after installing — the plugin reads it automatically to activate your license.\n",
-        )
-    zip_buffer.seek(0)
-    response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
-    response["Content-Disposition"] = f'attachment; filename="{installer_name.rsplit(".", 1)[0]}.zip"'
-    return response
 
 
 class ClaimFreeProductView(APIView):

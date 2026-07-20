@@ -126,10 +126,12 @@ The `.exe` itself is generated **live, on the spot, in exactly two places** — 
 storage in either case:
 - **A customer downloading it** (`/account/downloads`, or the virtual entry on `/api/account/downloads`
   that appears once both files are uploaded) — `AccountPluginBuildDownloadView` calls
-  `installer/builder.py::generate_installer_bytes`, then zips the result with a `<productCode>.key`
-  file containing the purchaser's own license key (already issued at purchase time) — no
-  copy-pasting a key by hand. Every download re-runs the NSIS build; nothing is reused between
-  downloads.
+  `installer/builder.py::generate_installer_bytes` and streams the bare `.exe` straight back, no zip,
+  no key attached. Every download re-runs the NSIS build; nothing is reused between downloads.
+  **The customer types their license key into the plugin themselves** (copied from
+  `/account/licenses`) — there's deliberately no auto-import: the plugin only ever works once a key
+  is entered, and the first `/api/license/activate` call that carries one is what binds it to that
+  machine and starts showing its end date on the Licenses page.
 - **Staff/partner testing it** from the products list's **"..." menu** (per row, next to Edit) —
   `GET /api/admin/plugin-builds/<id>/download` runs the same live build and streams the raw `.exe`
   back directly, no purchase or license key needed, including for an unpublished draft product. The
@@ -288,10 +290,10 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
 - Account: `POST /api/account/checkout` (turns the client-side cart into real `ProductPurchase` rows —
   no payment collected, see "Checkout" above), `POST /api/account/licenses/redeem` (redeem a
   staff-generated license code onto the caller's own account — see "License codes" above),
-  `GET /api/account/downloads/plugin-builds/<id>/get` (generates the `.exe` live and zips it with the
-  purchaser's license key — see "Auto-generated installers" above),
+  `GET /api/account/downloads/plugin-builds/<id>/get` (generates and streams the bare `.exe` live —
+  no zip, no key attached; see "Auto-generated installers" above),
   `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer, no purchase needed —
-  generates the raw `.exe` with no key zip, gated on `Product.has_trial`; see "Free trials" above).
+  same bare `.exe`, gated on `Product.has_trial`; see "Free trials" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped
