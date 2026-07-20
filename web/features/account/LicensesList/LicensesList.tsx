@@ -5,13 +5,7 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
-import {
-  AccountApiError,
-  getAccountLicenses,
-  redeemLicenseCode,
-  type AccountLicense,
-} from "@/lib/accountApi";
-import { paymentStatusTone } from "@/features/account/paymentStatusTone";
+import { AccountApiError, getAccountLicenses, redeemLicenseCode, type AccountLicense } from "@/lib/accountApi";
 
 import styles from "./LicensesList.module.css";
 
@@ -24,6 +18,15 @@ function machineTone(status: string): "success" | "error" | "neutral" {
   if (status === "active" || status === "paid") return "success";
   if (status === "blocked" || status === "expired") return "error";
   return "neutral";
+}
+
+/** The three states a buyer actually needs to reason about — collapses
+ * payment_status's finer-grained values (pending/failed/refunded/cancelled/
+ * revoked all just mean "not usable right now") into one plain label. */
+function licenseStatusTone(status: AccountLicense["license_status"]): "success" | "warning" | "error" {
+  if (status === "active") return "success";
+  if (status === "expired") return "error";
+  return "warning";
 }
 
 export function LicensesList() {
@@ -109,7 +112,7 @@ export function LicensesList() {
               <span className={styles.product}>{license.product_name}</span>
               <span className={styles.code}>{license.product_code}</span>
             </div>
-            <Pill tone={paymentStatusTone(license.payment_status)}>{license.payment_status}</Pill>
+            <Pill tone={licenseStatusTone(license.license_status)}>{license.license_status}</Pill>
           </div>
 
           <div className={styles.meta}>
