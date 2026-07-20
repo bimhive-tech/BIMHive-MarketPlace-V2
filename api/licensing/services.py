@@ -34,6 +34,8 @@ def sync_license_sku(product):
             "product": product,
             "name": product.name,
             "default_trial_days": product.default_trial_days,
+            "default_trial_hours": product.default_trial_hours,
+            "default_trial_minutes": product.default_trial_minutes,
             "price": product.price,
             "currency": product.currency,
             "is_active": product.status == ProductStatus.PUBLISHED,

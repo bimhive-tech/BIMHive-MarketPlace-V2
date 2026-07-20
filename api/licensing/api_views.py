@@ -11,6 +11,7 @@ Endpoints (registered in config/urls.py, no trailing slash):
 import hashlib
 import hmac
 import json
+import math
 from datetime import timedelta
 
 from django.conf import settings
@@ -155,17 +156,29 @@ def license_products_api(request):
     products = (
         LicensedProduct.objects.filter(is_active=True)
         .order_by("code")
-        .values("code", "name", "revit_year", "default_trial_days")
+        .values("code", "name", "revit_year", "default_trial_days", "default_trial_hours", "default_trial_minutes")
     )
-    data = [
-        {
-            "code": item["code"],
-            "name": item["name"] or item["code"],
-            "revitYear": item["revit_year"] or "",
-            "defaultTrialDays": item["default_trial_days"] or 30,
-        }
-        for item in products
-    ]
+    data = []
+    for item in products:
+        total_minutes = (
+            (item["default_trial_days"] or 0) * 1440
+            + (item["default_trial_hours"] or 0) * 60
+            + (item["default_trial_minutes"] or 0)
+        )
+        data.append(
+            {
+                "code": item["code"],
+                "name": item["name"] or item["code"],
+                "revitYear": item["revit_year"] or "",
+                # Whole days, rounded UP so a plugin reading this as a plain
+                # int never sees a shorter trial than actually configured —
+                # the real to-the-minute value is what /api/license/activate
+                # enforces (see the trial clamp below); this field is
+                # display-only and was always whole days in the locked
+                # response shape.
+                "defaultTrialDays": math.ceil(total_minutes / 1440) or 30,
+            }
+        )
     return JsonResponse(data, safe=False)
 
 
@@ -208,14 +221,14 @@ def license_activate_api(request):
 
     now = timezone.now()
     # SECURITY: the client may *request* a trial length, but the server caps it at the
-    # product's configured maximum (default_trial_days). A tampered client asking for a
-    # 99999-day trial is clamped; a legitimate request (e.g. 7 days) is unchanged.
+    # product's configured maximum (default_trial_days/hours/minutes). A tampered client
+    # asking for a 99999-day trial is clamped; a legitimate request (e.g. 7 days) is unchanged.
     trial_minutes = int(body.get("trialMinutes") or 0)
     trial_days = int(body.get("trialDays") or 0)
     requested_trial_minutes = (
         trial_minutes if trial_minutes > 0 else ((trial_days * 24 * 60) if trial_days > 0 else None)
     )
-    server_max_minutes = max(1, product.default_trial_days or 30) * 24 * 60
+    server_max_minutes = max(1, product.trial_minutes_total)
     if requested_trial_minutes is None or requested_trial_minutes > server_max_minutes:
         effective_trial_minutes = server_max_minutes
     else:

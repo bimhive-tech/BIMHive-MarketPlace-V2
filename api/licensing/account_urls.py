@@ -7,6 +7,7 @@ from licensing.account_api import (
     AccountLicenseListView,
     AccountOrderListView,
     AccountPluginBuildDownloadView,
+    AccountPluginBuildTrialDownloadView,
     ClaimFreeProductView,
     RedeemLicenseCodeView,
 )
@@ -21,6 +22,11 @@ urlpatterns = [
         "downloads/plugin-builds/<uuid:build_id>/get",
         AccountPluginBuildDownloadView.as_view(),
         name="account-download-plugin-build",
+    ),
+    path(
+        "downloads/plugin-builds/<uuid:build_id>/trial",
+        AccountPluginBuildTrialDownloadView.as_view(),
+        name="account-download-plugin-build-trial",
     ),
     path("claim-free", ClaimFreeProductView.as_view(), name="account-claim-free"),
 ]

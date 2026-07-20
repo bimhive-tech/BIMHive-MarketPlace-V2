@@ -143,7 +143,8 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "slug", "product_code", "short_description", "description", "type",
             "category", "partner", "tags", "price", "download_count",
-            "default_trial_days", "status", "rejection_note", "visibility", "is_featured",
+            "default_trial_days", "default_trial_hours", "default_trial_minutes",
+            "status", "rejection_note", "visibility", "is_featured",
             "cover_image_url", "version", "released_at", "seo_title", "seo_description",
             "features", "media", "changelog", "compatibility", "documentation", "files",
             "created_at", "updated_at",

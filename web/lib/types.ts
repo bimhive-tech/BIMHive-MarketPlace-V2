@@ -169,10 +169,19 @@ export interface RatingBreakdownRow {
   percent: number;
 }
 
+export interface TrialBuild {
+  id: string;
+  revit_year: string;
+}
+
 export interface ProductDetail extends Omit<ProductCard, "category"> {
   description: string;
   is_free: boolean;
   default_trial_days: number;
+  default_trial_hours: number;
+  default_trial_minutes: number;
+  has_trial: boolean;
+  trial_builds: TrialBuild[];
   version: string;
   released_at: string | null;
   rating_breakdown: RatingBreakdownRow[];

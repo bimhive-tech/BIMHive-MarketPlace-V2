@@ -105,6 +105,29 @@ def test_trial_days_clamped_to_server_max(product):
     assert span_days == 30
 
 
+def test_trial_clamp_honors_hours_and_minutes_not_just_days():
+    fine_grained = LicensedProduct.objects.create(
+        code="fine-grained-online", name="Fine Grained", default_trial_days=0,
+        default_trial_hours=2, default_trial_minutes=30, is_active=True,
+    )
+    resp = _activate(Client(), productCode=fine_grained.code, machineFingerprintHash=FP, trialMinutes=99999)
+    body = resp.json()
+    assert body["remainingSeconds"] <= 150 * 60  # 2h30m, never more
+    assert body["remainingSeconds"] > 149 * 60  # allow a few seconds of test runtime drift
+
+
+def test_products_shape_rounds_fractional_days_up(product):
+    # 1 day 12 hours = 36h = 1.5 days -> the locked defaultTrialDays field is
+    # a whole int, rounded UP so a plugin reading it never sees less trial
+    # than actually configured (the real to-the-minute value is enforced by
+    # /api/license/activate directly, not this display field).
+    product.default_trial_days = 1
+    product.default_trial_hours = 12
+    product.save()
+    data = Client().get("/api/license/products").json()
+    assert data[0]["defaultTrialDays"] == 2
+
+
 def test_expired_trial_denied(product):
     _activate(Client(), productCode=product.code, machineFingerprintHash=FP)
     ml = MachineLicense.objects.get(product=product)

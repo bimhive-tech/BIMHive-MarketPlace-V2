@@ -183,6 +183,35 @@ page), so today `seats` is set by staff via the users icon button on `/admin-por
 real checkout exists, a quantity-N purchase should set this field directly instead of creating N
 separate purchase rows.
 
+## Free trials: configurable per product, download without buying
+
+Each plugin product has a trial length set on its **Pricing & License** tab as days + hours +
+minutes (`Product.default_trial_days/hours/minutes`, kept in sync onto the activation SKU by
+`sync_license_sku` same as everything else there) — a new product defaults to 7 days, staff/partners
+can change it per product, and setting all three to 0 turns the trial off entirely for that product
+(the storefront's "Download Trial" button then just doesn't render — see `Product.has_trial`).
+
+On a plugin product's page, `TrialDownloadCard` (rendered inside `BuyBox` when `has_trial` is true)
+lets any logged-in customer download the installer with **no purchase at all** — `GET
+/api/account/downloads/plugin-builds/<id>/trial` generates the same on-demand `.exe`
+(`installer/builder.py::generate_installer_bytes`) but skips the license-key zip wrapper, since
+there's no purchase yet to draw a key from. The trial clock itself isn't started by this download —
+it starts the moment the installed plugin's first `/api/license/activate` call comes in with no
+`licenseKey`, which already fell into the trial-issuing branch before this feature existed (see
+"Licensing" above); the server caps that trial at the product's configured
+`default_trial_days/hours/minutes` (`ProductPurchase.trial_minutes_total`), same clamping logic as
+always, just now precise to the minute instead of only whole days. Once the trial expires the
+already-installed plugin denies access on its own (the activation response's `expiresAt`/
+`remainingSeconds` is what it enforces against) — buying a real license just means entering that key
+directly in the plugin; nothing needs to be re-downloaded.
+
+The legacy-compatible `GET /api/license/products` endpoint still returns `defaultTrialDays` as a
+single whole integer (rounded **up** from the precise day/hour/minute total, so an old plugin
+reading it as a plain int never sees a shorter trial than configured) — that field's shape is part
+of the locked byte-compatible contract and was never going to change; the real to-the-minute value
+only matters to `/api/license/activate`, which already accepted `trialMinutes` before this feature
+and needed no contract change at all.
+
 ## License codes: redeemable, account-connected replacement for the old key files
 
 The upgrade of the legacy installer-generator's manually-issued license keys (which were baked
@@ -232,7 +261,9 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
 - Account: `POST /api/account/licenses/redeem` (redeem a staff-generated license code onto the
   caller's own account — see "License codes" above), `GET /api/account/downloads/plugin-builds/<id>/get`
   (generates the `.exe` live and zips it with the purchaser's license key — see "Auto-generated
-  installers" above).
+  installers" above), `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer,
+  no purchase needed — generates the raw `.exe` with no key zip, gated on `Product.has_trial`; see
+  "Free trials" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped

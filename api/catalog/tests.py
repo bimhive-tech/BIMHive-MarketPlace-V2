@@ -44,6 +44,37 @@ def test_creating_product_creates_activation_sku(category, partner):
     assert sku.is_active is False  # draft products aren't activatable
 
 
+def test_trial_hours_and_minutes_sync_to_the_activation_sku(category, partner):
+    product = Product.objects.create(
+        name="Fine Trial", short_description="s", description="d",
+        category=category, partner=partner, price="10.00", status=ProductStatus.DRAFT,
+        default_trial_days=0, default_trial_hours=3, default_trial_minutes=45,
+    )
+    sku = LicensedProduct.objects.get(code=product.product_code)
+    assert sku.default_trial_hours == 3
+    assert sku.default_trial_minutes == 45
+    assert sku.trial_minutes_total == 225
+
+
+def test_new_product_defaults_to_a_seven_day_trial(category, partner):
+    product = Product.objects.create(
+        name="Default Trial", short_description="s", description="d",
+        category=category, partner=partner, price="10.00",
+    )
+    assert product.default_trial_days == 7
+    assert product.default_trial_hours == 0
+    assert product.has_trial is True
+
+
+def test_a_product_with_zero_trial_length_has_no_trial(category, partner):
+    product = Product.objects.create(
+        name="No Trial", short_description="s", description="d",
+        category=category, partner=partner, price="10.00",
+        default_trial_days=0, default_trial_hours=0, default_trial_minutes=0,
+    )
+    assert product.has_trial is False
+
+
 def test_publishing_product_activates_its_sku(category, partner):
     product = Product.objects.create(
         name="Test Plugin 2", short_description="s", description="d",

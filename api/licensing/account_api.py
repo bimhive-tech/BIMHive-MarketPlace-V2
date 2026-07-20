@@ -266,6 +266,53 @@ class AccountPluginBuildDownloadView(APIView):
         return _zip_installer_bytes_with_license_key(installer_name, installer_bytes, build.product, purchase)
 
 
+class AccountPluginBuildTrialDownloadView(APIView):
+    """No purchase required — any logged-in customer can grab a trial build,
+    as long as the product has a trial configured (Product.has_trial). Unlike
+    the paid download, this streams the raw .exe with no license-key zip —
+    there's no key yet. The plugin's own first `/api/license/activate` call
+    (sent with no licenseKey) falls into the server's trial-issuing branch
+    on its own; nothing about that flow needs to know this came from a
+    trial download specifically."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, build_id):
+        from django.db.models import F
+        from django.http import HttpResponse
+
+        from catalog.models import Product
+        from catalog.models.product import ProductStatus
+        from installer.builder import generate_installer_bytes
+        from installer.models import PluginBuild
+
+        build = (
+            PluginBuild.objects.select_related("product")
+            .filter(pk=build_id, product__status=ProductStatus.PUBLISHED)
+            .first()
+        )
+        if not build:
+            raise ValidationError({"detail": "File not found."})
+        if not build.product.has_trial:
+            raise ValidationError({"detail": "This product doesn't offer a trial."})
+
+        success, log, installer_bytes, installer_name = generate_installer_bytes(build)
+        if not success:
+            raise ValidationError({"detail": "Could not generate the trial installer. Please contact support."})
+
+        log_activity(
+            request.user,
+            ActivityVerb.DOWNLOADED_FILE,
+            target_label=f"{build.product.name} — Trial",
+            metadata={"revit_version": build.revit_year, "trial": True},
+        )
+        Product.objects.filter(pk=build.product_id).update(download_count=F("download_count") + 1)
+
+        response = HttpResponse(installer_bytes, content_type="application/vnd.microsoft.portable-executable")
+        response["Content-Disposition"] = f'attachment; filename="{installer_name}"'
+        return response
+
+
 def _zip_installer_bytes_with_license_key(installer_name, installer_bytes, product, purchase):
     import io
     import zipfile

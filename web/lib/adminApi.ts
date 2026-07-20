@@ -170,6 +170,8 @@ export interface AdminProductDetail {
   price: string;
   download_count: number;
   default_trial_days: number;
+  default_trial_hours: number;
+  default_trial_minutes: number;
   status: string;
   rejection_note: string;
   visibility: string;

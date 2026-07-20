@@ -68,7 +68,9 @@ const EMPTY_FORM = {
   partner: "",
   product_code: "",
   price: "0",
-  default_trial_days: "30",
+  default_trial_days: "7",
+  default_trial_hours: "0",
+  default_trial_minutes: "0",
   status: "published",
   rejection_note: "",
   visibility: "public",
@@ -137,6 +139,8 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           product_code: p.product_code,
           price: p.price,
           default_trial_days: String(p.default_trial_days),
+          default_trial_hours: String(p.default_trial_hours),
+          default_trial_minutes: String(p.default_trial_minutes),
           status: p.status,
           rejection_note: p.rejection_note,
           visibility: p.visibility,
@@ -190,7 +194,9 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       ...(mode === "admin" ? { partner: Number(form.partner) } : {}),
       product_code: form.product_code.trim(),
       price: form.price || "0",
-      default_trial_days: Number(form.default_trial_days) || 30,
+      default_trial_days: Number(form.default_trial_days) || 0,
+      default_trial_hours: Number(form.default_trial_hours) || 0,
+      default_trial_minutes: Number(form.default_trial_minutes) || 0,
       status,
       // Only staff can write this (see validate()); a partner's edits to it
       // are silently ignored server-side, so there's no point sending it.
@@ -502,9 +508,43 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                 </label>
               </div>
               <label className={styles.label}>
-                Default Trial Days
-                <input className={styles.input} type="number" min="0" value={form.default_trial_days} onChange={(e) => set("default_trial_days", e.target.value)} />
-                <span className={styles.hint}>The server caps activation trials at this length.</span>
+                Trial Duration
+                <div className={styles.trialRow}>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    aria-label="Trial days"
+                    value={form.default_trial_days}
+                    onChange={(e) => set("default_trial_days", e.target.value)}
+                    placeholder="Days"
+                  />
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    max="23"
+                    aria-label="Trial hours"
+                    value={form.default_trial_hours}
+                    onChange={(e) => set("default_trial_hours", e.target.value)}
+                    placeholder="Hours"
+                  />
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    max="59"
+                    aria-label="Trial minutes"
+                    value={form.default_trial_minutes}
+                    onChange={(e) => set("default_trial_minutes", e.target.value)}
+                    placeholder="Minutes"
+                  />
+                </div>
+                <span className={styles.hint}>
+                  The server caps activation trials at this length — days, hours, and minutes all add
+                  together. Set everything to 0 to turn off the trial for this product entirely (no
+                  "Download Trial" button on the product page).
+                </span>
               </label>
             </div>
           )}

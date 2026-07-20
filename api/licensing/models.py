@@ -15,6 +15,7 @@ import uuid
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
@@ -37,7 +38,12 @@ class LicensedProduct(models.Model):
     slug = models.SlugField(max_length=160, unique=True, blank=True)
     name = models.CharField(max_length=180)
     revit_year = models.CharField(max_length=16, blank=True)
-    default_trial_days = models.PositiveIntegerField(default=30)
+    # Mirrors catalog.Product's trial fields (kept in sync by
+    # licensing/services.py::sync_license_sku) — this is the copy the
+    # activation endpoint actually reads at request time.
+    default_trial_days = models.PositiveIntegerField(default=7)
+    default_trial_hours = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(23)])
+    default_trial_minutes = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(59)])
     is_active = models.BooleanField(default=True)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=8, default="USD")
@@ -46,6 +52,10 @@ class LicensedProduct(models.Model):
     class Meta:
         db_table = "license_products"
         ordering = ["name", "code"]
+
+    @property
+    def trial_minutes_total(self):
+        return self.default_trial_days * 1440 + self.default_trial_hours * 60 + self.default_trial_minutes
 
     def __str__(self):
         return f"{self.name} [{self.code}]"

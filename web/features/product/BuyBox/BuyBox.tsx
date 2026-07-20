@@ -10,6 +10,7 @@ import { AccountApiError, claimFreeProduct } from "@/lib/accountApi";
 import { me } from "@/lib/auth";
 import { formatPrice } from "@/config/site";
 import { useCart } from "@/lib/cart";
+import { TrialDownloadCard } from "@/features/product/TrialDownloadCard/TrialDownloadCard";
 import type { ProductDetail, User } from "@/lib/types";
 
 import styles from "./BuyBox.module.css";
@@ -136,6 +137,8 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
           Buy Now
         </Button>
       </div>
+
+      {product.has_trial && <TrialDownloadCard product={product} />}
 
       <ul className={styles.assurances}>
         {ASSURANCES.map((a) => (

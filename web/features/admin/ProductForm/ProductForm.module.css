@@ -210,6 +210,12 @@
   gap: var(--space-4);
 }
 
+.trialRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-4);
+}
+
 .features {
   display: flex;
   flex-direction: column;
@@ -508,6 +514,7 @@
     grid-template-columns: 1fr;
   }
   .row,
+  .trialRow,
   .mediaRow,
   .compatRow,
   .changelogRow,

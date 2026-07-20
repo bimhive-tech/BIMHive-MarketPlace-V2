@@ -9,6 +9,7 @@ back here; that keeps the shipped-plugin activation contract intact without a pa
 """
 from decimal import Decimal
 
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
@@ -72,7 +73,19 @@ class Product(TimeStamped):
     currency = models.CharField(max_length=8, default="USD")
 
     # ── Licensing config (activation records live in licensing.LicensedProduct) ──
-    default_trial_days = models.PositiveIntegerField(default=30)
+    # A trial length of 0/0/0 means no trial is offered for this product at all
+    # (see has_trial) — the buy box then skips the "Download Trial" option.
+    default_trial_days = models.PositiveIntegerField(default=7)
+    default_trial_hours = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(23)])
+    default_trial_minutes = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(59)])
+
+    @property
+    def trial_minutes_total(self):
+        return self.default_trial_days * 1440 + self.default_trial_hours * 60 + self.default_trial_minutes
+
+    @property
+    def has_trial(self):
+        return self.trial_minutes_total > 0
 
     # ── Media / meta ──
     # Synced from whichever ProductMedia item is marked "cover" (see

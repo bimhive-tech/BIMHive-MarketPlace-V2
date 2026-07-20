@@ -13,7 +13,7 @@ export type IconName =
   | "database" | "chart" | "share" | "hash" | "layers" | "refresh"
   | "windows" | "globe" | "revit" | "facebook" | "linkedin" | "twitter"
   | "logout" | "trash" | "camera" | "plus" | "edit" | "more-horizontal" | "filter" | "x"
-  | "upload" | "video" | "image" | "grip-vertical" | "wallet" | "copy";
+  | "upload" | "video" | "image" | "grip-vertical" | "wallet" | "copy" | "clock";
 
 /** Each entry is the inner markup of a 24x24 viewBox, stroked. */
 const PATHS: Record<IconName, string> = {
@@ -73,6 +73,7 @@ const PATHS: Record<IconName, string> = {
   "grip-vertical": '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>',
   wallet: '<path d="M4 7a2 2 0 0 1 2-2h11a1 1 0 0 1 0 2H6a1 1 0 0 0 0 2h13a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14" r="1.3"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
 };
 
 interface IconProps {

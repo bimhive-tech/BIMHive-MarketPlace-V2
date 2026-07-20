@@ -18,6 +18,7 @@ from catalog.models import (
     ProductMedia,
     Tag,
 )
+from catalog.models.product import ProductType
 from reviews.models import Review
 
 
@@ -173,18 +174,34 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     reviews = ReviewSerializer(many=True, read_only=True)
     price_label = serializers.CharField(read_only=True)
     is_free = serializers.BooleanField(read_only=True)
+    has_trial = serializers.BooleanField(read_only=True)
     rating_breakdown = serializers.SerializerMethodField()
+    trial_builds = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             "id", "name", "slug", "type", "short_description", "description",
             "price", "currency", "price_label", "is_free",
-            "default_trial_days", "cover_image_url", "version", "released_at",
+            "default_trial_days", "default_trial_hours", "default_trial_minutes", "has_trial",
+            "trial_builds", "cover_image_url", "version", "released_at",
             "rating_average", "rating_count", "download_count", "rating_breakdown",
             "seo_title", "seo_description",
             "category", "partner", "tags", "media", "features", "changelog",
             "compatibility", "documentation", "reviews",
+        ]
+
+    def get_trial_builds(self, obj):
+        # Deferred import — installer/models.py imports catalog.models at
+        # module level, so importing installer up there would be circular.
+        if obj.type != ProductType.PLUGIN or not obj.has_trial:
+            return []
+        from installer.models import PluginBuild
+
+        return [
+            {"id": str(build.id), "revit_year": build.revit_year}
+            for build in PluginBuild.objects.filter(product=obj)
+            if build.is_ready_for_build
         ]
 
     def get_documentation(self, obj):
