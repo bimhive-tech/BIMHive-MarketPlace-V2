@@ -25,26 +25,46 @@ WELCOME_SIZE = (164, 314)
 
 
 def _font(size: int) -> ImageFont.ImageFont:
+    # segoeui.ttf only exists on Windows — Railway's Linux build host never has
+    # it, so this always falls through to load_default() there. Passing
+    # size= (Pillow 10.1+) matters: without it, load_default() silently
+    # ignores the requested size and returns a fixed ~10px stub font, which
+    # made every rendered word tiny enough that the banner/sidebar read as
+    # blank rather than branded.
     try:
         return ImageFont.truetype("segoeui.ttf", size)
     except OSError:
-        return ImageFont.load_default()
+        return ImageFont.load_default(size=size)
 
 
-def _render_header() -> Image.Image:
+def _render_header(plugin_name: str) -> Image.Image:
+    # Mirrors the original WiX Banner.bmp layout 1:1 (just rescaled to NSIS's
+    # fixed 150x57): a thin full-width gold rule across the top, plugin name
+    # + "BIMHive" underneath.
     img = Image.new("RGB", HEADER_SIZE, PAPER)
     draw = ImageDraw.Draw(img)
-    draw.rectangle([0, 0, 4, HEADER_SIZE[1]], fill=BRAND_GOLD)
-    draw.text((16, 18), "BIMHive", fill=BRAND_GOLD_DARK, font=_font(16))
+    draw.rectangle([0, 0, HEADER_SIZE[0], 4], fill=BRAND_GOLD)
+    font = _font(11)
+    name = plugin_name
+    max_width = HEADER_SIZE[0] - 20
+    while draw.textlength(name, font=font) > max_width and len(name) > 1:
+        name = name[:-1]
+    if name != plugin_name:
+        name = name.rstrip() + "…"
+    draw.text((10, 11), name, fill=INK, font=font)
+    draw.text((10, 30), "BIMHive Installer", fill=BRAND_GOLD_DARK, font=_font(9))
     return img
 
 
 def _render_welcome(plugin_name: str) -> Image.Image:
-    img = Image.new("RGB", WELCOME_SIZE, BRAND_GOLD)
+    # Mirrors the original WiX Dialog.bmp layout 1:1 (rescaled to NSIS's
+    # fixed 164x314): paper background, a left gold rule, "BIMHive" title
+    # then the plugin name underneath.
+    img = Image.new("RGB", WELCOME_SIZE, PAPER)
     draw = ImageDraw.Draw(img)
-    draw.rectangle([0, 0, WELCOME_SIZE[0], 96], fill=BRAND_GOLD_DARK)
-    draw.text((18, 34), "BIMHive", fill=PAPER, font=_font(20))
-    _draw_wrapped_text(draw, plugin_name, (18, 116), WELCOME_SIZE[0] - 32, INK, _font(14), line_height=20)
+    draw.rectangle([0, 0, 8, WELCOME_SIZE[1]], fill=BRAND_GOLD)
+    draw.text((24, 28), "BIMHive", fill=BRAND_GOLD_DARK, font=_font(18))
+    _draw_wrapped_text(draw, plugin_name, (24, 60), WELCOME_SIZE[0] - 40, INK, _font(13), line_height=18)
     return img
 
 
@@ -85,6 +105,6 @@ def _render_eula(plugin_name: str, manufacturer: str) -> str:
 def write_branding_assets(staging_dir: Path, plugin_name: str, manufacturer: str) -> None:
     branding_dir = staging_dir / "branding"
     branding_dir.mkdir(parents=True, exist_ok=True)
-    _render_header().save(branding_dir / "Header.bmp", "BMP")
+    _render_header(plugin_name).save(branding_dir / "Header.bmp", "BMP")
     _render_welcome(plugin_name).save(branding_dir / "Welcome.bmp", "BMP")
     (branding_dir / "EULA.txt").write_text(_render_eula(plugin_name, manufacturer), encoding="ascii", errors="replace")
