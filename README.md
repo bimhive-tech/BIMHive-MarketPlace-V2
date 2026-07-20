@@ -72,8 +72,8 @@ design/   brand assets + UI mockups (design source of truth)
 ## Routes (built so far)
 
 **Storefront**: `/` (home), `/catalog` (browse + category filter), `/products/<slug>` (detail).
-**Cart**: `/cart` (real, localStorage-backed), `/checkout` (honest "coming soon" stub — no fake
-payment flow until Stripe/PayPal are wired).
+**Cart**: `/cart` (real, localStorage-backed), `/checkout` (real order review + "Complete Purchase" —
+see "Checkout" below for why there's no card field yet), `/checkout/confirmation` (thank-you page).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
 **Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses` (license
 keys, bound machines, a seat-usage indicator when a purchase allows more than one machine — each
@@ -174,14 +174,36 @@ below) — whichever fits.
 
 A single `ProductPurchase` can allow more than one machine via `seats` (`ProductPurchase.seats`,
 default 1) — buying "3 licenses" of a product means 3 machines can each claim one seat, not 3
-separate downloads or 3 purchase rows. `ProductPurchase.has_seat_for()` is the check: an
-already-claimed machine always re-validates fine (a plugin restart doesn't cost a seat), a new
-machine only claims a seat if fewer than `seats` are currently held. `ProductPurchase.license_status`
-(`active` / `inactive` / `expired`) is the simplified customer-facing label — `payment_status` has
-more states than a buyer needs to reason about. There's no checkout flow yet (see the Orders admin
-page), so today `seats` is set by staff via the users icon button on `/admin-portal/orders` — once
-real checkout exists, a quantity-N purchase should set this field directly instead of creating N
-separate purchase rows.
+separate downloads or 3 purchase rows (checkout, below, enforces this directly: buying qty=3 of one
+product in one cart sets `seats=3` on a single purchase, never three). `ProductPurchase.has_seat_for()`
+is the check: an already-claimed machine always re-validates fine (a plugin restart doesn't cost a
+seat), a new machine only claims a seat if fewer than `seats` are currently held.
+`ProductPurchase.license_status` (`active` / `inactive` / `expired`) is the simplified customer-facing
+label shown on `/account/licenses` — `payment_status` has more states than a buyer needs to reason
+about. Staff can still override `seats` directly via the users icon button on `/admin-portal/orders`
+(e.g. to comp extra seats without a real purchase).
+
+## Checkout: real purchase flow, no payment processor connected yet
+
+`POST /api/account/checkout` (`CheckoutView`) takes the client-side cart (`web/lib/cart.tsx` — real,
+localStorage-backed, never had server state) and turns it into real `ProductPurchase` rows: `PAID`,
+no card collected. This is the same honest trade-off `ClaimFreeProductView` already made for
+free-only products (see the account API notes there), just extended to any price — Stripe/PayPal
+aren't wired up yet, so this is what actually completing a purchase means today, and it's the
+only way to exercise the full buy → license → download path with a real (non-free, non-staff)
+purchase for testing.
+
+One purchase per distinct product, never one-per-unit — buying qty=3 of the same product in one
+cart sets that single purchase's `seats` to 3 (`amount` = unit price × 3), matching how seats work
+everywhere else in this project (see "Licensing" above); `ProductPurchase`'s
+`unique_together(user, product)` enforces this at the DB level regardless. Checking out a product
+you already own updates its seats/amount in place rather than erroring, so re-testing stays easy.
+`/checkout` shows an order summary with a visible "no payment processor" notice and a single
+Complete Purchase button; `/checkout/confirmation` is the thank-you page, reading the just-completed
+order out of `sessionStorage` (there's no server-side "current order" to fetch — the confirmation
+data is handed off client-side at the moment of purchase). When Stripe/PayPal are actually wired up,
+this view is exactly where real payment collection needs to be inserted before the
+`ProductPurchase` is created.
 
 ## Free trials: configurable per product, download without buying
 
@@ -258,12 +280,13 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   `?product=`/`?status=`), `POST /api/admin/license-codes/<id>/revoke` (only while unredeemed).
   `POST /api/admin/licenses/<id>/release` (staff-only: frees one machine's seat so a different
   machine can claim it — the manual override for a customer whose PC died; see "Licensing" above).
-- Account: `POST /api/account/licenses/redeem` (redeem a staff-generated license code onto the
-  caller's own account — see "License codes" above), `GET /api/account/downloads/plugin-builds/<id>/get`
-  (generates the `.exe` live and zips it with the purchaser's license key — see "Auto-generated
-  installers" above), `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer,
-  no purchase needed — generates the raw `.exe` with no key zip, gated on `Product.has_trial`; see
-  "Free trials" above).
+- Account: `POST /api/account/checkout` (turns the client-side cart into real `ProductPurchase` rows —
+  no payment collected, see "Checkout" above), `POST /api/account/licenses/redeem` (redeem a
+  staff-generated license code onto the caller's own account — see "License codes" above),
+  `GET /api/account/downloads/plugin-builds/<id>/get` (generates the `.exe` live and zips it with the
+  purchaser's license key — see "Auto-generated installers" above),
+  `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer, no purchase needed —
+  generates the raw `.exe` with no key zip, gated on `Product.has_trial`; see "Free trials" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped

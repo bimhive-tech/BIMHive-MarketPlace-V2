@@ -48,6 +48,7 @@ export interface AccountOrder {
   currency: string;
   payment_status: string;
   license_key: string;
+  seats: number;
   requested_at: string;
   paid_at: string | null;
 }
@@ -110,6 +111,13 @@ async function writeJSON<T>(path: string, method: string, body?: unknown): Promi
 const postJSON = <T>(path: string, body: unknown) => writeJSON<T>(path, "POST", body);
 
 export const claimFreeProduct = (slug: string) => postJSON<AccountOrder>("/api/account/claim-free", { slug });
+
+export interface CheckoutItem {
+  slug: string;
+  qty: number;
+}
+export const checkout = (items: CheckoutItem[]) =>
+  postJSON<{ purchases: AccountOrder[] }>("/api/account/checkout", { items });
 
 export interface ReviewSubmission {
   rating: number;

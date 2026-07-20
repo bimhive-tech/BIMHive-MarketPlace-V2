@@ -23,7 +23,7 @@ class AccountOrderSerializer(serializers.ModelSerializer):
         model = ProductPurchase
         fields = [
             "id", "product_name", "product_code", "amount", "currency", "payment_status",
-            "license_key", "requested_at", "paid_at",
+            "license_key", "seats", "requested_at", "paid_at",
         ]
 
 
@@ -381,3 +381,87 @@ class ClaimFreeProductView(APIView):
             log_activity(request.user, ActivityVerb.CLAIMED_FREE_PRODUCT, target_label=product.name)
         status_code = 201 if created else 200
         return Response(AccountOrderSerializer(purchase).data, status=status_code)
+
+
+class CheckoutView(APIView):
+    """
+    Turns a cart (client-supplied, since the cart itself is localStorage-only —
+    see web/lib/cart.tsx) into real ProductPurchase rows. No payment is
+    collected: Stripe/PayPal aren't wired up yet, so this is the honest
+    interim behavior for testing the purchase → license flow end to end,
+    the same trade-off ClaimFreeProductView already makes for free products,
+    just extended to any price.
+
+    One purchase per distinct product, never one-per-unit: buying qty=3 of
+    the same product sets that single purchase's `seats` to 3 rather than
+    creating three separate purchases/keys — ProductPurchase's
+    unique_together(user, product) enforces this at the DB level too, and
+    it matches how seats already work everywhere else (see
+    ProductPurchase.has_seat_for). Re-checking out a product you already
+    own updates its seats/amount instead of erroring, so this stays
+    convenient to use repeatedly while testing.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.db import transaction
+
+        from catalog.models import Product
+
+        raw_items = request.data.get("items")
+        if not isinstance(raw_items, list) or not raw_items:
+            raise ValidationError({"items": "Your cart is empty."})
+
+        qty_by_slug: dict[str, int] = {}
+        for entry in raw_items:
+            slug = (entry or {}).get("slug")
+            if not slug:
+                raise ValidationError({"items": "Each cart item needs a slug."})
+            try:
+                qty = int(entry.get("qty") or 1)
+            except (TypeError, ValueError):
+                raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
+            if qty < 1:
+                raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
+            qty_by_slug[slug] = qty_by_slug.get(slug, 0) + qty
+
+        resolved: list[tuple[Product, LicensedProduct, int]] = []
+        for slug, qty in qty_by_slug.items():
+            product = Product.objects.published().filter(slug=slug).first()
+            if not product:
+                raise ValidationError({"items": f"'{slug}' isn't available to purchase right now."})
+            sku = LicensedProduct.objects.filter(product=product).first()
+            if not sku:
+                raise ValidationError({"items": f"'{product.name}' isn't ready to purchase yet — try again shortly."})
+            resolved.append((product, sku, qty))
+
+        purchases = []
+        with transaction.atomic():
+            for product, sku, qty in resolved:
+                purchase, created = ProductPurchase.objects.get_or_create(
+                    user=request.user,
+                    product=sku,
+                    defaults={
+                        "payment_status": ProductPurchase.PaymentStatus.PAID,
+                        "seats": qty,
+                        "amount": product.price * qty,
+                        "currency": product.currency,
+                        "payment_reference": "test-checkout-no-payment-processor",
+                    },
+                )
+                if not created:
+                    purchase.payment_status = ProductPurchase.PaymentStatus.PAID
+                    purchase.seats = qty
+                    purchase.amount = product.price * qty
+                    purchase.payment_reference = "test-checkout-no-payment-processor"
+                    purchase.save(update_fields=["payment_status", "seats", "amount", "payment_reference", "updated_at"])
+                purchases.append(purchase)
+
+        log_activity(
+            request.user,
+            ActivityVerb.ORDER_PLACED,
+            target_label=", ".join(p.product.name for p in purchases),
+            metadata={"item_count": len(purchases), "no_payment_processor": True},
+        )
+        return Response({"purchases": AccountOrderSerializer(purchases, many=True).data}, status=201)

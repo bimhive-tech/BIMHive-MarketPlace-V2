@@ -8,11 +8,13 @@ from licensing.account_api import (
     AccountOrderListView,
     AccountPluginBuildDownloadView,
     AccountPluginBuildTrialDownloadView,
+    CheckoutView,
     ClaimFreeProductView,
     RedeemLicenseCodeView,
 )
 
 urlpatterns = [
+    path("checkout", CheckoutView.as_view(), name="account-checkout"),
     path("orders", AccountOrderListView.as_view(), name="account-orders"),
     path("licenses", AccountLicenseListView.as_view(), name="account-licenses"),
     path("licenses/redeem", RedeemLicenseCodeView.as_view(), name="account-license-redeem"),
