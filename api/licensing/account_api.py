@@ -215,7 +215,16 @@ class AccountDownloadSerializer(serializers.ModelSerializer):
 
 
 class AccountDownloadListView(generics.ListAPIView):
-    """Only paid purchases grant downloads — this is the entitlement gate."""
+    """Only paid purchases grant downloads — this is the entitlement gate.
+
+    One card per distinct product, never one per purchase: a customer
+    holding several independent keys for the same product (see
+    CheckoutView — one key per seat) still only has one set of files to
+    download, since the .exe/ProductFile itself carries no per-purchase
+    data. `distinct("product__product_id")` (Postgres DISTINCT ON) picks
+    one representative purchase per product — which purchase doesn't
+    matter, get_files() below only ever reads the shared catalog product
+    off it, never anything purchase-specific."""
 
     permission_classes = [IsAuthenticated]
     serializer_class = AccountDownloadSerializer
@@ -227,7 +236,8 @@ class AccountDownloadListView(generics.ListAPIView):
             )
             .select_related("product", "product__product")
             .prefetch_related("product__product__files")
-            .order_by("-paid_at")
+            .order_by("product__product_id", "-paid_at")
+            .distinct("product__product_id")
         )
 
 

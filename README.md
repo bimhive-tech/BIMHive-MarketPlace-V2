@@ -203,7 +203,12 @@ none of the three keys are tied to each other. (This flipped from an earlier ver
 a qty=3 buy into one purchase with `seats=3` — dropped once it became clear that isn't what "3
 copies" should mean to a customer holding 3 separate keys; `ProductPurchase` no longer has a
 `unique_together(user, product)` constraint, since holding several independent keys for the same
-product is now the normal case, not an edge case.) Checking out a product you already own just adds
+product is now the normal case, not an edge case.) `/account/orders` and `/account/licenses`
+correctly show one row/card per purchase (N keys for N copies) — but **`/account/downloads` still
+shows exactly one card per distinct product no matter how many keys you hold for it**
+(`AccountDownloadListView` dedupes with `distinct("product__product_id")`), since the files
+themselves carry no per-purchase data and there's nothing to gain from listing the same download
+link twice. Checking out a product you already own just adds
 more purchases/keys — it never edits an existing one. `/checkout` shows an order summary with a
 visible "no payment processor" notice and a single Complete Purchase button; `/checkout/confirmation`
 is the thank-you page, listing every key from the order (reading the just-completed order out of

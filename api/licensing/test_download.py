@@ -45,6 +45,23 @@ def buyer_client(category):
     return client, product, purchase
 
 
+def test_downloads_list_shows_one_card_per_product_not_per_purchase(buyer_client):
+    """Buying 2 copies of the same product (one key per seat, see
+    test_checkout.py) must not duplicate the whole downloads card — there's
+    still only one set of files to download, regardless of how many keys
+    the customer holds for that product."""
+    client, product, purchase = buyer_client
+    sku = purchase.product
+    ProductPurchase.objects.create(user=purchase.user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID)
+
+    resp = client.get("/api/account/downloads")
+
+    assert resp.status_code == 200
+    entries = resp.json()
+    assert len(entries) == 1
+    assert entries[0]["product_name"] == product.name
+
+
 # Real NSIS invocation, same no-mocking philosophy as test_builder.py.
 def test_plugin_build_download_streams_a_bare_exe_with_no_key_attached(buyer_client):
     client, product, purchase = buyer_client
