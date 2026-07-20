@@ -172,18 +172,19 @@ customer's machine dies, staff resolve it by hand on `/admin-portal/licenses` �
 `licensing/services.py::release_machine_binding`) or generating them a fresh License Code (see
 below) — whichever fits.
 
-A single `ProductPurchase` can allow more than one machine via `seats` (`ProductPurchase.seats`,
-default 1) — buying "3 licenses" of a product means 3 machines can each claim one seat, not 3
-separate downloads or 3 purchase rows (checkout, below, enforces this directly: buying qty=3 of one
-product in one cart sets `seats=3` on a single purchase, never three). `ProductPurchase.has_seat_for()`
-is the check: an already-claimed machine always re-validates fine (a plugin restart doesn't cost a
-seat), a new machine only claims a seat if fewer than `seats` are currently held.
-`ProductPurchase.license_status` (`active` / `inactive` / `expired`) is the simplified customer-facing
-label shown on `/account/licenses` — `payment_status` has more states than a buyer needs to reason
-about. Staff can still override `seats` directly via the users icon button on `/admin-portal/orders`
-(e.g. to comp extra seats without a real purchase).
+`ProductPurchase.seats` (default 1) lets a *single key* be claimed by more than one machine at
+once — this is a staff-only override (via the users icon button on `/admin-portal/orders`, e.g. to
+comp extra machines onto one key without a real purchase) and is unrelated to how many copies
+someone buys. Buying multiple copies is a different mechanism entirely — see "Checkout" below:
+each copy bought is its own independent `ProductPurchase`/key, seats=1 each, not one key shared
+across seats. `ProductPurchase.has_seat_for()` is still the activation check regardless of which
+path set `seats`: an already-claimed machine always re-validates fine (a plugin restart doesn't
+cost a seat), a new machine only claims a seat if fewer than `seats` are currently held.
+`ProductPurchase.license_status` (`active` / `inactive` / `expired`) is the simplified
+customer-facing label shown on `/account/licenses` — `payment_status` has more states than a buyer
+needs to reason about.
 
-## Checkout: real purchase flow, no payment processor connected yet
+## Checkout: real purchase flow, one key per copy, no payment processor connected yet
 
 `POST /api/account/checkout` (`CheckoutView`) takes the client-side cart (`web/lib/cart.tsx` — real,
 localStorage-backed, never had server state) and turns it into real `ProductPurchase` rows: `PAID`,
@@ -193,17 +194,21 @@ aren't wired up yet, so this is what actually completing a purchase means today,
 only way to exercise the full buy → license → download path with a real (non-free, non-staff)
 purchase for testing.
 
-One purchase per distinct product, never one-per-unit — buying qty=3 of the same product in one
-cart sets that single purchase's `seats` to 3 (`amount` = unit price × 3), matching how seats work
-everywhere else in this project (see "Licensing" above); `ProductPurchase`'s
-`unique_together(user, product)` enforces this at the DB level regardless. Checking out a product
-you already own updates its seats/amount in place rather than erroring, so re-testing stays easy.
-`/checkout` shows an order summary with a visible "no payment processor" notice and a single
-Complete Purchase button; `/checkout/confirmation` is the thank-you page, reading the just-completed
-order out of `sessionStorage` (there's no server-side "current order" to fetch — the confirmation
-data is handed off client-side at the moment of purchase). When Stripe/PayPal are actually wired up,
-this view is exactly where real payment collection needs to be inserted before the
-`ProductPurchase` is created.
+**One purchase per unit bought, never one purchase covering a quantity** — buying qty=3 of the same
+product in one cart creates three independent `ProductPurchase` rows, each its own `license_key`,
+each `seats=1`, `amount` = unit price. One key per seat: each copy activates its own machine, and
+none of the three keys are tied to each other. (This flipped from an earlier version that collapsed
+a qty=3 buy into one purchase with `seats=3` — dropped once it became clear that isn't what "3
+copies" should mean to a customer holding 3 separate keys; `ProductPurchase` no longer has a
+`unique_together(user, product)` constraint, since holding several independent keys for the same
+product is now the normal case, not an edge case.) Checking out a product you already own just adds
+more purchases/keys — it never edits an existing one. `/checkout` shows an order summary with a
+visible "no payment processor" notice and a single Complete Purchase button; `/checkout/confirmation`
+is the thank-you page, listing every key from the order (reading the just-completed order out of
+`sessionStorage`, since there's no server-side "current order" to fetch — the confirmation data is
+handed off client-side at the moment of purchase). When Stripe/PayPal are actually wired up, this
+view is exactly where real payment collection needs to be inserted before the `ProductPurchase`
+rows are created.
 
 ## Free trials: configurable per product, download without buying
 

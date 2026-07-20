@@ -2,10 +2,9 @@
 Test checkout — no payment processor connected yet, so this is the honest
 interim way to turn a cart into real ProductPurchase rows (see
 licensing/account_api.py::CheckoutView). The main behavior worth locking in:
-buying multiple units of the SAME product collapses into one purchase with
-seats set, never multiple purchases/keys — that's the whole point of the
-seat model (see [[multi-seat-licensing]] equivalent reasoning in
-licensing/models.py::ProductPurchase.has_seat_for).
+one purchase per unit bought — buying qty=3 of the same product creates
+three independent purchases, each its own license_key, seats=1. One key
+per seat, deliberately, so each copy activates its own machine.
 """
 import pytest
 from django.contrib.auth import get_user_model
@@ -54,35 +53,37 @@ def _checkout(client, items):
     return client.post("/api/account/checkout", data={"items": items}, content_type="application/json")
 
 
-def test_buying_three_of_the_same_product_creates_one_purchase_with_three_seats(buyer_client, product):
+def test_buying_three_of_the_same_product_creates_three_separate_keys(buyer_client, product):
     client, user = buyer_client
     resp = _checkout(client, [{"slug": product.slug, "qty": 3}])
     assert resp.status_code == 201, resp.json()
 
-    purchases = ProductPurchase.objects.filter(user=user, product__product=product)
-    assert purchases.count() == 1
-    purchase = purchases.get()
-    assert purchase.seats == 3
-    assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
-    assert str(purchase.amount) == "147.00"  # 49.00 * 3
+    purchases = list(ProductPurchase.objects.filter(user=user, product__product=product))
+    assert len(purchases) == 3
+    assert len({p.license_key for p in purchases}) == 3  # every key is distinct
+    for purchase in purchases:
+        assert purchase.seats == 1
+        assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
+        assert str(purchase.amount) == "49.00"  # unit price, not qty * price
 
 
-def test_checkout_creates_one_purchase_per_distinct_product(buyer_client, product, second_product):
+def test_checkout_creates_one_purchase_per_unit_across_distinct_products(buyer_client, product, second_product):
     client, user = buyer_client
     resp = _checkout(client, [{"slug": product.slug, "qty": 1}, {"slug": second_product.slug, "qty": 2}])
     assert resp.status_code == 201, resp.json()
-    assert ProductPurchase.objects.filter(user=user).count() == 2
+    assert ProductPurchase.objects.filter(user=user, product__product=product).count() == 1
+    assert ProductPurchase.objects.filter(user=user, product__product=second_product).count() == 2
 
 
-def test_checking_out_again_updates_seats_instead_of_erroring(buyer_client, product):
+def test_checking_out_again_adds_more_separate_purchases(buyer_client, product):
     client, user = buyer_client
     _checkout(client, [{"slug": product.slug, "qty": 1}])
-    resp = _checkout(client, [{"slug": product.slug, "qty": 5}])
+    resp = _checkout(client, [{"slug": product.slug, "qty": 2}])
     assert resp.status_code == 201, resp.json()
 
-    purchases = ProductPurchase.objects.filter(user=user, product__product=product)
-    assert purchases.count() == 1
-    assert purchases.get().seats == 5
+    purchases = list(ProductPurchase.objects.filter(user=user, product__product=product))
+    assert len(purchases) == 3  # 1 from the first checkout + 2 from the second
+    assert len({p.license_key for p in purchases}) == 3
 
 
 def test_checkout_requires_login(product):

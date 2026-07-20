@@ -392,14 +392,16 @@ class CheckoutView(APIView):
     the same trade-off ClaimFreeProductView already makes for free products,
     just extended to any price.
 
-    One purchase per distinct product, never one-per-unit: buying qty=3 of
-    the same product sets that single purchase's `seats` to 3 rather than
-    creating three separate purchases/keys — ProductPurchase's
-    unique_together(user, product) enforces this at the DB level too, and
-    it matches how seats already work everywhere else (see
-    ProductPurchase.has_seat_for). Re-checking out a product you already
-    own updates its seats/amount instead of erroring, so this stays
-    convenient to use repeatedly while testing.
+    One purchase per unit bought, never one purchase covering a quantity:
+    buying qty=3 of the same product creates three independent
+    ProductPurchase rows, each its own license_key and seats=1 — one key
+    per seat, so each copy activates its own machine and none of them are
+    tied together. (Earlier this shipped as a single purchase with
+    seats=3 instead; that's gone — ProductPurchase no longer has a
+    unique_together(user, product) constraint, since a customer holding
+    several independent keys for the same product is now the normal case.)
+    Every checkout call creates fresh purchases/keys — re-checking out a
+    product you already own just adds more, it never edits an existing one.
     """
 
     permission_classes = [IsAuthenticated]
@@ -439,24 +441,18 @@ class CheckoutView(APIView):
         purchases = []
         with transaction.atomic():
             for product, sku, qty in resolved:
-                purchase, created = ProductPurchase.objects.get_or_create(
-                    user=request.user,
-                    product=sku,
-                    defaults={
-                        "payment_status": ProductPurchase.PaymentStatus.PAID,
-                        "seats": qty,
-                        "amount": product.price * qty,
-                        "currency": product.currency,
-                        "payment_reference": "test-checkout-no-payment-processor",
-                    },
-                )
-                if not created:
-                    purchase.payment_status = ProductPurchase.PaymentStatus.PAID
-                    purchase.seats = qty
-                    purchase.amount = product.price * qty
-                    purchase.payment_reference = "test-checkout-no-payment-processor"
-                    purchase.save(update_fields=["payment_status", "seats", "amount", "payment_reference", "updated_at"])
-                purchases.append(purchase)
+                for _ in range(qty):
+                    purchases.append(
+                        ProductPurchase.objects.create(
+                            user=request.user,
+                            product=sku,
+                            payment_status=ProductPurchase.PaymentStatus.PAID,
+                            seats=1,
+                            amount=product.price,
+                            currency=product.currency,
+                            payment_reference="test-checkout-no-payment-processor",
+                        )
+                    )
 
         log_activity(
             request.user,

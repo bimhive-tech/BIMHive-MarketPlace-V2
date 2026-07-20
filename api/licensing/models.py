@@ -91,10 +91,12 @@ class ProductPurchase(models.Model):
     payment_status = models.CharField(
         max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING, db_index=True
     )
-    # How many machines this one purchase may have bound at once (a "buy 3
-    # licenses" checkout sets this to 3 instead of creating 3 separate
-    # purchase rows — see ProductPurchase.available_seats and
-    # licensing/api_views.py's activation seat check).
+    # How many machines this one purchase/key may have bound at once. Checkout
+    # always creates one purchase per unit bought now (a "buy 3 copies" order
+    # is 3 separate purchases/keys, each seats=1 — see CheckoutView) so this
+    # stays at the default for anything a customer buys themselves; it exists
+    # for staff to grant a single key extra capacity by hand (see
+    # AdminOrderSeatsView) without that being the normal checkout path.
     seats = models.PositiveIntegerField(default=1)
     # Null = perpetual (the default for a normal purchase). Set when this
     # purchase came from a time-limited LicenseCode redemption — the whole
@@ -115,11 +117,10 @@ class ProductPurchase(models.Model):
     class Meta:
         db_table = "license_purchases"
         ordering = ["-requested_at", "-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "product"], name="unique_product_purchase_per_user"
-            )
-        ]
+        # No longer unique per (user, product): a customer can hold more than
+        # one independent key for the same product — one purchase per seat
+        # bought, each with its own license_key (which IS still globally
+        # unique, see above) — see CheckoutView.
 
     def __str__(self):
         return f"{self.user} -> {self.product.code} ({self.payment_status})"
