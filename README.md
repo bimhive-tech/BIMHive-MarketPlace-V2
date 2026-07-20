@@ -177,10 +177,24 @@ Every installer build wraps the real plugin with it, transparently, at packaging
    dialog with a text box for the key — **this is where the customer actually types the key** they
    copied from `/account/licenses`. A successful key gets cached to
    `%APPDATA%\BIMHive\Licenses\<productCode>.key` so it's not re-typed on every launch.
+5. If a fresh/ongoing trial is granted instead (server-side, no key needed — see below), LicLoader
+   tells the customer so directly with a "your trial is active, N remaining" notice, since that path
+   never shows the key dialog at all otherwise. A "License Key" button LicLoader adds to its own
+   Ribbon tab lets the customer open that same key-entry dialog voluntarily at any time — e.g. to
+   upgrade from a trial to a paid key — without needing to be denied first or restart Revit.
 
 Rewriting a `.addin` that doesn't parse as a normal Revit manifest fails the build loudly
 (`AddinRewriteError` → `BuildError`) rather than silently shipping the real plugin unwrapped and
 unprotected.
+
+**Staff/partner test-downloads are exempt.** `GET /api/admin/plugin-builds/<id>/download` (the
+products list's "..." menu — testing a build before it's published, or without a real purchase)
+calls `generate_installer_bytes(build, protect_with_license=False)`, which skips the shim entirely
+and ships the plain, unwrapped plugin — the same as before LicLoader existed. This is deliberate,
+not a leftover gap: the online license check requires the product to actually be published
+(`LicensedProduct.is_active`, see below), which would make it impossible to test-install a build on
+a draft product — exactly the case this endpoint exists for. Only customer-facing downloads
+(`/account/downloads`, trial downloads) are ever license-protected.
 
 ## Licensing: single-use seats, not hardware-locked
 

@@ -1,10 +1,13 @@
 # LicLoader.dll
 
-A prebuilt binary, not source we own in this repo. It's the activation shim every generated
-installer wraps the real plugin with (see `installer/license_shim.py` and
-`installer/builder.py::generate_installer_bytes`) — Revit loads `LicLoader.dll` first, it calls
-`/api/license/activate`, shows a real "enter your license key" dialog if needed, and only then
-loads the actual plugin `.dll` via reflection.
+A prebuilt binary, not source we own in this repo. It's the activation shim every
+*customer-facing* installer wraps the real plugin with (see `installer/license_shim.py` and
+`installer/builder.py::generate_installer_bytes` — staff/partner test-downloads pass
+`protect_with_license=False` and skip it entirely, since that path must work on unpublished draft
+products) — Revit loads `LicLoader.dll` first, it calls `/api/license/activate`, shows a real
+"enter your license key" dialog if needed (also reachable anytime via a "License Key" button
+LicLoader adds to its own Ribbon tab), and only then loads the actual plugin `.dll` via reflection.
+A successful trial grant shows a one-time "trial active, N remaining" notice.
 
 **Source lives outside this repo**, in a separate .NET Framework 4.8 / Revit API project:
 `E:\Eng. Youssef Sami\Installer Generator 3\Installer Generator 2\InstallerGenerator\LoaderShim\`

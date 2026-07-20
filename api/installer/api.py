@@ -195,7 +195,10 @@ class PluginBuildDownloadView(APIView):
     """GET /api/admin/plugin-builds/<id>/download — generates the .exe live
     and streams it back directly. Nothing is cached or persisted — this is
     staff/partner's way to test a build (including on an unpublished draft
-    product) without a real purchase, and every click is a fresh build."""
+    product) without a real purchase, and every click is a fresh build.
+    Deliberately skips the LicLoader wrap (protect_with_license=False) — the
+    online license check requires the product to be published, which would
+    defeat the entire point of testing a build before it goes live."""
 
     permission_classes = [IsStaffOrPartner]
 
@@ -203,7 +206,7 @@ class PluginBuildDownloadView(APIView):
         from django.http import HttpResponse
 
         build = get_object_or_404(_build_queryset(request), pk=pk)
-        success, log, installer_bytes, installer_name = generate_installer_bytes(build)
+        success, log, installer_bytes, installer_name = generate_installer_bytes(build, protect_with_license=False)
         if not success:
             raise ValidationError({"detail": log})
         response = HttpResponse(installer_bytes, content_type="application/vnd.microsoft.portable-executable")

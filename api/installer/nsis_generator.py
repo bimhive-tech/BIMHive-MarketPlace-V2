@@ -53,7 +53,7 @@ def _dest_dir(root: str, folder_segments: list[str]) -> str:
     return "\\".join([root, *folder_segments]) if folder_segments else root
 
 
-def generate_nsis_script(build, resource_files) -> tuple[str, list[str]]:
+def generate_nsis_script(build, resource_files, protect_with_license: bool = True) -> tuple[str, list[str]]:
     """Returns (nsi_script_source, list_of_staging_relative_payload_paths)
     — the caller stages files at those relative paths (forward slashes,
     resolved from the staging dir) before invoking `makensis`.
@@ -61,7 +61,12 @@ def generate_nsis_script(build, resource_files) -> tuple[str, list[str]]:
     Every value that can contain arbitrary partner input (product name,
     plugin version) goes through _nsis_str() before landing inside a
     quoted literal, the NSIS equivalent of the WiX generator's quoteattr()
-    discipline — never a bare f-string straight into a "..." literal."""
+    discipline — never a bare f-string straight into a "..." literal.
+
+    `protect_with_license=False` (staff/partner test downloads only) omits
+    the LicLoader shim files — must match what installer/builder.py's
+    _stage_payload actually staged, or `File` would reference paths that
+    don't exist."""
     scope = resolve_scope(resource_files)
     plugin_name = build.product.name
     manufacturer = settings.INSTALLER_MANUFACTURER
@@ -79,25 +84,26 @@ def generate_nsis_script(build, resource_files) -> tuple[str, list[str]]:
     dll_source = f"payload\\{build.dll_filename}"
     payload_paths.append(f"payload/{build.addin_filename}")
     payload_paths.append(f"payload/{build.dll_filename}")
-    payload_paths.append(f"payload/{SHIM_DLL_NAME}")
-    payload_paths.append("payload/_real_plugin.txt")
-    payload_paths.append("payload/_license.bin")
 
     install_lines = [
         f'SetOutPath "{addin_dir}"',
-        # The .addin here has already been rewritten (see
-        # installer/license_shim.py::rewrite_addin_for_shim) to point Revit
-        # at LicLoader.dll instead of the real plugin — these five files
-        # all have to land in this exact same folder for that to work:
-        # LicLoader reads _real_plugin.txt/_license.bin as siblings of
-        # itself, and loads the real plugin (still present, just no longer
-        # Revit's direct entry point) by that filename via reflection.
         f'File "{addin_source}"',
         f'File "{dll_source}"',
-        f'File "payload\\{SHIM_DLL_NAME}"',
-        'File "payload\\_real_plugin.txt"',
-        'File "payload\\_license.bin"',
     ]
+    if protect_with_license:
+        payload_paths.append(f"payload/{SHIM_DLL_NAME}")
+        payload_paths.append("payload/_real_plugin.txt")
+        payload_paths.append("payload/_license.bin")
+        # The .addin here has already been rewritten (see
+        # installer/license_shim.py::rewrite_addin_for_shim) to point Revit
+        # at LicLoader.dll instead of the real plugin — these three extra
+        # files all have to land in this exact same folder for that to
+        # work: LicLoader reads _real_plugin.txt/_license.bin as siblings
+        # of itself, and loads the real plugin (still present, just no
+        # longer Revit's direct entry point) by that filename via reflection.
+        install_lines.append(f'File "payload\\{SHIM_DLL_NAME}"')
+        install_lines.append('File "payload\\_real_plugin.txt"')
+        install_lines.append('File "payload\\_license.bin"')
     uninstall_dirs = [addin_dir]
 
     for index, resource in enumerate(resource_files):

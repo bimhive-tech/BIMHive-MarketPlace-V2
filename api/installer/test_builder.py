@@ -89,6 +89,26 @@ def test_staging_wraps_the_addin_with_the_license_shim(product, tmp_path):
     assert "Plugin.dll" not in rewritten_addin  # the real assembly reference is gone, not just supplemented
 
 
+def test_staging_without_license_protection_leaves_the_real_addin_untouched(product, tmp_path):
+    """Staff/partner test-downloads (installer/api.py::PluginBuildDownloadView)
+    pass protect_with_license=False so testing an unpublished draft product
+    still works — the online license check requires the product to be
+    published, which would otherwise block every pre-publish test build."""
+    from installer.builder import _stage_payload
+    from installer.license_shim import SHIM_DLL_NAME
+
+    build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
+    _stage_dll_and_addin(build)
+
+    _stage_payload(build, tmp_path, protect_with_license=False)
+    payload_dir = tmp_path / "payload"
+
+    assert not (payload_dir / SHIM_DLL_NAME).exists()
+    assert not (payload_dir / "_real_plugin.txt").exists()
+    assert not (payload_dir / "_license.bin").exists()
+    assert (payload_dir / build.addin_filename).read_bytes() == SAMPLE_ADDIN_XML
+
+
 def test_staging_fails_loudly_on_an_unparseable_addin(product, tmp_path):
     from installer.builder import _stage_payload
 
