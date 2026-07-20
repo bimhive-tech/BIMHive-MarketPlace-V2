@@ -212,6 +212,27 @@ handed off client-side at the moment of purchase). When Stripe/PayPal are actual
 view is exactly where real payment collection needs to be inserted before the `ProductPurchase`
 rows are created.
 
+## Cancel / refund: self-service, 30-day window, abuse-proof by construction
+
+`POST /api/account/orders/<id>/refund` (`AccountOrderRefundView`) is the self-service side of the
+"30-Day Money Back Guarantee" the buy box has always advertised — until this shipped, that copy had
+no mechanism behind it. Scoped to the caller's own order, only while `payment_status == "paid"`, and
+only within `REFUND_WINDOW_DAYS` (30) of `paid_at`; past that it's a clear "contact support" error
+instead of silently failing. Reuses `licensing/services.py::revoke_purchase_access` — the exact same
+function staff use from `/admin-portal/orders` — so a self-service refund and a staff-issued one
+behave identically. The **Cancel & Refund** button lives on `/account/orders`, next to each
+refund-eligible order.
+
+**Why refunding can't be used to farm a second free trial on the same machine — deliberately not new
+code, just a consequence of how activation already worked:** `revoke_purchase_access` never deletes
+the `MachineLicense` row for a machine that had activated, it only changes its `status` and expires
+it. `/api/license/activate` only ever issues a trial (`status: "active"`, a fresh `expiresAt`) when
+**no** `MachineLicense` row exists yet for that `(product, machine)` pair. Once any machine has
+activated at all — trial or paid — that row exists forever, so a later refund just leaves it
+pointing at an inactive purchase: the next activation call from that same machine is denied
+(`status: "cancelled"`), never handed a new trial. A genuinely different machine is unaffected and
+still gets its own first trial normally — the block is per-machine, not per-account or per-product.
+
 ## Free trials: configurable per product, download without buying
 
 Each plugin product has a trial length set on its **Pricing & License** tab as days + hours +
@@ -288,7 +309,9 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   `POST /api/admin/licenses/<id>/release` (staff-only: frees one machine's seat so a different
   machine can claim it — the manual override for a customer whose PC died; see "Licensing" above).
 - Account: `POST /api/account/checkout` (turns the client-side cart into real `ProductPurchase` rows —
-  no payment collected, see "Checkout" above), `POST /api/account/licenses/redeem` (redeem a
+  no payment collected, see "Checkout" above), `POST /api/account/orders/<id>/refund` (self-service
+  cancel/refund, own orders only, 30-day window — see "Cancel / refund" above),
+  `POST /api/account/licenses/redeem` (redeem a
   staff-generated license code onto the caller's own account — see "License codes" above),
   `GET /api/account/downloads/plugin-builds/<id>/get` (generates and streams the bare `.exe` live —
   no zip, no key attached; see "Auto-generated installers" above),

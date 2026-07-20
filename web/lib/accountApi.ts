@@ -111,6 +111,7 @@ async function writeJSON<T>(path: string, method: string, body?: unknown): Promi
 const postJSON = <T>(path: string, body: unknown) => writeJSON<T>(path, "POST", body);
 
 export const claimFreeProduct = (slug: string) => postJSON<AccountOrder>("/api/account/claim-free", { slug });
+export const refundOrder = (id: string) => postJSON<AccountOrder>(`/api/account/orders/${id}/refund`, {});
 
 export interface CheckoutItem {
   slug: string;

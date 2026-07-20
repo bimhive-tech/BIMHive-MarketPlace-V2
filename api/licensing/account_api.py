@@ -12,7 +12,12 @@ from rest_framework.views import APIView
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
-from licensing.services import LicenseCodeError, redeem_license_code
+from licensing.services import LicenseCodeError, redeem_license_code, revoke_purchase_access
+
+# Matches the "30-Day Money Back Guarantee" copy already shown on every buy
+# box (web/features/product/BuyBox/BuyBox.tsx) — self-service refund gives
+# that promise an actual mechanism instead of just being marketing copy.
+REFUND_WINDOW_DAYS = 30
 
 
 class AccountOrderSerializer(serializers.ModelSerializer):
@@ -37,6 +42,52 @@ class AccountOrderListView(generics.ListAPIView):
             .select_related("product")
             .order_by("-requested_at")
         )
+
+
+class AccountOrderRefundView(APIView):
+    """Self-service cancel/refund — there's no distinct "cancel a pending
+    order" state today (checkout marks everything PAID immediately, see
+    CheckoutView), so this is the one action for both: give up this
+    purchase, no staff involved. Reuses the exact same
+    licensing.services.revoke_purchase_access staff already use, so a
+    refunded purchase behaves identically either way.
+
+    Why refunding can't be used to grab a second free trial on the same
+    machine: revoking never deletes the MachineLicense row, only changes
+    its status — and /api/license/activate only ever issues a trial when
+    NO MachineLicense row exists yet for that (product, machine) pair. Once
+    a machine has activated at all (trial or paid), that row exists
+    forever, so a later refund just leaves it pointing at an inactive
+    purchase — the machine is denied, never handed a fresh trial. Nothing
+    extra needed here to prevent that; it falls out of how activation
+    already works."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        purchase = ProductPurchase.objects.filter(pk=pk, user=request.user).select_related("product").first()
+        if not purchase:
+            raise ValidationError({"detail": "Order not found."})
+        if purchase.payment_status != ProductPurchase.PaymentStatus.PAID:
+            raise ValidationError({"detail": "This order isn't eligible for a refund."})
+        if not purchase.paid_at or timezone.now() - purchase.paid_at > timedelta(days=REFUND_WINDOW_DAYS):
+            raise ValidationError(
+                {"detail": f"This order is outside the {REFUND_WINDOW_DAYS}-day refund window. Contact support for help."}
+            )
+
+        revoke_purchase_access(purchase, status=ProductPurchase.PaymentStatus.REFUNDED, reason="customer_requested")
+        purchase.refresh_from_db()
+        log_activity(
+            request.user,
+            ActivityVerb.ORDER_REFUND_REQUESTED,
+            target_label=purchase.product.name,
+            metadata={"self_service": True},
+        )
+        return Response(AccountOrderSerializer(purchase).data)
 
 
 class AccountMachineSerializer(serializers.ModelSerializer):

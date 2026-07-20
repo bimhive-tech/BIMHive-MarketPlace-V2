@@ -11,7 +11,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr auto auto auto auto;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
@@ -53,6 +53,31 @@
   font-weight: var(--fw-medium);
   color: var(--color-heading);
   white-space: nowrap;
+}
+
+.refundBtn {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--error-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--error-fg);
+  white-space: nowrap;
+}
+.refundBtn:hover {
+  background: var(--error-bg);
+}
+.refundBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  padding: var(--space-3) var(--space-4);
+  background: var(--error-bg);
+  color: var(--error-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
 }
 
 @media (max-width: 640px) {

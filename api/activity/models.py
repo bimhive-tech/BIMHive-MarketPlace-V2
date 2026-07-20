@@ -14,6 +14,7 @@ class ActivityVerb(models.TextChoices):
     SIGNED_UP = "signed_up", "Signed up"
     CLAIMED_FREE_PRODUCT = "claimed_free_product", "Claimed a free product"
     ORDER_PLACED = "order_placed", "Placed an order"
+    ORDER_REFUND_REQUESTED = "order_refund_requested", "Requested a refund"
     DOWNLOADED_FILE = "downloaded_file", "Downloaded a file"
     POSTED_REVIEW = "posted_review", "Posted a review"
     PRODUCT_CREATED = "product_created", "Created a product"
