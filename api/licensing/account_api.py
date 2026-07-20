@@ -95,7 +95,10 @@ class AccountMachineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MachineLicense
-        fields = ["id", "fingerprint_preview", "status", "last_seen_at", "install_count", "plugin_version"]
+        fields = [
+            "id", "fingerprint_preview", "status", "started_at", "last_seen_at",
+            "install_count", "plugin_version",
+        ]
 
     def get_fingerprint_preview(self, obj):
         h = obj.machine_fingerprint_hash or ""

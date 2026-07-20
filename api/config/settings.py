@@ -200,6 +200,11 @@ LICENSE_SIGNING_KEY = env("LICENSE_SIGNING_KEY", default="")
 NSIS_EXECUTABLE = env("NSIS_EXECUTABLE", default="makensis")
 INSTALLER_BUILD_TIMEOUT_SECONDS = env.int("INSTALLER_BUILD_TIMEOUT_SECONDS", default=180)
 INSTALLER_MANUFACTURER = env("INSTALLER_MANUFACTURER", default="BIMHive")
+# The public domain LicLoader.dll (see installer/license_shim.py) is told to
+# call for /api/license/activate — reuses the same env var Next.js already
+# reads for its own public site URL rather than adding a second setting for
+# the same value; both processes run in the one combined Railway service.
+SITE_URL = env("NEXT_PUBLIC_SITE_URL", default="http://localhost:3000")
 
 # ─────────────────────────────────────────────────────────────
 # Object storage (Cloudflare R2 / MinIO). Wired in a later task.

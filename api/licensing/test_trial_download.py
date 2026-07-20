@@ -19,6 +19,21 @@ User = get_user_model()
 
 PE_MAGIC = b"MZ"
 
+# A realistic minimal Revit .addin manifest — the license shim (see
+# installer/license_shim.py::rewrite_addin_for_shim) rewrites <Assembly>/
+# <FullClassName> to point at LicLoader instead, so it needs something
+# that actually parses as a normal add-in manifest, not a bare stub.
+SAMPLE_ADDIN_XML = b"""<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Test Plugin</Name>
+    <Assembly>Plugin.dll</Assembly>
+    <AddInId>ABCDEF12-3456-7890-ABCD-EF1234567890</AddInId>
+    <FullClassName>TestPlugin.App</FullClassName>
+    <VendorId>TEST</VendorId>
+  </AddIn>
+</RevitAddIns>"""
+
 
 @pytest.fixture
 def category():
@@ -37,7 +52,7 @@ def _staged_build(product):
     build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
     build.dll_storage_key = default_storage.save(f"test/{product.id}/Plugin.dll", ContentFile(b"fake dll"))
     build.dll_filename = "Plugin.dll"
-    build.addin_storage_key = default_storage.save(f"test/{product.id}/Plugin.addin", ContentFile(b"<RevitAddIns/>"))
+    build.addin_storage_key = default_storage.save(f"test/{product.id}/Plugin.addin", ContentFile(SAMPLE_ADDIN_XML))
     build.addin_filename = "Plugin.addin"
     build.save()
     return build

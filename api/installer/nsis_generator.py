@@ -13,6 +13,7 @@ actually runs where this app is deployed.
 """
 from django.conf import settings
 
+from installer.license_shim import SHIM_DLL_NAME
 from installer.paths import INSTALL_DIR_TOKEN, parse_destination_path
 
 OUTPUT_FILENAME = "installer.exe"
@@ -78,11 +79,24 @@ def generate_nsis_script(build, resource_files) -> tuple[str, list[str]]:
     dll_source = f"payload\\{build.dll_filename}"
     payload_paths.append(f"payload/{build.addin_filename}")
     payload_paths.append(f"payload/{build.dll_filename}")
+    payload_paths.append(f"payload/{SHIM_DLL_NAME}")
+    payload_paths.append("payload/_real_plugin.txt")
+    payload_paths.append("payload/_license.bin")
 
     install_lines = [
         f'SetOutPath "{addin_dir}"',
+        # The .addin here has already been rewritten (see
+        # installer/license_shim.py::rewrite_addin_for_shim) to point Revit
+        # at LicLoader.dll instead of the real plugin — these five files
+        # all have to land in this exact same folder for that to work:
+        # LicLoader reads _real_plugin.txt/_license.bin as siblings of
+        # itself, and loads the real plugin (still present, just no longer
+        # Revit's direct entry point) by that filename via reflection.
         f'File "{addin_source}"',
         f'File "{dll_source}"',
+        f'File "payload\\{SHIM_DLL_NAME}"',
+        'File "payload\\_real_plugin.txt"',
+        'File "payload\\_license.bin"',
     ]
     uninstall_dirs = [addin_dir]
 
@@ -108,6 +122,9 @@ def generate_nsis_script(build, resource_files) -> tuple[str, list[str]]:
     # its own containing files mid-execution on Windows).
     uninstall_lines.append(f'Delete "{addin_dir}\\{build.dll_filename}"')
     uninstall_lines.append(f'Delete "{addin_dir}\\{build.addin_filename}"')
+    uninstall_lines.append(f'Delete "{addin_dir}\\{SHIM_DLL_NAME}"')
+    uninstall_lines.append(f'Delete "{addin_dir}\\_real_plugin.txt"')
+    uninstall_lines.append(f'Delete "{addin_dir}\\_license.bin"')
     uninstall_lines.append('Delete "$INSTDIR\\Uninstall.exe"')
     uninstall_lines.append('RMDir "$INSTDIR"')
 

@@ -14,6 +14,13 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
 function machineTone(status: string): "success" | "error" | "neutral" {
   if (status === "active" || status === "paid") return "success";
   if (status === "blocked" || status === "expired") return "error";
@@ -134,6 +141,7 @@ export function LicensesList() {
                 <div key={machine.id} className={styles.machine}>
                   <Icon name="windows" size={14} className={styles.machineIcon} />
                   <span className={styles.fingerprint}>{machine.fingerprint_preview}</span>
+                  <span className={styles.lastSeen}>Activated {formatDateTime(machine.started_at)}</span>
                   <span className={styles.lastSeen}>Last seen {formatDate(machine.last_seen_at)}</span>
                   <Pill tone={machineTone(machine.status)}>{machine.status}</Pill>
                 </div>

@@ -24,6 +24,21 @@ pytestmark = pytest.mark.django_db
 # makensis actually produced an .exe and not, say, an empty/garbage file.
 PE_MAGIC = b"MZ"
 
+# A realistic minimal Revit .addin manifest — the license shim (see
+# installer/license_shim.py::rewrite_addin_for_shim) rewrites <Assembly>/
+# <FullClassName> to point at LicLoader instead, so it needs something
+# that actually parses as a normal add-in manifest, not a bare stub.
+SAMPLE_ADDIN_XML = b"""<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Test Plugin</Name>
+    <Assembly>Plugin.dll</Assembly>
+    <AddInId>ABCDEF12-3456-7890-ABCD-EF1234567890</AddInId>
+    <FullClassName>TestPlugin.App</FullClassName>
+    <VendorId>TEST</VendorId>
+  </AddIn>
+</RevitAddIns>"""
+
 
 @pytest.fixture
 def category():
@@ -40,12 +55,52 @@ def product(category):
 
 def _stage_dll_and_addin(build):
     dll_key = default_storage.save(f"test/{build.product_id}/Plugin.dll", ContentFile(b"fake dll bytes"))
-    addin_key = default_storage.save(f"test/{build.product_id}/Plugin.addin", ContentFile(b"<RevitAddIns/>"))
+    addin_key = default_storage.save(f"test/{build.product_id}/Plugin.addin", ContentFile(SAMPLE_ADDIN_XML))
     build.dll_storage_key = dll_key
     build.dll_filename = "Plugin.dll"
     build.addin_storage_key = addin_key
     build.addin_filename = "Plugin.addin"
     build.save()
+
+
+def test_staging_wraps_the_addin_with_the_license_shim(product, tmp_path):
+    """Doesn't need makensis at all — just checks _stage_payload put the
+    right files in the right place, which is the part that actually
+    matters for licensing to work (see installer/license_shim.py)."""
+    from installer.builder import _stage_payload
+    from installer.license_shim import SHIM_DLL_NAME
+
+    build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
+    _stage_dll_and_addin(build)
+
+    _stage_payload(build, tmp_path)
+    payload_dir = tmp_path / "payload"
+
+    assert (payload_dir / build.dll_filename).read_bytes() == b"fake dll bytes"
+    assert (payload_dir / SHIM_DLL_NAME).exists()
+    assert (payload_dir / "_real_plugin.txt").read_text() == build.dll_filename
+    license_config = (payload_dir / "_license.bin").read_text()
+    assert product.product_code in license_config
+    assert "onlineLicense" in license_config
+
+    rewritten_addin = (payload_dir / build.addin_filename).read_text()
+    assert "LicLoader.dll" in rewritten_addin
+    assert "LicLoader.ExternalApp" in rewritten_addin
+    assert "Plugin.dll" not in rewritten_addin  # the real assembly reference is gone, not just supplemented
+
+
+def test_staging_fails_loudly_on_an_unparseable_addin(product, tmp_path):
+    from installer.builder import _stage_payload
+
+    build = PluginBuild.objects.create(product=product, revit_year="2025")
+    build.dll_storage_key = default_storage.save(f"test/{product.id}/Plugin.dll", ContentFile(b"fake dll bytes"))
+    build.dll_filename = "Plugin.dll"
+    build.addin_storage_key = default_storage.save(f"test/{product.id}/broken.addin", ContentFile(b"not xml at all"))
+    build.addin_filename = "broken.addin"
+    build.save()
+
+    with pytest.raises(Exception, match="license-protect"):
+        _stage_payload(build, tmp_path)
 
 
 def test_build_without_dll_or_addin_fails_cleanly(product):

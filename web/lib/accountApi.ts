@@ -58,6 +58,7 @@ export interface AccountMachine {
   id: string;
   fingerprint_preview: string;
   status: string;
+  started_at: string;
   last_seen_at: string;
   install_count: number;
   plugin_version: string;

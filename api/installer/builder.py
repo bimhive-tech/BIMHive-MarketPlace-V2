@@ -16,6 +16,14 @@ from pathlib import Path
 from django.conf import settings
 
 from installer.branding import write_branding_assets
+from installer.license_shim import (
+    SHIM_DLL_NAME,
+    SHIM_DLL_PATH,
+    AddinRewriteError,
+    build_license_config,
+    build_real_plugin_hint,
+    rewrite_addin_for_shim,
+)
 from installer.models import PluginBuild
 from installer.nsis_generator import OUTPUT_FILENAME, generate_nsis_script, resolve_scope
 
@@ -33,9 +41,30 @@ def _stage_file(storage_key: str, dest: Path) -> None:
 
 
 def _stage_payload(build: PluginBuild, staging_dir: Path) -> None:
+    """Stages the real plugin .dll plus everything LicLoader.dll (the
+    license-check shim every installer wraps the plugin with — see
+    installer/license_shim.py) needs sitting right next to it: itself, the
+    .addin manifest rewritten to load it instead of the real plugin, a hint
+    file pointing at the real plugin's filename, and the per-product online
+    license config."""
     payload_dir = staging_dir / "payload"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+
     _stage_file(build.dll_storage_key, payload_dir / build.dll_filename)
-    _stage_file(build.addin_storage_key, payload_dir / build.addin_filename)
+    shutil.copyfile(SHIM_DLL_PATH, payload_dir / SHIM_DLL_NAME)
+    (payload_dir / "_real_plugin.txt").write_bytes(build_real_plugin_hint(build.dll_filename))
+    (payload_dir / "_license.bin").write_bytes(build_license_config(build))
+
+    from django.core.files.storage import default_storage
+
+    with default_storage.open(build.addin_storage_key, "rb") as source:
+        raw_addin = source.read()
+    try:
+        wrapped_addin = rewrite_addin_for_shim(raw_addin)
+    except AddinRewriteError as exc:
+        raise BuildError(f"Could not license-protect this build: {exc}") from exc
+    (payload_dir / build.addin_filename).write_bytes(wrapped_addin)
+
     for index, resource in enumerate(build.resource_files.all()):
         rel = f"resources/{index}_{resource.original_filename}"
         _stage_file(resource.storage_key, payload_dir / rel)

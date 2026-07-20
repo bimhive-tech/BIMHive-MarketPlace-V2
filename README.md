@@ -128,10 +128,8 @@ storage in either case:
   that appears once both files are uploaded) — `AccountPluginBuildDownloadView` calls
   `installer/builder.py::generate_installer_bytes` and streams the bare `.exe` straight back, no zip,
   no key attached. Every download re-runs the NSIS build; nothing is reused between downloads.
-  **The customer types their license key into the plugin themselves** (copied from
-  `/account/licenses`) — there's deliberately no auto-import: the plugin only ever works once a key
-  is entered, and the first `/api/license/activate` call that carries one is what binds it to that
-  machine and starts showing its end date on the Licenses page.
+  No key is baked into the `.exe` — see "Client-side license enforcement" below for what actually
+  makes a key required to use the plugin at all, and where the customer types it in.
 - **Staff/partner testing it** from the products list's **"..." menu** (per row, next to Edit) —
   `GET /api/admin/plugin-builds/<id>/download` runs the same live build and streams the raw `.exe`
   back directly, no purchase or license key needed, including for an unpublished draft product. The
@@ -153,6 +151,36 @@ Linux-hosted cross-compiler for Windows installers (`apt-get install nsis` in th
 See `installer/` (models, `nsis_generator.py`, `builder.py`, `api.py`) — and the project's licensing
 reference notes for the legacy tool this replaces and why (unstable `UpgradeCode`/`Version` per
 build, unsigned client-trusted activation response).
+
+## Client-side license enforcement (the LicLoader shim)
+
+Uploading a `.dll` + `.addin` isn't enough on its own — Revit will happily load and run any add-in
+with no key at all unless something on the machine actually stops it. That something is
+`LicLoader.dll`, a small prebuilt activation shim vendored into this repo at
+`api/installer/vendor/LicLoader.dll` (source lives in a separate, non-Revit-API-buildable C# project
+outside this repo — see `api/installer/vendor/README.md` for exactly where and how to rebuild it).
+
+Every installer build wraps the real plugin with it, transparently, at packaging time
+(`installer/license_shim.py`, wired into `installer/builder.py::_stage_payload` and
+`installer/nsis_generator.py`):
+1. The uploaded `.addin` manifest gets rewritten so its `<Assembly>`/`<FullClassName>` point at
+   `LicLoader.dll` instead of the real plugin — Revit now loads the shim as the add-in entry point,
+   not the plugin directly. `<AddInId>` and everything else is left untouched.
+2. `LicLoader.dll` itself, a `_real_plugin.txt` hint (the real plugin's filename) and a `_license.bin`
+   config (JSON despite the name — the product code + trial length LicLoader should request) all get
+   staged as siblings of the rewritten `.addin` in the same Revit Addins folder.
+3. On Revit startup, LicLoader computes a hardware fingerprint, calls this same server's
+   `/api/license/activate` (same byte-compatible contract described below), and only if that
+   succeeds does it load the real plugin via reflection and forward Revit's `OnStartup`/`OnShutdown`
+   calls to it — an unlicensed machine never reaches the real plugin's code at all.
+4. If activation comes back unauthorized, LicLoader shows a real "BIM Hive Activation" Windows
+   dialog with a text box for the key — **this is where the customer actually types the key** they
+   copied from `/account/licenses`. A successful key gets cached to
+   `%APPDATA%\BIMHive\Licenses\<productCode>.key` so it's not re-typed on every launch.
+
+Rewriting a `.addin` that doesn't parse as a normal Revit manifest fails the build loudly
+(`AddinRewriteError` → `BuildError`) rather than silently shipping the real plugin unwrapped and
+unprotected.
 
 ## Licensing: single-use seats, not hardware-locked
 

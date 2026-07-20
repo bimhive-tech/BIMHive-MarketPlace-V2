@@ -106,6 +106,7 @@ def test_licenses_reports_bound_machines(django_user_model, sku):
     assert len(rows) == 1
     assert len(rows[0]["machines"]) == 1
     assert rows[0]["machines"][0]["fingerprint_preview"] == "ABCDEF012345…"
+    assert rows[0]["machines"][0]["started_at"] == "2026-01-01T00:00:00Z"
 
 
 # ── Claiming a free product (the no-checkout acquisition path) ──
