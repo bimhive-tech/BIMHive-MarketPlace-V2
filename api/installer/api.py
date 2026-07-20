@@ -20,12 +20,12 @@ from catalog.permissions import IsStaffOrPartner
 from installer.builder import generate_installer_bytes
 from installer.models import PluginBuild, PluginResourceFile
 from installer.paths import DESTINATION_TOKENS, InvalidDestinationPath, parse_destination_path
-from installer.wxs_generator import resolve_scope
+from installer.nsis_generator import resolve_scope
 
 
 def _resync_scope(build):
     """Keeps build.scope accurate the moment resources change, without ever
-    invoking WiX — resolve_scope is a pure function of the resource list."""
+    invoking NSIS — resolve_scope is a pure function of the resource list."""
     build.scope = resolve_scope(list(build.resource_files.all()))
     build.save(update_fields=["scope", "updated_at"])
 
@@ -192,7 +192,7 @@ class PluginResourceDetailView(APIView):
 
 
 class PluginBuildDownloadView(APIView):
-    """GET /api/admin/plugin-builds/<id>/download — generates the .msi live
+    """GET /api/admin/plugin-builds/<id>/download — generates the .exe live
     and streams it back directly. Nothing is cached or persisted — this is
     staff/partner's way to test a build (including on an unpublished draft
     product) without a real purchase, and every click is a fresh build."""
@@ -203,11 +203,11 @@ class PluginBuildDownloadView(APIView):
         from django.http import HttpResponse
 
         build = get_object_or_404(_build_queryset(request), pk=pk)
-        success, log, msi_bytes, msi_name = generate_installer_bytes(build)
+        success, log, installer_bytes, installer_name = generate_installer_bytes(build)
         if not success:
             raise ValidationError({"detail": log})
-        response = HttpResponse(msi_bytes, content_type="application/x-msi")
-        response["Content-Disposition"] = f'attachment; filename="{msi_name}"'
+        response = HttpResponse(installer_bytes, content_type="application/vnd.microsoft.portable-executable")
+        response["Content-Disposition"] = f'attachment; filename="{installer_name}"'
         return response
 
 

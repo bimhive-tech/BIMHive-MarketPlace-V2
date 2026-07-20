@@ -192,10 +192,12 @@ LICENSE_SIGNING_KEY = env("LICENSE_SIGNING_KEY", default="")
 # ─────────────────────────────────────────────────────────────
 # Auto-generated plugin installers (see installer/)
 # ─────────────────────────────────────────────────────────────
-# Resolved via PATH by default — matches installing WiX as a dotnet global
-# tool (`dotnet tool install --global wix`), the same toolchain the legacy
-# InstallerGenerator uses, just invoked headlessly instead of from its GUI.
-WIX_EXECUTABLE = env("WIX_EXECUTABLE", default="wix")
+# Resolved via PATH by default — matches installing NSIS via `apt-get install
+# nsis` (see Dockerfile). WiX was tried first and dropped: it explicitly
+# only supports running on Windows and silently miscompiled every build on
+# Railway's Linux container; makensis is a real, long-supported cross-
+# platform compiler for Windows installers.
+NSIS_EXECUTABLE = env("NSIS_EXECUTABLE", default="makensis")
 INSTALLER_BUILD_TIMEOUT_SECONDS = env.int("INSTALLER_BUILD_TIMEOUT_SECONDS", default=180)
 INSTALLER_MANUFACTURER = env("INSTALLER_MANUFACTURER", default="BIMHive")
 

@@ -18,12 +18,8 @@ rules, and [`style.md`](style.md) + [`design/`](design/) for the design system.
 - Node.js 22+ and npm 10+
 - Python 3.13 (backend) — 3.14 is not yet supported by the Django/psycopg wheels
 - Docker (for local Postgres + MinIO)
-- .NET SDK 9+ and the WiX v5 CLI, only if you're building/testing the auto-generated installer
-  pipeline (`installer/`):
-  ```bash
-  dotnet tool install --global wix --version 5.0.2   # v7+ requires accepting a paid maintenance fee — avoid it
-  wix extension add -g WixToolset.UI.wixext/5.0.2
-  ```
+- NSIS (`makensis`), only if you're building/testing the auto-generated installer pipeline
+  (`installer/`) — Windows: `winget install NSIS.NSIS`; Debian/Ubuntu/Docker: `apt-get install nsis`.
 
 ---
 
@@ -102,7 +98,7 @@ hidden/gated until the seller application is approved.
 **Admin portal** (staff-gated, separate from Django's `/admin`): `/admin-portal` (dashboard),
 `/admin-portal/products` (list/create/edit, full form incl. media/features/changelog/compatibility/
 files/**Installer Build** — upload a compiled `.dll` + `.addin` manifest per Revit year plus any
-resource/dependency files, and BIMHive packages them into a real signed `.msi` automatically; see
+resource/dependency files, and BIMHive packages them into a real `.exe` installer automatically; see
 "Auto-generated installers" below), `/admin-portal/{orders,customers,reviews,licenses}`,
 `/admin-portal/{categories,tags,partners,collections}` (taxonomy CRUD — Partners includes a
 Pending/Approved/Rejected review queue for seller applications), `/admin-portal/settings` (live
@@ -117,7 +113,7 @@ Files & Downloads is the only delivery mechanism. Switching a product's Product 
 (Pricing & License tab) live shows/hides the Installer Build tab without needing to save first;
 the backend rejects a build for a non-plugin product either way (`installer/api.py`).
 
-Partners/staff no longer hand-build `.msi` installers with a separate desktop tool — but there's
+Partners/staff no longer hand-build installers with a separate desktop tool — but there's
 also no "Build Installer" step or cached artifact anymore. The **Installer Build** tab on a
 product's edit page is upload-only:
 1. Upload the compiled `.dll` and `.addin` manifest for each Revit year you support.
@@ -127,33 +123,39 @@ product's edit page is upload-only:
      all makes the whole installer per-machine (Windows Installer scope is package-level, so it
      can't be mixed component-by-component).
 
-The `.msi` itself is generated **live, on the spot, in exactly two places** — and never written to
+The `.exe` itself is generated **live, on the spot, in exactly two places** — and never written to
 storage in either case:
 - **A customer downloading it** (`/account/downloads`, or the virtual entry on `/api/account/downloads`
   that appears once both files are uploaded) — `AccountPluginBuildDownloadView` calls
   `installer/builder.py::generate_installer_bytes`, then zips the result with a `<productCode>.key`
   file containing the purchaser's own license key (already issued at purchase time) — no
-  copy-pasting a key by hand. Every download re-runs the WiX build; nothing is reused between
+  copy-pasting a key by hand. Every download re-runs the NSIS build; nothing is reused between
   downloads.
 - **Staff/partner testing it** from the products list's **"..." menu** (per row, next to Edit) —
-  `GET /api/admin/plugin-builds/<id>/download` runs the same live build and streams the raw `.msi`
+  `GET /api/admin/plugin-builds/<id>/download` runs the same live build and streams the raw `.exe`
   back directly, no purchase or license key needed, including for an unpublished draft product. The
   menu fetches that product's uploaded builds lazily on open and lists one entry per Revit year;
   since this is a live build, the frontend uses fetch+blob rather than a plain link, so a failed
   build shows its actual error instead of "downloading" a JSON error body.
 
-This was a deliberate choice, not an oversight: the `.msi` carries no per-customer data (unlike the
+This was a deliberate choice, not an oversight: the `.exe` carries no per-customer data (unlike the
 legacy tool, which baked a machine whitelist directly into the binary — see the licensing reference
 notes), so there's nothing to gain from pre-building and caching one ahead of time. Every trigger —
 customer or admin — gets a fresh build.
 
-See `installer/` (models, `wxs_generator.py`, `builder.py`, `api.py`) — and the project's licensing
+The installer is built by NSIS (`makensis`), not WiX/MSI — WiX was tried first and dropped after a
+real production failure: it explicitly only supports running on Windows
+(`warning WIX0000: ... All behavior after this point is undefined` on any other OS) and silently
+miscompiled every generated `.wxs` file on Railway's Linux container. NSIS is a real, long-supported
+Linux-hosted cross-compiler for Windows installers (`apt-get install nsis` in the Dockerfile).
+
+See `installer/` (models, `nsis_generator.py`, `builder.py`, `api.py`) — and the project's licensing
 reference notes for the legacy tool this replaces and why (unstable `UpgradeCode`/`Version` per
 build, unsigned client-trusted activation response).
 
 ## Seats: why sharing an installer doesn't share the license
 
-The `.msi` an installer build produces is generic — the same file for every buyer of that product
+The `.exe` an installer build produces is generic — the same file for every buyer of that product
 and Revit year. What actually gates use is `/api/license/activate`: the first machine to activate a
 purchase's license key binds to it, and every other machine trying that same key gets refused
 outright, even with the installer and key file in hand. Freeing a binding for a new PC only happens
@@ -208,7 +210,7 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   `DELETE /api/admin/plugin-builds/<id>/resources/<id>`,
   `GET /api/admin/plugin-builds/destination-options` (the `{ADDIN_DIR}`/`{INSTALL_DIR}` tokens +
   their real on-disk hint text — single source of truth shared with the frontend),
-  `GET /api/admin/plugin-builds/<id>/download` (generates the `.msi` live and streams it back — no
+  `GET /api/admin/plugin-builds/<id>/download` (generates the `.exe` live and streams it back — no
   purchase needed, no caching, works on an unpublished product; this is staff/partner's only way to
   test a build).
 - License codes (staff): `GET|POST /api/admin/license-codes` (list/generate, filterable by
@@ -216,7 +218,7 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
 - Account: `POST /api/account/licenses/machines/<id>/reactivate` (release a machine binding so the
   license can activate on a new PC — self-service, rate-limited), `POST /api/account/licenses/redeem`
   (redeem a staff-generated license code onto the caller's own account — see "License codes" above),
-  `GET /api/account/downloads/plugin-builds/<id>/get` (generates the `.msi` live and zips it with the
+  `GET /api/account/downloads/plugin-builds/<id>/get` (generates the `.exe` live and zips it with the
   purchaser's license key — see "Auto-generated installers" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
@@ -236,8 +238,8 @@ A staff user is seeded for local admin access: `admin@bimhive.ai` / `BimHiveAdmi
 cd api && pytest          # includes golden-master tests for the license API contract
 ```
 
-`installer/test_builder.py` runs real WiX builds (no mocking) end to end — needs the WiX CLI on
-PATH (see Prerequisites). The rest of the suite doesn't touch WiX and runs anywhere.
+`installer/test_builder.py` runs real NSIS builds (no mocking) end to end — needs `makensis` on
+PATH (see Prerequisites). The rest of the suite doesn't touch NSIS and runs anywhere.
 
 ---
 

@@ -18,7 +18,7 @@ interface ProductRowActionsProps {
 /** Per-row "..." menu on the admin Products list — Edit, plus Download
  * Installer for plugin products (fetches uploaded builds lazily on open, so
  * the list itself doesn't pay for an extra request per row). Every download
- * click generates the .msi live server-side — nothing is pre-built or
+ * click generates the .exe live server-side — nothing is pre-built or
  * cached, so this uses fetch+blob instead of a plain link: a failed build
  * returns a JSON error, and a plain <a> would just "download" that JSON
  * instead of showing the admin what went wrong. Renders through a portal so
@@ -66,7 +66,7 @@ export function ProductRowActions({ productId, editHref, isPlugin }: ProductRowA
       }
       const blob = await res.blob();
       const disposition = res.headers.get("Content-Disposition") || "";
-      const filename = disposition.match(/filename="?([^"]+)"?/)?.[1] || `installer-${build.revit_year}.msi`;
+      const filename = disposition.match(/filename="?([^"]+)"?/)?.[1] || `installer-${build.revit_year}.exe`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

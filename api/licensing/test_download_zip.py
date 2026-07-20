@@ -43,7 +43,7 @@ def buyer_client(category):
     return client, product, purchase
 
 
-# Real WiX invocation, same no-mocking philosophy as test_builder.py.
+# Real NSIS invocation, same no-mocking philosophy as test_builder.py.
 def test_plugin_build_download_is_a_zip_with_the_license_key(buyer_client):
     client, product, purchase = buyer_client
     build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
@@ -59,7 +59,7 @@ def test_plugin_build_download_is_a_zip_with_the_license_key(buyer_client):
     assert resp["Content-Type"] == "application/zip"
     archive = zipfile.ZipFile(io.BytesIO(resp.content))
     names = archive.namelist()
-    assert any(name.endswith(".msi") for name in names)
+    assert any(name.endswith(".exe") for name in names)
     assert "zip-test.key" in names
     assert archive.read("zip-test.key").decode() == purchase.license_key
 

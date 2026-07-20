@@ -35,38 +35,15 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 3: runtime — Python + Node together, nothing else ──
 FROM python:3.12-slim AS runtime
-# The .NET runtime (needed below for the WiX toolchain) hard-crashes on
-# startup without ICU globalization data, which python:3.12-slim doesn't ship.
-# The package is versioned (libicu72, libicu76, ...) and tracks whatever
-# Debian release the "slim" tag currently resolves to, so resolve the name
-# dynamically instead of pinning a version that breaks on the next base-image
-# bump (already happened once: bookworm's libicu72 doesn't exist on trixie).
+# `nsis` (auto-generated plugin installers — see api/installer/) is a real,
+# long-supported Linux-hosted cross-compiler for Windows installers, unlike
+# WiX (tried first, dropped: it explicitly only supports running on Windows
+# and silently miscompiled every build on this same Linux container).
 RUN apt-get update \
-    && ICU_PKG="$(apt-cache search --names-only '^libicu[0-9]+$' | sort -V | tail -n1 | cut -d' ' -f1)" \
-    && apt-get install -y --no-install-recommends curl libpq5 "$ICU_PKG" \
+    && apt-get install -y --no-install-recommends curl libpq5 nsis \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-# ── WiX toolchain (auto-generated plugin installers — see api/installer/) ──
-# Installed via Microsoft's official script rather than the apt repo, to stay
-# portable across Debian base image versions. Pinned to WiX v5 — v7+ requires
-# accepting a paid "Open Source Maintenance Fee" just to run, avoid it. HOME
-# is fixed here (not the `bimhive` user's normal home, created below) because
-# `wix extension add -g` caches under $HOME/.wix — this build step and the
-# app's runtime user both need to resolve that same cache location, and ENV
-# values apply to every USER in a Dockerfile, not just the one active when set.
-ENV HOME=/opt/dotnet-home \
-    DOTNET_ROOT=/usr/local/dotnet \
-    PATH="/usr/local/dotnet:/usr/local/dotnet/tools:${PATH}" \
-    DOTNET_NOLOGO=1 \
-    DOTNET_CLI_TELEMETRY_OPTOUT=1
-RUN mkdir -p "$HOME" /usr/local/dotnet/tools \
-    && curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
-    && bash /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/local/dotnet \
-    && rm /tmp/dotnet-install.sh \
-    && dotnet tool install --tool-path /usr/local/dotnet/tools wix --version 5.0.2 \
-    && wix extension add -g WixToolset.UI.wixext/5.0.2
 
 WORKDIR /app
 COPY --from=api-build /install /usr/local
@@ -84,7 +61,7 @@ RUN chmod +x scripts/start.sh
 
 RUN useradd --create-home --shell /bin/bash bimhive \
     && mkdir -p api/staticfiles api/media \
-    && chown -R bimhive:bimhive /app "$HOME"
+    && chown -R bimhive:bimhive /app
 USER bimhive
 
 ENV PYTHONUNBUFFERED=1 \

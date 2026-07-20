@@ -1,8 +1,8 @@
 """
 Auto-generated plugin installer pipeline. A partner/admin uploads raw build
 artifacts (compiled .dll, .addin manifest, optional resources/dependencies)
-once per (product, Revit year); the backend packages them into a real WiX
-.msi (see wix_builder.py) instead of a human running the legacy
+once per (product, Revit year); the backend packages them into a real NSIS
+.exe (see builder.py) instead of a human running the legacy
 InstallerGenerator GUI. See installer-generator-reference project notes for
 the full design rationale.
 """
@@ -18,7 +18,7 @@ from installer.paths import InvalidDestinationPath, parse_destination_path
 class PluginBuild(models.Model):
     """One buildable installer target: a single (product, Revit year) pair —
     purely a container for the raw uploaded inputs (dll, addin, resources).
-    There is deliberately no cached/persisted .msi here: the installer is
+    There is deliberately no cached/persisted .exe here: the installer is
     generated on demand, live, at the moment someone actually needs the file
     (a customer downloading, or staff/partner testing from the products
     list) — see installer/builder.py::generate_installer_bytes. Nothing
@@ -41,7 +41,7 @@ class PluginBuild(models.Model):
     # clean upgrade.
     upgrade_code = models.UUIDField(default=uuid.uuid4, editable=False)
     # "perUser" | "perMachine" — derived purely from resource destinations
-    # (see wix_generator.resolve_scope) and kept in sync whenever a resource
+    # (see nsis_generator.resolve_scope) and kept in sync whenever a resource
     # is added/removed (installer/api.py), so the admin UI reflects it
     # without ever needing to actually generate an installer first.
     scope = models.CharField(max_length=16, default="perUser")

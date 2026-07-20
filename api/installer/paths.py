@@ -11,8 +11,8 @@ ADDIN_DIR_TOKEN = "{ADDIN_DIR}"
 INSTALL_DIR_TOKEN = "{INSTALL_DIR}"
 
 # Keyed by the literal token a partner types into the destination field.
-# `scope` decides the MSI's overall install scope (see wix_builder.py) — a
-# build that places anything under INSTALL_DIR becomes a per-machine
+# `scope` decides the installer's overall execution level (see builder.py) —
+# a build that places anything under INSTALL_DIR becomes a per-machine
 # (admin-elevated) installer; one that only ever touches ADDIN_DIR stays
 # per-user, matching the legacy generator's default (no install prompt).
 DESTINATION_TOKENS = {

@@ -281,9 +281,9 @@ class AccountDownloadFileView(APIView):
 
 
 class AccountPluginBuildDownloadView(APIView):
-    """Generates the .msi live, right now, for this one request — see
+    """Generates the .exe live, right now, for this one request — see
     installer.builder.generate_installer_bytes. Nothing is cached: every
-    single download re-runs the WiX build and the result is discarded once
+    single download re-runs the NSIS build and the result is discarded once
     the response is sent, then zips it with the purchaser's own license key
     (already issued at purchase time) so the plugin's first run can
     auto-import it instead of the customer copy-pasting a key by hand."""
@@ -309,7 +309,7 @@ class AccountPluginBuildDownloadView(APIView):
         if not purchase:
             raise ValidationError({"detail": "You don't have access to this file."})
 
-        success, log, msi_bytes, msi_name = generate_installer_bytes(build)
+        success, log, installer_bytes, installer_name = generate_installer_bytes(build)
         if not success:
             raise ValidationError({"detail": "Could not generate the installer. Please contact support."})
 
@@ -321,10 +321,10 @@ class AccountPluginBuildDownloadView(APIView):
         )
         Product.objects.filter(pk=build.product_id).update(download_count=F("download_count") + 1)
 
-        return _zip_installer_bytes_with_license_key(msi_name, msi_bytes, build.product, purchase)
+        return _zip_installer_bytes_with_license_key(installer_name, installer_bytes, build.product, purchase)
 
 
-def _zip_installer_bytes_with_license_key(msi_name, msi_bytes, product, purchase):
+def _zip_installer_bytes_with_license_key(installer_name, installer_bytes, product, purchase):
     import io
     import zipfile
 
@@ -332,7 +332,7 @@ def _zip_installer_bytes_with_license_key(msi_name, msi_bytes, product, purchase
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(msi_name, msi_bytes)
+        archive.writestr(installer_name, installer_bytes)
         # LicLoader (the installed plugin's activation shim) checks for a
         # same-name .key file next to itself in %AppData%\BIMHive\Licenses\
         # on first run before falling back to a manual prompt — see
@@ -340,13 +340,13 @@ def _zip_installer_bytes_with_license_key(msi_name, msi_bytes, product, purchase
         archive.writestr(f"{product.product_code}.key", purchase.license_key)
         archive.writestr(
             "README.txt",
-            f"1. Run {msi_name} to install {product.name}.\n"
+            f"1. Run {installer_name} to install {product.name}.\n"
             f"2. Keep {product.product_code}.key in this folder until the first Revit launch "
             "after installing — the plugin reads it automatically to activate your license.\n",
         )
     zip_buffer.seek(0)
     response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
-    response["Content-Disposition"] = f'attachment; filename="{msi_name.rsplit(".", 1)[0]}.zip"'
+    response["Content-Disposition"] = f'attachment; filename="{installer_name.rsplit(".", 1)[0]}.zip"'
     return response
 
 

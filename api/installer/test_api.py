@@ -2,7 +2,7 @@
 HTTP-layer concerns for the plugin-build API: ownership scoping (mirrors
 catalog.admin_api._effective_partner_id, reused rather than re-derived),
 upload validation, and the destination-path guard rejecting unsafe paths
-at the API boundary too (not just in the model's .clean()). WiX build
+at the API boundary too (not just in the model's .clean()). NSIS build
 mechanics themselves are covered in test_builder.py.
 """
 import pytest
@@ -169,8 +169,8 @@ def test_destination_options_lists_both_tokens(partner_a_client):
 
 
 # ── Direct download (staff/partner testing a build, no purchase needed) ──
-# Real WiX invocation, same philosophy as test_builder.py — no mocking.
-def test_owner_downloading_generates_and_streams_a_fresh_msi(partner_a_client, product_a):
+# Real NSIS invocation, same philosophy as test_builder.py — no mocking.
+def test_owner_downloading_generates_and_streams_a_fresh_exe(partner_a_client, product_a):
     from django.core.files.base import ContentFile
     from django.core.files.storage import default_storage
 
@@ -183,8 +183,8 @@ def test_owner_downloading_generates_and_streams_a_fresh_msi(partner_a_client, p
 
     resp = partner_a_client.get(f"/api/admin/plugin-builds/{build.id}/download")
     assert resp.status_code == 200
-    assert resp["Content-Type"] == "application/x-msi"
-    assert len(resp.content) > 0
+    assert resp["Content-Type"] == "application/vnd.microsoft.portable-executable"
+    assert resp.content.startswith(b"MZ")
 
 
 def test_cannot_download_a_build_missing_dll_or_addin(partner_a_client, product_a):
