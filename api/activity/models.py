@@ -24,6 +24,7 @@ class ActivityVerb(models.TextChoices):
     LICENSE_REVOKED = "license_revoked", "Revoked a license"
     LICENSE_RESTORED = "license_restored", "Restored a license"
     LICENSE_EXTENDED = "license_extended", "Extended a license"
+    LICENSE_RELEASED = "license_released", "Released a machine binding"
     ORDER_STATUS_CHANGED = "order_status_changed", "Changed an order's status"
     ORDER_SEATS_CHANGED = "order_seats_changed", "Changed an order's seat count"
     LICENSE_CODE_CREATED = "license_code_created", "Generated a license code"

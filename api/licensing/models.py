@@ -123,6 +123,19 @@ class ProductPurchase(models.Model):
         return self.payment_status == self.PaymentStatus.PAID and not self.is_expired
 
     @property
+    def license_status(self):
+        """Simplified active/inactive/expired label for customer-facing UI —
+        `payment_status` has more states than a buyer needs to reason about
+        (pending/failed/refunded/cancelled/revoked all just mean "not usable
+        right now"). Checked in this order since a lapsed expires_at should
+        read as "expired" even on an otherwise-paid purchase."""
+        if self.is_expired:
+            return "expired"
+        if self.payment_status == self.PaymentStatus.PAID:
+            return "active"
+        return "inactive"
+
+    @property
     def denial_status(self):
         if self.is_expired:
             return "expired"
@@ -145,16 +158,20 @@ class ProductPurchase(models.Model):
 
     @property
     def active_machine_licenses(self):
-        # "released" machines (see services.release_machine_binding) are
-        # deliberately excluded — that status exists specifically so a freed
-        # binding frees up a seat for the next activation attempt from a new PC.
+        # "released" machines (see services.release_machine_binding, now a
+        # staff-only override — see licensing/admin_api.py::AdminLicenseReleaseView)
+        # are deliberately excluded — that status exists specifically so a
+        # freed binding frees up a seat for a new machine to take.
         return self.machine_licenses.exclude(status="released").order_by("first_seen_at", "id")
 
     def has_seat_for(self, machine_fingerprint_hash):
         """True if `machine_fingerprint_hash` already holds one of this
         purchase's seats, or if an unused seat is available for it to take.
-        `seats` machines may be bound concurrently — see
-        licensing/api_views.py's activation seat check."""
+        Each seat is single-use for the machine that first claims it — there
+        is no customer self-service way to move a claimed seat to a
+        different machine (only a staff override, see AdminLicenseReleaseView);
+        `seats` just controls how many distinct machines may each claim one
+        seat, once, ever."""
         active = list(self.active_machine_licenses)
         if any(m.machine_fingerprint_hash == machine_fingerprint_hash for m in active):
             return True

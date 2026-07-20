@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from licensing.models import LicenseCode, LicensedProduct, MachineLicense, ProductPurchase
-from licensing.services import restore_purchase_access, revoke_purchase_access
+from licensing.services import release_machine_binding, restore_purchase_access, revoke_purchase_access
 
 
 # ─────────────────────────────────────────────────────────────
@@ -95,6 +95,25 @@ class AdminLicenseRestoreView(APIView):
             license_obj.save(update_fields=["status", "last_seen_at"])
         license_obj.refresh_from_db()
         log_activity(request.user, ActivityVerb.LICENSE_RESTORED, target_label=license_obj.product.name)
+        return Response(AdminMachineLicenseSerializer(license_obj).data)
+
+
+class AdminLicenseReleaseView(APIView):
+    """Staff-only equivalent of the old customer self-service reactivation:
+    frees this one machine's seat so a different machine can claim it. Each
+    seat is otherwise single-use forever (see ProductPurchase.has_seat_for)
+    — this is the deliberate manual override for "customer's PC died,"
+    an alternative to issuing them a brand-new license code from scratch."""
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, pk):
+        license_obj = MachineLicense.objects.select_related("purchase", "product").get(pk=pk)
+        if license_obj.status == "released":
+            raise ValidationError({"detail": "This machine binding is already released."})
+        release_machine_binding(license_obj)
+        license_obj.refresh_from_db()
+        log_activity(request.user, ActivityVerb.LICENSE_RELEASED, target_label=license_obj.product.name)
         return Response(AdminMachineLicenseSerializer(license_obj).data)
 
 

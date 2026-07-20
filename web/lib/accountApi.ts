@@ -66,6 +66,7 @@ export interface AccountLicense {
   product_name: string;
   product_code: string;
   payment_status: string;
+  license_status: "active" | "inactive" | "expired";
   license_key: string;
   seats: number;
   expires_at: string | null;
@@ -74,8 +75,6 @@ export interface AccountLicense {
   machines: AccountMachine[];
 }
 export const getAccountLicenses = () => getJSON<AccountLicense[]>("/api/account/licenses");
-export const reactivateLicense = (machineId: string) =>
-  writeJSON<AccountLicense>(`/api/account/licenses/machines/${machineId}/reactivate`, "POST");
 export const redeemLicenseCode = (code: string) =>
   writeJSON<AccountLicense>("/api/account/licenses/redeem", "POST", { code });
 

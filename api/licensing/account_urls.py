@@ -8,18 +8,12 @@ from licensing.account_api import (
     AccountOrderListView,
     AccountPluginBuildDownloadView,
     ClaimFreeProductView,
-    ReactivateLicenseView,
     RedeemLicenseCodeView,
 )
 
 urlpatterns = [
     path("orders", AccountOrderListView.as_view(), name="account-orders"),
     path("licenses", AccountLicenseListView.as_view(), name="account-licenses"),
-    path(
-        "licenses/machines/<uuid:machine_license_id>/reactivate",
-        ReactivateLicenseView.as_view(),
-        name="account-license-reactivate",
-    ),
     path("licenses/redeem", RedeemLicenseCodeView.as_view(), name="account-license-redeem"),
     path("downloads", AccountDownloadListView.as_view(), name="account-downloads"),
     path("downloads/<int:file_id>/get", AccountDownloadFileView.as_view(), name="account-download-file"),

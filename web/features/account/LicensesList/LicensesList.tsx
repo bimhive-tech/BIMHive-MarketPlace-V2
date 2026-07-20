@@ -8,7 +8,6 @@ import { Pill } from "@/components/Pill/Pill";
 import {
   AccountApiError,
   getAccountLicenses,
-  reactivateLicense,
   redeemLicenseCode,
   type AccountLicense,
 } from "@/lib/accountApi";
@@ -29,7 +28,6 @@ function machineTone(status: string): "success" | "error" | "neutral" {
 
 export function LicensesList() {
   const [licenses, setLicenses] = useState<AccountLicense[] | null>(null);
-  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [redeemCode, setRedeemCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
@@ -41,23 +39,6 @@ export function LicensesList() {
       .then(setLicenses)
       .catch(() => setLicenses([]));
   }, []);
-
-  async function onReactivate(machineId: string) {
-    const confirmed = window.confirm(
-      "This releases the license from that device so you can activate it on a new one. Continue?",
-    );
-    if (!confirmed) return;
-    setError("");
-    setReactivatingId(machineId);
-    try {
-      const updated = await reactivateLicense(machineId);
-      setLicenses((list) => (list ?? []).map((license) => (license.id === updated.id ? updated : license)));
-    } catch (err) {
-      setError(err instanceof AccountApiError ? err.detail : "Could not reactivate this license.");
-    } finally {
-      setReactivatingId(null);
-    }
-  }
 
   async function onRedeem() {
     if (!redeemCode.trim()) return;
@@ -152,18 +133,11 @@ export function LicensesList() {
                   <span className={styles.fingerprint}>{machine.fingerprint_preview}</span>
                   <span className={styles.lastSeen}>Last seen {formatDate(machine.last_seen_at)}</span>
                   <Pill tone={machineTone(machine.status)}>{machine.status}</Pill>
-                  {license.payment_status === "paid" && machine.status !== "released" && (
-                    <button
-                      type="button"
-                      className={styles.reactivateBtn}
-                      disabled={reactivatingId === machine.id}
-                      onClick={() => onReactivate(machine.id)}
-                    >
-                      {reactivatingId === machine.id ? "Reactivating…" : "This isn't my computer anymore"}
-                    </button>
-                  )}
                 </div>
               ))}
+              <p className={styles.hint}>
+                Each seat activates on one device, once. Installing on a different machine? Contact support.
+              </p>
             </div>
           )}
         </div>

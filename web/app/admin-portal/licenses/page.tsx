@@ -8,6 +8,7 @@ import { LicenseCodesPanel } from "@/features/admin/LicenseCodesPanel/LicenseCod
 import {
   extendLicense,
   getAdminLicenses,
+  releaseLicense,
   restoreLicense,
   revokeLicense,
   type AdminLicense,
@@ -21,6 +22,7 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "neutral"> =
   expired: "warning",
   blocked: "error",
   cancelled: "error",
+  released: "neutral",
 };
 
 const TABS = [
@@ -82,6 +84,20 @@ export default function AdminLicensesPage() {
     }
   }
 
+  async function onRelease(id: string) {
+    const confirmed = window.confirm(
+      "This frees the seat so a different machine can activate it — the customer's own device won't be able to reactivate afterward. Continue?",
+    );
+    if (!confirmed) return;
+    setBusyId(id);
+    try {
+      const updated = await releaseLicense(id);
+      setRows((list) => list?.map((r) => (r.id === id ? updated : r)) ?? null);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.head}>
@@ -126,6 +142,7 @@ export default function AdminLicensesPage() {
               <option value="expired">Expired</option>
               <option value="blocked">Blocked</option>
               <option value="cancelled">Cancelled</option>
+              <option value="released">Released</option>
             </select>
           </div>
 
@@ -177,6 +194,15 @@ export default function AdminLicensesPage() {
                             onClick={() => onRevoke(row.id)}
                           >
                             Revoke
+                          </button>
+                        )}
+                        {row.status !== "released" && (
+                          <button
+                            className={styles.actionBtn}
+                            disabled={busyId === row.id}
+                            onClick={() => onRelease(row.id)}
+                          >
+                            Release
                           </button>
                         )}
                         <button

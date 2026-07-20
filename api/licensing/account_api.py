@@ -3,9 +3,6 @@ Customer-facing account API — "my orders / my licenses / my downloads"
 (mounted under /api/account/). Everything here is scoped to request.user; this is
 the read side of the same ProductPurchase/MachineLicense data the admin API manages.
 """
-from datetime import timedelta
-
-from django.utils import timezone
 from rest_framework import generics, serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -14,14 +11,8 @@ from rest_framework.views import APIView
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
-from licensing.models import LicenseEvent, LicensedProduct, MachineLicense, ProductPurchase
-from licensing.services import LicenseCodeError, redeem_license_code, release_machine_binding
-
-# A customer can move their license to a new machine at most this often,
-# self-service — more frequent than this needs a support ticket. Chosen to
-# comfortably cover "I got a new PC" without enabling casual license sharing
-# via repeated reactivation.
-REACTIVATION_COOLDOWN_DAYS = 90
+from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
+from licensing.services import LicenseCodeError, redeem_license_code
 
 
 class AccountOrderSerializer(serializers.ModelSerializer):
@@ -68,7 +59,7 @@ class AccountLicenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductPurchase
         fields = [
-            "id", "product_name", "product_code", "payment_status", "license_key",
+            "id", "product_name", "product_code", "payment_status", "license_status", "license_key",
             "seats", "expires_at", "requested_at", "paid_at", "machines",
         ]
 
@@ -84,55 +75,6 @@ class AccountLicenseListView(generics.ListAPIView):
             .prefetch_related("machine_licenses")
             .order_by("-requested_at")
         )
-
-
-class ReactivateLicenseView(APIView):
-    """Self-service "this isn't my computer anymore" — releases a paid
-    purchase's current machine binding so the next activation (from a new
-    PC) binds fresh instead of being denied forever. Rate-limited via the
-    LicenseEvent audit trail rather than a separate counter field, mirroring
-    how the rest of this app treats LicenseEvent as the source of truth for
-    "did X happen recently"."""
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, machine_license_id):
-        machine_license = (
-            MachineLicense.objects.select_related("purchase", "product")
-            .filter(pk=machine_license_id, purchase__user=request.user)
-            .first()
-        )
-        if not machine_license:
-            raise ValidationError({"detail": "License not found."})
-        if not machine_license.purchase_id or not machine_license.purchase.is_license_active:
-            raise ValidationError({"detail": "This license isn't currently active."})
-        if machine_license.status == "released":
-            raise ValidationError(
-                {"detail": "This device is already released — install on your new machine to finish."}
-            )
-
-        cooldown_start = timezone.now() - timedelta(days=REACTIVATION_COOLDOWN_DAYS)
-        recent_reactivation = LicenseEvent.objects.filter(
-            product=machine_license.product,
-            event_type="machine_released",
-            payload__purchaseId=str(machine_license.purchase_id),
-            event_time__gte=cooldown_start,
-        ).exists()
-        if recent_reactivation:
-            raise ValidationError(
-                {
-                    "detail": (
-                        f"You can only reactivate a license once every {REACTIVATION_COOLDOWN_DAYS} days. "
-                        "Contact support if you need this sooner."
-                    )
-                }
-            )
-
-        release_machine_binding(machine_license)
-        purchase = ProductPurchase.objects.select_related("product", "product__product").prefetch_related(
-            "machine_licenses"
-        ).get(pk=machine_license.purchase_id)
-        return Response(AccountLicenseSerializer(purchase).data)
 
 
 class RedeemLicenseCodeView(APIView):

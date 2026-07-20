@@ -85,8 +85,9 @@ def revoke_purchase_access(purchase, status=None, reason=None, event_time=None):
 
 
 def release_machine_binding(machine_license, event_time=None):
-    """Frees one seat of a paid purchase — self-service "I got a new PC"
-    reactivation (see licensing/account_api.py::ReactivateLicenseView). The
+    """Frees one seat of a paid purchase — a staff-only manual override (see
+    licensing/admin_api.py::AdminLicenseReleaseView). Licenses are single-use
+    per machine with no customer self-service way to move one, by design; the
     next activation call with a different fingerprint can then take that seat
     instead of being denied forever by the old one (active_machine_licenses
     excludes "released" machines — see ProductPurchase.active_machine_licenses

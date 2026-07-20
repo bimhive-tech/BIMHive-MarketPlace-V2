@@ -1,9 +1,9 @@
 """
-Self-service license reactivation ("I got a new PC") — release a paid
-purchase's machine binding so the next activation call, from a different
-fingerprint, binds fresh instead of being denied forever by the old one.
-See licensing/services.py::release_machine_binding and
-licensing/account_api.py::ReactivateLicenseView.
+Staff-only machine-binding release — the replacement for the old customer
+self-service "I got a new PC" reactivation, removed when licenses became
+single-use-per-machine (see licensing/services.py::release_machine_binding,
+licensing/admin_api.py::AdminLicenseReleaseView). A customer can no longer
+free their own seat; only staff can, as a manual override.
 """
 import json
 from datetime import timedelta
@@ -29,14 +29,14 @@ def category():
 @pytest.fixture
 def sku(category):
     product = Product.objects.create(
-        name="Reactivate Test", product_code="reactivate-test", category=category,
+        name="Release Test", product_code="release-test", category=category,
         short_description="s", description="d", status=ProductStatus.PUBLISHED,
     )
     return LicensedProduct.objects.get(code=product.product_code)
 
 
 @pytest.fixture
-def buyer_client(sku):
+def buyer_and_machine(sku):
     user = User.objects.create_user(username="buyer@x.com", email="buyer@x.com", password="x")
     purchase = ProductPurchase.objects.create(
         user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
@@ -45,24 +45,37 @@ def buyer_client(sku):
         product=sku, user=user, purchase=purchase, machine_fingerprint_hash="OLDHASH",
         status="paid", started_at=timezone.now(), expires_at=timezone.now() + timedelta(days=36500),
     )
+    return user, purchase, machine
+
+
+@pytest.fixture
+def staff_client(client):
+    user = User.objects.create_user(username="staff@x.com", email="staff@x.com", password="x", is_staff=True)
+    client.force_login(user)
+    return client
+
+
+def test_customer_has_no_self_service_way_to_release_their_own_machine(buyer_and_machine):
+    user, _, machine = buyer_and_machine
     client = Client()
     client.force_login(user)
-    return client, user, purchase, machine
-
-
-def test_reactivating_releases_the_machine_binding(buyer_client):
-    client, _, purchase, machine = buyer_client
     resp = client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
+    assert resp.status_code == 404
+
+
+def test_staff_can_release_a_machine_binding(staff_client, buyer_and_machine):
+    _, _, machine = buyer_and_machine
+    resp = staff_client.post(f"/api/admin/licenses/{machine.id}/release")
     assert resp.status_code == 200, resp.json()
     machine.refresh_from_db()
     assert machine.status == "released"
     assert LicenseEvent.objects.filter(event_type="machine_released").exists()
 
 
-def test_after_reactivation_a_new_machine_can_activate(buyer_client, settings):
+def test_a_new_machine_can_activate_after_staff_releases_the_old_one(staff_client, buyer_and_machine, settings):
     settings.LICENSE_PEPPER = "test-pepper"
-    client, user, purchase, machine = buyer_client
-    client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
+    _, purchase, machine = buyer_and_machine
+    staff_client.post(f"/api/admin/licenses/{machine.id}/release")
 
     activate_client = Client()
     resp = activate_client.post(
@@ -80,7 +93,7 @@ def test_after_reactivation_a_new_machine_can_activate(buyer_client, settings):
     assert new_machine.status == "paid"
 
 
-def test_reactivating_one_seat_of_a_multi_seat_purchase_only_frees_that_one(sku):
+def test_releasing_one_seat_of_a_multi_seat_purchase_only_frees_that_one(staff_client, sku):
     user = User.objects.create_user(username="buyer2@x.com", email="buyer2@x.com", password="x")
     purchase = ProductPurchase.objects.create(
         user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID, seats=2,
@@ -93,10 +106,8 @@ def test_reactivating_one_seat_of_a_multi_seat_purchase_only_frees_that_one(sku)
         product=sku, user=user, purchase=purchase, machine_fingerprint_hash="HASH-B",
         status="paid", started_at=timezone.now(), expires_at=timezone.now() + timedelta(days=36500),
     )
-    client = Client()
-    client.force_login(user)
 
-    resp = client.post(f"/api/account/licenses/machines/{machine_a.id}/reactivate")
+    resp = staff_client.post(f"/api/admin/licenses/{machine_a.id}/release")
     assert resp.status_code == 200, resp.json()
 
     machine_a.refresh_from_db()
@@ -105,49 +116,22 @@ def test_reactivating_one_seat_of_a_multi_seat_purchase_only_frees_that_one(sku)
     assert machine_b.status == "paid"  # untouched — releasing one seat doesn't touch the other
 
 
-def test_cannot_reactivate_someone_elses_license(buyer_client):
-    _, _, _, machine = buyer_client
-    other = User.objects.create_user(username="other@x.com", email="other@x.com", password="x")
-    other_client = Client()
-    other_client.force_login(other)
-    resp = other_client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
+def test_releasing_an_already_released_machine_is_rejected(staff_client, buyer_and_machine):
+    _, _, machine = buyer_and_machine
+    staff_client.post(f"/api/admin/licenses/{machine.id}/release")
+    resp = staff_client.post(f"/api/admin/licenses/{machine.id}/release")
     assert resp.status_code == 400
 
 
-def test_cannot_reactivate_twice_within_the_cooldown(buyer_client):
-    client, _, _, machine = buyer_client
-    first = client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
-    assert first.status_code == 200
-
-    # A second machine license appears once the customer activates on the new
-    # PC; reactivating THAT one immediately should be blocked by the cooldown
-    # tied to the same purchase.
-    new_machine = MachineLicense.objects.create(
-        product=machine.product, user=machine.user, purchase=machine.purchase,
-        machine_fingerprint_hash="NEWHASH", status="paid",
-        started_at=timezone.now(), expires_at=timezone.now() + timedelta(days=36500),
-    )
-    second = client.post(f"/api/account/licenses/machines/{new_machine.id}/reactivate")
-    assert second.status_code == 400
-    assert "90 days" in second.json()["detail"]
+def test_non_staff_cannot_release_a_machine_binding(buyer_and_machine):
+    user, _, machine = buyer_and_machine
+    client = Client()
+    client.force_login(user)
+    resp = client.post(f"/api/admin/licenses/{machine.id}/release")
+    assert resp.status_code in (401, 403)
 
 
-def test_cannot_reactivate_an_unpaid_license(buyer_client):
-    client, _, purchase, machine = buyer_client
-    purchase.payment_status = ProductPurchase.PaymentStatus.REFUNDED
-    purchase.save()
-    resp = client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
-    assert resp.status_code == 400
-
-
-def test_reactivating_an_already_released_machine_is_rejected(buyer_client):
-    client, _, _, machine = buyer_client
-    client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
-    resp = client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
-    assert resp.status_code == 400
-
-
-def test_anonymous_cannot_reactivate(client, buyer_client):
-    _, _, _, machine = buyer_client
-    resp = client.post(f"/api/account/licenses/machines/{machine.id}/reactivate")
+def test_anonymous_cannot_release_a_machine_binding(client, buyer_and_machine):
+    _, _, machine = buyer_and_machine
+    resp = client.post(f"/api/admin/licenses/{machine.id}/release")
     assert resp.status_code in (401, 403)

@@ -318,6 +318,8 @@ export const restoreLicense = (id: string) =>
   request<AdminLicense>(`/api/admin/licenses/${id}/restore`, "POST");
 export const extendLicense = (id: string, days: number) =>
   request<AdminLicense>(`/api/admin/licenses/${id}/extend`, "POST", { days });
+export const releaseLicense = (id: string) =>
+  request<AdminLicense>(`/api/admin/licenses/${id}/release`, "POST");
 
 // ── Orders ──
 export interface AdminOrder {

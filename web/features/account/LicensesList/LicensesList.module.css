@@ -82,19 +82,10 @@
   flex: 1;
 }
 
-.reactivateBtn {
+.hint {
+  padding-top: var(--space-1);
   font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  color: var(--color-link);
-  white-space: nowrap;
-}
-.reactivateBtn:hover {
-  text-decoration: underline;
-}
-.reactivateBtn:disabled {
   color: var(--color-muted);
-  text-decoration: none;
-  cursor: default;
 }
 
 .error {

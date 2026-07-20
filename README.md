@@ -76,10 +76,9 @@ design/   brand assets + UI mockups (design source of truth)
 payment flow until Stripe/PayPal are wired).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
 **Account** (auth-gated, shared sidebar shell): `/account` (overview), `/account/licenses` (license
-keys, bound machines, a seat-usage indicator when a purchase allows more than one machine, and a
-"this isn't my computer anymore" self-service reactivation that frees one machine binding so the
-license can activate on a new PC — rate-limited to once every 90 days per machine),
-`/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
+keys, bound machines, a seat-usage indicator when a purchase allows more than one machine — each
+seat activates on one machine, once, with no customer self-service way to move it; see "Licensing"
+below), `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
 job title/bio, change email, change password, delete account, plus a "Become a Seller"/"Partner"
 tab whose label and content track the account's seller-application state).
 **Become a seller**: `/sell` (marketing landing page — its sidebar promo on the homepage hides
@@ -153,23 +152,36 @@ See `installer/` (models, `nsis_generator.py`, `builder.py`, `api.py`) — and t
 reference notes for the legacy tool this replaces and why (unstable `UpgradeCode`/`Version` per
 build, unsigned client-trusted activation response).
 
-## Seats: why sharing an installer doesn't share the license
+## Licensing: single-use seats, not hardware-locked
 
 The `.exe` an installer build produces is generic — the same file for every buyer of that product
 and Revit year. What actually gates use is `/api/license/activate`: the first machine to activate a
-purchase's license key binds to it, and every other machine trying that same key gets refused
-outright, even with the installer and key file in hand. Freeing a binding for a new PC only happens
-through the account holder's own "this isn't my computer anymore" reactivation (rate-limited,
-90 days) — handing the installer to someone else doesn't do it.
+purchase's license key claims it, and every other machine trying that same key gets refused
+outright, even with the installer and key file in hand. This is deliberately Autodesk-serial-key
+simple, not hardware-fingerprint security theater: the server doesn't try to verify the
+`machineFingerprintHash` the plugin sends is genuinely MAC/CPU-derived (it can't — that's computed
+client-side, and the shipped plugin's request shape is a fixed contract, see "Licensing
+(byte-compatible...)" below) — it's just treated as an opaque per-install identifier so a repeat
+call from the *same* install doesn't cost a new seat.
 
-A single `ProductPurchase` can allow more than one machine at once via `seats`
-(`ProductPurchase.seats`, default 1) — buying "3 licenses" of a product means 3 concurrently-bound
-machines under one purchase and one key, not 3 separate downloads. `ProductPurchase.has_seat_for()`
-is the check: an already-bound machine always re-validates fine (a plugin restart doesn't cost a
-seat), a new machine only binds if fewer than `seats` are currently active. There's no checkout
-flow yet (see the Orders admin page), so today `seats` is set by staff via the users icon button on
-`/admin-portal/orders` — once real checkout exists, a quantity-N purchase should set this field
-directly instead of creating N separate purchase rows.
+**Each seat is single-use, forever, once claimed — there is no customer self-service way to move
+one to a different machine.** This was a deliberate choice: the previous version had a "this isn't
+my computer anymore" self-service reactivation (rate-limited to once/90 days); it's gone. If a
+customer's machine dies, staff resolve it by hand on `/admin-portal/licenses` — either **Release**
+(frees that one seat so a different machine can claim it, `AdminLicenseReleaseView` /
+`licensing/services.py::release_machine_binding`) or generating them a fresh License Code (see
+below) — whichever fits.
+
+A single `ProductPurchase` can allow more than one machine via `seats` (`ProductPurchase.seats`,
+default 1) — buying "3 licenses" of a product means 3 machines can each claim one seat, not 3
+separate downloads or 3 purchase rows. `ProductPurchase.has_seat_for()` is the check: an
+already-claimed machine always re-validates fine (a plugin restart doesn't cost a seat), a new
+machine only claims a seat if fewer than `seats` are currently held. `ProductPurchase.license_status`
+(`active` / `inactive` / `expired`) is the simplified customer-facing label — `payment_status` has
+more states than a buyer needs to reason about. There's no checkout flow yet (see the Orders admin
+page), so today `seats` is set by staff via the users icon button on `/admin-portal/orders` — once
+real checkout exists, a quantity-N purchase should set this field directly instead of creating N
+separate purchase rows.
 
 ## License codes: redeemable, account-connected replacement for the old key files
 
@@ -180,7 +192,7 @@ something self-service and connected to a real account. On the **License Codes**
 "Lifetime"), and generate a single-use code. That code can be handed to anyone; whoever redeems it
 — entered on `/account/licenses` while logged into their own account — gets a real `ProductPurchase`
 for that product with the seats/duration the code specified, going through the exact same
-seat-aware activation enforcement as anything bought through checkout (see "Seats" above). A
+seat-aware activation enforcement as anything bought through checkout (see "Licensing" above). A
 time-limited redemption (`duration_days` set) actually expires: `ProductPurchase.expires_at` caps
 the whole purchase, and `/api/license/activate` returns `status: "expired"` once it passes — staff
 can extend a time-limited purchase's date via the existing Extend action on `/admin-portal/licenses`.
@@ -194,9 +206,9 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
 - Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
   `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
   CRUD at `/api/admin/{categories,tags,partners,collections,roles}`; `GET /api/admin/{licenses,orders,
-  users,customers,reviews}` plus their action routes (revoke/restore/extend a license, set an order's
-  status, update a user's role, `POST /api/admin/orders/<id>/seats` to set how many machines a
-  purchase may bind at once — see "Seats" above). A product's `product_code` auto-syncs to its
+  users,customers,reviews}` plus their action routes (revoke/restore/extend/release a license, set an
+  order's status, update a user's role, `POST /api/admin/orders/<id>/seats` to set how many machines a
+  purchase may bind at once — see "Licensing" above). A product's `product_code` auto-syncs to its
   licensing SKU on save (see `catalog/signals.py`) — creating/editing/publishing a product is
   immediately reflected in what the activation API will authorize.
 - Partner self-service (auth-gated): `POST /api/partner/apply` (become a seller — company name +
@@ -215,11 +227,12 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   test a build).
 - License codes (staff): `GET|POST /api/admin/license-codes` (list/generate, filterable by
   `?product=`/`?status=`), `POST /api/admin/license-codes/<id>/revoke` (only while unredeemed).
-- Account: `POST /api/account/licenses/machines/<id>/reactivate` (release a machine binding so the
-  license can activate on a new PC — self-service, rate-limited), `POST /api/account/licenses/redeem`
-  (redeem a staff-generated license code onto the caller's own account — see "License codes" above),
-  `GET /api/account/downloads/plugin-builds/<id>/get` (generates the `.exe` live and zips it with the
-  purchaser's license key — see "Auto-generated installers" above).
+  `POST /api/admin/licenses/<id>/release` (staff-only: frees one machine's seat so a different
+  machine can claim it — the manual override for a customer whose PC died; see "Licensing" above).
+- Account: `POST /api/account/licenses/redeem` (redeem a staff-generated license code onto the
+  caller's own account — see "License codes" above), `GET /api/account/downloads/plugin-builds/<id>/get`
+  (generates the `.exe` live and zips it with the purchaser's license key — see "Auto-generated
+  installers" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped
