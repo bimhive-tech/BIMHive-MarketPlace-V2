@@ -9,6 +9,7 @@ from licensing.account_api import (
     AccountOrderRefundView,
     AccountPluginBuildDownloadView,
     AccountPluginBuildTrialDownloadView,
+    CheckoutStatusView,
     CheckoutView,
     ClaimFreeProductView,
     RedeemLicenseCodeView,
@@ -16,6 +17,7 @@ from licensing.account_api import (
 
 urlpatterns = [
     path("checkout", CheckoutView.as_view(), name="account-checkout"),
+    path("checkout/status", CheckoutStatusView.as_view(), name="account-checkout-status"),
     path("orders", AccountOrderListView.as_view(), name="account-orders"),
     path("orders/<uuid:pk>/refund", AccountOrderRefundView.as_view(), name="account-order-refund"),
     path("licenses", AccountLicenseListView.as_view(), name="account-licenses"),

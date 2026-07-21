@@ -9,6 +9,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from licensing.account_api import PaymobWebhookView
 from licensing.api_views import license_activate_api, license_products_api
 
 urlpatterns = [
@@ -16,6 +17,8 @@ urlpatterns = [
     # ── License activation contract (byte-compatible; DO NOT add trailing slash) ──
     path("api/license/products", license_products_api, name="license-products-api"),
     path("api/license/activate", license_activate_api, name="license-activate-api"),
+    # ── Payment processor webhooks (no auth — verified by signature instead) ──
+    path("api/webhooks/paymob", PaymobWebhookView.as_view(), name="paymob-webhook"),
     # ── Auth API (session-based) ──
     path("api/auth/", include("accounts.urls")),
     # ── Customer account API (my orders / licenses / downloads / reviews) ──

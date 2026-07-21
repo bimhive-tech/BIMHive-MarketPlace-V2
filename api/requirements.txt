@@ -21,6 +21,7 @@ whitenoise==6.8.2
 
 # ── Payments ──
 stripe==11.3.0
+requests==2.34.2
 
 # ── Dev / test ──
 pytest==8.3.4

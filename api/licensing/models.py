@@ -116,7 +116,9 @@ class ProductPurchase(models.Model):
     is_trial = models.BooleanField(default=False)
     # "" = one-time/perpetual (the default, and every purchase before this
     # field existed) — set by CheckoutView when the buyer picks a recurring
-    # interval; drives how far out `expires_at` is set at checkout time.
+    # interval; PaymobWebhookView reads it to compute `expires_at` once
+    # payment actually confirms (not set at checkout time — a purchase
+    # sits PENDING with expires_at=None until then).
     billing_period = models.CharField(max_length=10, choices=BillingPeriod.choices, blank=True, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=8, default="USD")

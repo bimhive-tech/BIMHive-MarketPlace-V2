@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AccountApiError, checkout } from "@/lib/accountApi";
@@ -15,11 +14,8 @@ import type { User } from "@/lib/types";
 
 import styles from "./page.module.css";
 
-const CONFIRMATION_STORAGE_KEY = "bimhive.checkout.confirmation";
-
 export default function CheckoutPage() {
-  const router = useRouter();
-  const { items, subtotal, clear } = useCart();
+  const { items, subtotal } = useCart();
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
@@ -28,19 +24,20 @@ export default function CheckoutPage() {
     me().then(setUser);
   }, []);
 
+  // Cart is deliberately NOT cleared here — the customer isn't done yet,
+  // they're about to be sent to Paymob's hosted checkout to actually pay.
+  // It only clears once /checkout/confirmation sees the payment actually
+  // confirmed, so an abandoned/failed Paymob attempt doesn't lose the cart.
   async function onCompletePurchase() {
     setError("");
     setPlacing(true);
     try {
-      const { purchases } = await checkout(
+      const { checkoutUrl } = await checkout(
         items.map((i) => ({ slug: i.slug, qty: i.qty, billingPeriod: i.billingPeriod })),
       );
-      sessionStorage.setItem(CONFIRMATION_STORAGE_KEY, JSON.stringify(purchases));
-      clear();
-      router.push("/checkout/confirmation");
+      window.location.href = checkoutUrl;
     } catch (err) {
-      setError(err instanceof AccountApiError ? err.detail : "Could not complete the purchase.");
-    } finally {
+      setError(err instanceof AccountApiError ? err.detail : "Could not start payment.");
       setPlacing(false);
     }
   }
@@ -105,16 +102,13 @@ export default function CheckoutPage() {
 
           <div className={styles.testNotice}>
             <Icon name="help" size={16} className={styles.testNoticeIcon} />
-            <p>
-              No payment processor is connected yet — this completes the purchase without collecting a card, for
-              testing the license flow end to end.
-            </p>
+            <p>You&apos;ll be taken to Paymob&apos;s secure checkout to pay — card details never touch this site.</p>
           </div>
 
           {error && <p className={styles.error}>{error}</p>}
 
           <Button size="lg" fullWidth onClick={onCompletePurchase} disabled={placing || user === undefined}>
-            {placing ? "Placing order…" : "Complete Purchase"}
+            {placing ? "Redirecting to payment…" : "Continue to Payment"}
           </Button>
         </aside>
       </div>

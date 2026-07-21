@@ -281,6 +281,26 @@ STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
 
+# Paymob (Egypt) — the actually-wired-up processor, see licensing/paymob.py.
+# PAYMOB_INTEGRATION_ID has no sane default: it's the ID of a specific
+# payment-method integration (e.g. "online card") configured on the Paymob
+# dashboard, unique per merchant account — checkout fails loudly if it's
+# blank rather than silently using a made-up value.
+PAYMOB_BASE_URL = env("PAYMOB_BASE_URL", default="https://accept.paymob.com")
+PAYMOB_API_KEY = env("PAYMOB_API_KEY", default="")
+PAYMOB_PUBLIC_KEY = env("PAYMOB_PUBLIC_KEY", default="")
+PAYMOB_SECRET_KEY = env("PAYMOB_SECRET_KEY", default="")
+PAYMOB_HMAC_SECRET = env("PAYMOB_HMAC_SECRET", default="")
+PAYMOB_INTEGRATION_ID = env("PAYMOB_INTEGRATION_ID", default="")
+# The merchant account behind these keys is Egypt-only (settles in EGP) —
+# every price on this storefront is stored/displayed in USD, and no FX
+# conversion exists. Test-mode simplification, not a real currency
+# conversion: the cart's numeric total is sent to Paymob as-is, relabeled
+# EGP, so the real order amount still flows through the whole flow
+# end-to-end (webhook, license grant) — just not at a real exchange rate.
+# Revisit once a USD-settling integration (or real FX) is needed for prod.
+PAYMOB_CURRENCY = env("PAYMOB_CURRENCY", default="EGP")
+
 # ─────────────────────────────────────────────────────────────
 # Cache — used by the license rate limiter (fail-open). Local-memory by default.
 # ─────────────────────────────────────────────────────────────

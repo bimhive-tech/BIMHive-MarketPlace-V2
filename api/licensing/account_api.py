@@ -3,6 +3,8 @@ Customer-facing account API — "my orders / my licenses / my downloads"
 (mounted under /api/account/). Everything here is scoped to request.user; this is
 the read side of the same ProductPurchase/MachineLicense data the admin API manages.
 """
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import generics, serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -11,6 +13,7 @@ from rest_framework.views import APIView
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
+from licensing import paymob
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
 from licensing.services import LicenseCodeError, redeem_license_code, revoke_purchase_access
 
@@ -449,124 +452,256 @@ class ClaimFreeProductView(APIView):
         return Response(AccountOrderSerializer(purchase).data, status=status_code)
 
 
+# How long a subscription purchase's `expires_at` runs for, keyed by
+# billing_period. TEMPORARY TEST OVERRIDE for the monthly interval — see the
+# comment on MONTHLY below. Revert MONTHLY back to timedelta(days=30) once
+# the Paymob payment -> webhook -> license-revocation flow has been proven
+# out with the fast interval; nothing else about billing_period changes.
+def _subscription_duration(billing_period: str):
+    from datetime import timedelta
+
+    if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
+        # TEMPORARY (test only): really 30 days — shortened to 10 minutes
+        # so a real Paymob test payment can be watched through to license
+        # revocation without waiting a month. Change back to
+        # timedelta(days=30) once that's confirmed working end to end.
+        return timedelta(minutes=10)
+    if billing_period == ProductPurchase.BillingPeriod.YEARLY:
+        return timedelta(days=365)
+    return None
+
+
+def _resolve_checkout_items(raw_items):
+    """Shared by CheckoutView: validates + prices the cart the same way
+    regardless of payment method, returns
+    list[(catalog.Product, LicensedProduct, billing_period, unit_price, qty)].
+    Raises ValidationError on anything not purchasable as given."""
+    from catalog.models import Product
+
+    if not isinstance(raw_items, list) or not raw_items:
+        raise ValidationError({"items": "Your cart is empty."})
+
+    valid_periods = {choice for choice, _ in ProductPurchase.BillingPeriod.choices}
+    # Keyed by (slug, billingPeriod) rather than just slug — a customer can
+    # hold a monthly cart line and a yearly cart line for the same product
+    # at once (e.g. mid-decision), and those must never merge into one
+    # purchase with an ambiguous price/duration.
+    qty_by_key: dict[tuple[str, str], int] = {}
+    for entry in raw_items:
+        slug = (entry or {}).get("slug")
+        if not slug:
+            raise ValidationError({"items": "Each cart item needs a slug."})
+        billing_period = (entry.get("billingPeriod") or "").strip()
+        if billing_period not in valid_periods:
+            raise ValidationError({"items": f"Invalid billing period for {slug!r}."})
+        try:
+            qty = int(entry.get("qty") or 1)
+        except (TypeError, ValueError):
+            raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
+        if qty < 1:
+            raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
+        key = (slug, billing_period)
+        qty_by_key[key] = qty_by_key.get(key, 0) + qty
+
+    resolved = []
+    for (slug, billing_period), qty in qty_by_key.items():
+        product = Product.objects.published().filter(slug=slug).first()
+        if not product:
+            raise ValidationError({"items": f"'{slug}' isn't available to purchase right now."})
+        sku = LicensedProduct.objects.filter(product=product).first()
+        if not sku:
+            raise ValidationError({"items": f"'{product.name}' isn't ready to purchase yet — try again shortly."})
+        if billing_period and not product.is_subscription:
+            raise ValidationError({"items": f"'{product.name}' isn't sold as a subscription."})
+        if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
+            unit_price = product.monthly_price
+        elif billing_period == ProductPurchase.BillingPeriod.YEARLY:
+            unit_price = product.yearly_price
+        else:
+            unit_price = product.price
+        if unit_price is None:
+            raise ValidationError({"items": f"'{product.name}' doesn't have a price for that billing option."})
+        resolved.append((product, sku, billing_period, unit_price, qty))
+    return resolved
+
+
 class CheckoutView(APIView):
     """
     Turns a cart (client-supplied, since the cart itself is localStorage-only —
-    see web/lib/cart.tsx) into real ProductPurchase rows. No payment is
-    collected: Stripe/PayPal aren't wired up yet, so this is the honest
-    interim behavior for testing the purchase → license flow end to end,
-    the same trade-off ClaimFreeProductView already makes for free products,
-    just extended to any price.
+    see web/lib/cart.tsx) into PENDING ProductPurchase rows, then creates a
+    Paymob payment intention for the total and hands back the URL to
+    redirect the customer's browser to. Nothing is marked PAID here —
+    that only happens once PaymobWebhookView gets a genuine, HMAC-verified
+    confirmation (see below); trusting a client-side redirect for that
+    would let anyone grant themselves a license by hitting the URL by hand.
 
     One purchase per unit bought, never one purchase covering a quantity:
     buying qty=3 of the same product creates three independent
     ProductPurchase rows, each its own license_key and seats=1 — one key
     per seat, so each copy activates its own machine and none of them are
-    tied together. (Earlier this shipped as a single purchase with
-    seats=3 instead; that's gone — ProductPurchase no longer has a
-    unique_together(user, product) constraint, since a customer holding
-    several independent keys for the same product is now the normal case.)
-    Every checkout call creates fresh purchases/keys — re-checking out a
-    product you already own just adds more, it never edits an existing one.
+    tied together. `payment_reference` is shared across every purchase
+    created by one checkout call — that's how the webhook finds them again.
 
     Each cart item optionally carries a `billingPeriod` ("monthly"/"yearly")
-    for a subscription-priced product (Product.is_subscription) — the created
-    purchase's `amount` comes from that interval's price and its `expires_at`
-    is set 30/365 days out accordingly. Omitted (or "") means the product's
-    normal one-time price and a perpetual purchase, exactly as before this
-    existed.
+    for a subscription-priced product (Product.is_subscription) — the
+    purchase's `amount` comes from that interval's price; `expires_at` is
+    computed and set by the webhook once payment actually confirms, not
+    here (so an interval as short as the current test override, see
+    _subscription_duration, isn't already ticking down while the customer
+    is still typing in their card).
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        from datetime import timedelta
+        import uuid
 
         from django.db import transaction
-        from django.utils import timezone
 
-        from catalog.models import Product
+        resolved = _resolve_checkout_items(request.data.get("items"))
+        order_reference = f"bimhive-{uuid.uuid4()}"
 
-        raw_items = request.data.get("items")
-        if not isinstance(raw_items, list) or not raw_items:
-            raise ValidationError({"items": "Your cart is empty."})
-
-        valid_periods = {choice for choice, _ in ProductPurchase.BillingPeriod.choices}
-        # Keyed by (slug, billingPeriod) rather than just slug — a customer
-        # can hold a monthly cart line and a yearly cart line for the same
-        # product at once (e.g. mid-decision), and those must never merge
-        # into one purchase with an ambiguous price/duration.
-        qty_by_key: dict[tuple[str, str], int] = {}
-        for entry in raw_items:
-            slug = (entry or {}).get("slug")
-            if not slug:
-                raise ValidationError({"items": "Each cart item needs a slug."})
-            billing_period = (entry.get("billingPeriod") or "").strip()
-            if billing_period not in valid_periods:
-                raise ValidationError({"items": f"Invalid billing period for {slug!r}."})
-            try:
-                qty = int(entry.get("qty") or 1)
-            except (TypeError, ValueError):
-                raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
-            if qty < 1:
-                raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
-            key = (slug, billing_period)
-            qty_by_key[key] = qty_by_key.get(key, 0) + qty
-
-        resolved = []  # list[tuple[Product, LicensedProduct, str, Decimal, int]]
-        for (slug, billing_period), qty in qty_by_key.items():
-            product = Product.objects.published().filter(slug=slug).first()
-            if not product:
-                raise ValidationError({"items": f"'{slug}' isn't available to purchase right now."})
-            sku = LicensedProduct.objects.filter(product=product).first()
-            if not sku:
-                raise ValidationError({"items": f"'{product.name}' isn't ready to purchase yet — try again shortly."})
-            if billing_period and not product.is_subscription:
-                raise ValidationError({"items": f"'{product.name}' isn't sold as a subscription."})
-            if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
-                unit_price = product.monthly_price
-            elif billing_period == ProductPurchase.BillingPeriod.YEARLY:
-                unit_price = product.yearly_price
-            else:
-                unit_price = product.price
-            if unit_price is None:
-                raise ValidationError({"items": f"'{product.name}' doesn't have a price for that billing option."})
-            resolved.append((product, sku, billing_period, unit_price, qty))
-
-        now = timezone.now()
         purchases = []
         with transaction.atomic():
             for product, sku, billing_period, unit_price, qty in resolved:
-                # Same mechanism a LicenseCode redemption already uses
-                # (expires_at) — a subscription purchase is just a purchase
-                # with a shorter fuse than the perpetual default, not a
-                # separate recurring-billing system requiring its own
-                # renewal/webhook machinery.
-                if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
-                    expires_at = now + timedelta(days=30)
-                elif billing_period == ProductPurchase.BillingPeriod.YEARLY:
-                    expires_at = now + timedelta(days=365)
-                else:
-                    expires_at = None
                 for _ in range(qty):
                     purchases.append(
                         ProductPurchase.objects.create(
                             user=request.user,
                             product=sku,
-                            payment_status=ProductPurchase.PaymentStatus.PAID,
+                            payment_status=ProductPurchase.PaymentStatus.PENDING,
                             seats=1,
                             amount=unit_price,
                             currency=product.currency,
                             billing_period=billing_period,
-                            expires_at=expires_at,
-                            payment_reference="test-checkout-no-payment-processor",
+                            payment_reference=order_reference,
                         )
                     )
 
+        total_cents = sum(int(p.amount * 100) for p in purchases)
+        items = [
+            {
+                "name": p.product.name[:100],
+                "amount": int(p.amount * 100),
+                "description": p.product.name[:200],
+                "quantity": 1,
+            }
+            for p in purchases
+        ]
+        billing_data = {
+            "first_name": request.user.first_name or request.user.username,
+            "last_name": request.user.last_name or "N/A",
+            "email": request.user.email,
+            "phone_number": "+20000000000",
+            "apartment": "NA", "floor": "NA", "street": "NA",
+            "building": "NA", "city": "NA", "state": "NA", "country": "NA",
+        }
+        try:
+            intention = paymob.create_intention(
+                amount_cents=total_cents,
+                special_reference=order_reference,
+                notification_url=f"{settings.SITE_URL}/api/webhooks/paymob",
+                redirection_url=f"{settings.SITE_URL}/checkout/confirmation?reference={order_reference}",
+                billing_data=billing_data,
+                items=items,
+            )
+        except paymob.PaymobError as exc:
+            raise ValidationError({"detail": f"Could not start payment: {exc}"}) from exc
+
+        return Response(
+            {
+                "checkoutUrl": paymob.checkout_url(intention["client_secret"]),
+                "reference": order_reference,
+            },
+            status=201,
+        )
+
+
+class CheckoutStatusView(APIView):
+    """Polled by /checkout/confirmation after the customer's browser is
+    redirected back from Paymob — never trusts that redirect itself (no
+    signature on redirection_url's query params), only reports purchases
+    once PaymobWebhookView has actually flipped them to PAID."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        reference = (request.query_params.get("reference") or "").strip()
+        if not reference:
+            raise ValidationError({"reference": "Required."})
+        purchases = (
+            ProductPurchase.objects.filter(user=request.user, payment_reference=reference)
+            .select_related("product")
+            .order_by("created_at")
+        )
+        if not purchases.exists():
+            raise ValidationError({"detail": "No order found for that reference."})
+        pending = any(p.payment_status == ProductPurchase.PaymentStatus.PENDING for p in purchases)
+        return Response({"pending": pending, "purchases": AccountOrderSerializer(purchases, many=True).data})
+
+
+class PaymobWebhookView(APIView):
+    """Server-to-server confirmation from Paymob — POST /api/webhooks/paymob.
+    No auth (Paymob doesn't have our session), CSRF-exempt (see urls.py),
+    the HMAC signature is what actually proves this came from Paymob and
+    wasn't spoofed. This is the ONLY place a checkout ever becomes PAID."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        import logging
+
+        logger = logging.getLogger(__name__)
+        body = request.data or {}
+        obj = body.get("obj") or {}
+        received_hmac = request.query_params.get("hmac", "")
+
+        if not paymob.verify_hmac(obj, received_hmac):
+            logger.warning("Paymob webhook: HMAC verification failed, ignoring.")
+            return Response({"detail": "Invalid signature."}, status=400)
+
+        if not obj.get("success") or obj.get("pending"):
+            # Failed or still-pending attempt — nothing to grant. Paymob
+            # may call again later for the same order if the customer
+            # retries, so this isn't necessarily final.
+            return Response({"ok": True})
+
+        # Best-effort: Paymob's docs confirm `special_reference` is meant
+        # for exactly this correlation purpose, but the exact field path it
+        # comes back on in the webhook body isn't nailed down without a
+        # real test transaction to inspect — tries the documented field
+        # plus the couple of plausible nested spots seen in other
+        # integrations' payloads.
+        order_obj = obj.get("order") or {}
+        reference = obj.get("special_reference") or order_obj.get("merchant_order_id") or order_obj.get("special_reference")
+        if not reference:
+            logger.warning("Paymob webhook: no order reference found in payload: %s", body)
+            return Response({"ok": True})
+
+        purchases = list(ProductPurchase.objects.filter(payment_reference=reference))
+        if not purchases:
+            logger.warning("Paymob webhook: no PENDING purchases found for reference %s", reference)
+            return Response({"ok": True})
+
+        now = timezone.now()
+        for purchase in purchases:
+            if purchase.payment_status == ProductPurchase.PaymentStatus.PAID:
+                continue  # already processed — webhooks can be delivered more than once
+            purchase.payment_status = ProductPurchase.PaymentStatus.PAID
+            purchase.expires_at = _expires_at_for(purchase.billing_period, now)
+            purchase.save()
+
+        user = purchases[0].user
         log_activity(
-            request.user,
+            user,
             ActivityVerb.ORDER_PLACED,
             target_label=", ".join(p.product.name for p in purchases),
-            metadata={"item_count": len(purchases), "no_payment_processor": True},
+            metadata={"item_count": len(purchases), "processor": "paymob", "reference": reference},
         )
-        return Response({"purchases": AccountOrderSerializer(purchases, many=True).data}, status=201)
+        return Response({"ok": True})
+
+
+def _expires_at_for(billing_period, now):
+    duration = _subscription_duration(billing_period)
+    return now + duration if duration else None

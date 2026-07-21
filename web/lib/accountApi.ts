@@ -123,8 +123,18 @@ export interface CheckoutItem {
   qty: number;
   billingPeriod?: "" | "monthly" | "yearly";
 }
+// Doesn't complete the purchase itself — returns a Paymob-hosted checkout
+// URL to redirect the browser to. Nothing is PAID until Paymob confirms via
+// webhook; see getCheckoutStatus for how the confirmation page finds out.
 export const checkout = (items: CheckoutItem[]) =>
-  postJSON<{ purchases: AccountOrder[] }>("/api/account/checkout", { items });
+  postJSON<{ checkoutUrl: string; reference: string }>("/api/account/checkout", { items });
+
+export interface CheckoutStatus {
+  pending: boolean;
+  purchases: AccountOrder[];
+}
+export const getCheckoutStatus = (reference: string) =>
+  getJSON<CheckoutStatus>(`/api/account/checkout/status?reference=${encodeURIComponent(reference)}`);
 
 export interface ReviewSubmission {
   rating: number;

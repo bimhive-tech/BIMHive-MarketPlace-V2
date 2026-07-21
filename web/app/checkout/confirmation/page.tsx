@@ -1,46 +1,101 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
 import { Button } from "@/components/Button/Button";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
-import type { AccountOrder } from "@/lib/accountApi";
+import { AccountApiError, getCheckoutStatus, type AccountOrder } from "@/lib/accountApi";
+import { useCart } from "@/lib/cart";
 
 import styles from "./page.module.css";
 
-const CONFIRMATION_STORAGE_KEY = "bimhive.checkout.confirmation";
+// Paymob's webhook usually lands within a couple of seconds of the redirect,
+// but never trust that — poll instead of assuming, and give up with a clear
+// "check your orders" message rather than spinning forever if it's slow.
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 60000;
 
-export default function CheckoutConfirmationPage() {
+function ConfirmationContent() {
+  const reference = useSearchParams().get("reference");
+  const { clear } = useCart();
   const [purchases, setPurchases] = useState<AccountOrder[] | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
+  const [error, setError] = useState("");
+  const startedAt = useRef(Date.now());
 
   useEffect(() => {
-    const raw = sessionStorage.getItem(CONFIRMATION_STORAGE_KEY);
-    setPurchases(raw ? (JSON.parse(raw) as AccountOrder[]) : []);
-    sessionStorage.removeItem(CONFIRMATION_STORAGE_KEY);
-  }, []);
+    if (!reference) {
+      setError("Missing order reference.");
+      return;
+    }
+    let cancelled = false;
 
-  if (purchases === null) return null;
+    async function poll() {
+      try {
+        const status = await getCheckoutStatus(reference!);
+        if (cancelled) return;
+        if (!status.pending) {
+          setPurchases(status.purchases);
+          // Only now — payment is actually confirmed, not just attempted.
+          clear();
+          return;
+        }
+        if (Date.now() - startedAt.current > POLL_TIMEOUT_MS) {
+          setTimedOut(true);
+          return;
+        }
+        setTimeout(poll, POLL_INTERVAL_MS);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof AccountApiError ? err.detail : "Could not confirm your order.");
+      }
+    }
 
-  if (purchases.length === 0) {
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [reference]);
+
+  if (error) {
     return (
-      <div className={`container ${styles.page}`}>
-        <EmptyState
-          icon="check-circle"
-          title="Nothing to confirm"
-          text="Looks like you didn't just come from checkout — your recent orders are on your account page."
-          actionLabel="View my orders"
-          actionHref="/account/orders"
-        />
+      <EmptyState
+        icon="x"
+        title="Couldn't confirm this order"
+        text={error}
+        actionLabel="View my orders"
+        actionHref="/account/orders"
+      />
+    );
+  }
+
+  if (timedOut) {
+    return (
+      <EmptyState
+        icon="clock"
+        title="Still confirming your payment"
+        text="This is taking longer than usual — your order will show up on your orders page as soon as it's confirmed."
+        actionLabel="View my orders"
+        actionHref="/account/orders"
+      />
+    );
+  }
+
+  if (purchases === null) {
+    return (
+      <div className={styles.hero}>
+        <Icon name="clock" size={40} className={styles.heroIcon} />
+        <h1 className={styles.title}>Confirming your payment…</h1>
+        <p className={styles.sub}>This only takes a moment.</p>
       </div>
     );
   }
 
   return (
-    <div className={`container ${styles.page}`}>
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Checkout" }]} />
-
+    <>
       <div className={styles.hero}>
         <Icon name="check-circle" size={40} className={styles.heroIcon} />
         <h1 className={styles.title}>Thanks for your purchase</h1>
@@ -72,6 +127,17 @@ export default function CheckoutConfirmationPage() {
           View My Licenses
         </Button>
       </div>
+    </>
+  );
+}
+
+export default function CheckoutConfirmationPage() {
+  return (
+    <div className={`container ${styles.page}`}>
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Checkout" }]} />
+      <Suspense fallback={null}>
+        <ConfirmationContent />
+      </Suspense>
     </div>
   );
 }

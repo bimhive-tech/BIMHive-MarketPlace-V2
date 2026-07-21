@@ -55,8 +55,10 @@ The Next.js dev server proxies `/api/*` to Django on `:8000`, so the app runs on
 ## Environment variables
 
 All config comes from `.env` (see [`.env.example`](.env.example) for the full annotated list). Key
-groups: Django core, `DATABASE_URL`, Cloudflare R2, licensing (`LICENSE_PEPPER`), and payments
-(Stripe/PayPal). **Never commit `.env`.**
+groups: Django core, `DATABASE_URL`, Cloudflare R2, licensing (`LICENSE_PEPPER`), and payments —
+Stripe/PayPal are scaffolded but unused; **Paymob is the one actually wired up** (`PAYMOB_SECRET_KEY`,
+`PAYMOB_PUBLIC_KEY`, `PAYMOB_HMAC_SECRET`, `PAYMOB_INTEGRATION_ID` — the last has no working default,
+see "Checkout" below). **Never commit `.env`.**
 
 ---
 
@@ -245,37 +247,52 @@ branch as a real sale, so seat limits, expiry, and repeat-activation all behave 
 response's `status` is `"trial"` instead of `"paid"` purely so the client can phrase things
 correctly (see LicLoader above), not because the enforcement path differs.
 
-## Checkout: real purchase flow, one key per copy, no payment processor connected yet
+## Checkout: real purchase flow, one key per copy, Paymob (test mode) collects payment
 
 `POST /api/account/checkout` (`CheckoutView`) takes the client-side cart (`web/lib/cart.tsx` — real,
-localStorage-backed, never had server state) and turns it into real `ProductPurchase` rows: `PAID`,
-no card collected. This is the same honest trade-off `ClaimFreeProductView` already made for
-free-only products (see the account API notes there), just extended to any price — Stripe/PayPal
-aren't wired up yet, so this is what actually completing a purchase means today, and it's the
-only way to exercise the full buy → license → download path with a real (non-free, non-staff)
-purchase for testing.
+localStorage-backed, never had server state) and creates `PENDING` `ProductPurchase` rows — one per
+unit, never one purchase covering a quantity: buying qty=3 of the same product creates three
+independent rows, each its own `license_key`, each `seats=1`, `amount` = unit price. One key per
+seat: each copy activates its own machine, none of the three keys are tied to each other.
+(`ProductPurchase` has no `unique_together(user, product)` constraint — holding several independent
+keys for the same product is the normal case.) `/account/orders` and `/account/licenses` show one
+row/card per purchase; **`/account/downloads` still shows exactly one card per distinct product**
+regardless of how many keys you hold for it (`AccountDownloadListView` dedupes with
+`distinct("product__product_id")`), since the files carry no per-purchase data.
 
-**One purchase per unit bought, never one purchase covering a quantity** — buying qty=3 of the same
-product in one cart creates three independent `ProductPurchase` rows, each its own `license_key`,
-each `seats=1`, `amount` = unit price. One key per seat: each copy activates its own machine, and
-none of the three keys are tied to each other. (This flipped from an earlier version that collapsed
-a qty=3 buy into one purchase with `seats=3` — dropped once it became clear that isn't what "3
-copies" should mean to a customer holding 3 separate keys; `ProductPurchase` no longer has a
-`unique_together(user, product)` constraint, since holding several independent keys for the same
-product is now the normal case, not an edge case.) `/account/orders` and `/account/licenses`
-correctly show one row/card per purchase (N keys for N copies) — but **`/account/downloads` still
-shows exactly one card per distinct product no matter how many keys you hold for it**
-(`AccountDownloadListView` dedupes with `distinct("product__product_id")`), since the files
-themselves carry no per-purchase data and there's nothing to gain from listing the same download
-link twice. Checking out a product you already own just adds
-more purchases/keys — it never edits an existing one. `/checkout` shows an order summary with a
-visible "no payment processor" notice and a single Complete Purchase button; `/checkout/confirmation`
-is the thank-you page, listing every key from the order (reading the just-completed order out of
-`sessionStorage`, since there's no server-side "current order" to fetch — the confirmation data is
-handed off client-side at the moment of purchase). When Stripe/PayPal are actually wired up, this
-view is exactly where real payment collection needs to be inserted before the `ProductPurchase`
-rows are created. (A subscription-priced product's cart item also carries a `billingPeriod` — see
-"Subscription pricing" below for how that changes `amount`/`expires_at`.)
+**Nothing is ever marked `PAID` by `CheckoutView` itself.** It also creates a Paymob payment
+intention for the order's total (`licensing/paymob.py::create_intention`) and returns a
+`checkoutUrl` — the `/checkout` page redirects the browser straight to it, Paymob's own hosted
+Unified Checkout page, so a card number never touches this app at all. Paymob confirms (or doesn't)
+via a server-to-server webhook, `POST /api/webhooks/paymob` (`PaymobWebhookView`, registered at the
+root, not under `/api/account/` — Paymob has no session to authenticate with). That webhook is the
+**only** place a purchase ever becomes `PAID`: it verifies an HMAC-SHA512 signature
+(`paymob.verify_hmac`, over a fixed field list Paymob's docs specify) before touching anything, and
+is idempotent (a `PAID` purchase is left alone on redelivery). `/checkout/confirmation` — where
+Paymob redirects the browser back to — never trusts that redirect for the actual grant decision
+either; it polls `GET /api/account/checkout/status?reference=` (matching on `payment_reference`,
+shared across every purchase from one checkout call) until the webhook has landed, showing a
+"confirming…" state in the meantime and clearing the cart only once purchases genuinely come back
+non-pending. See `api/installer/vendor/README.md`-style reasoning: a client-side "it worked" signal
+is never sufficient for something that grants a real license.
+
+**Test mode specifics, worth knowing before testing:**
+- Paymob's test/sandbox card (from their published test-credentials docs): `4987654321098769`,
+  expiry `12/25`, CVV `123`, any cardholder name.
+- The Paymob merchant account behind the current test keys is Egypt-only (settles in EGP) —
+  `PAYMOB_CURRENCY` (default `"EGP"`) is what's actually sent, regardless of a product's own
+  `currency` field. The cart's real numeric total still flows through end-to-end, just relabeled;
+  see the comment on `PAYMOB_CURRENCY` in `settings.py`. Not real FX, not meant to be.
+- `PAYMOB_INTEGRATION_ID` has no working default — it's a per-merchant-account ID from the Paymob
+  dashboard's Payment Integrations page and can't be guessed; `CheckoutView` fails with a clear 400
+  until it's set.
+- **The monthly subscription duration is TEMPORARILY 10 minutes, not 30 days** — see
+  `account_api.py::_subscription_duration`'s comment. This is deliberate, for testing that a Paymob
+  payment → webhook → license actually revoking on expiry works end to end without waiting a month;
+  change it back to `timedelta(days=30)` once that's confirmed. Yearly is untouched (365 days).
+
+(A subscription-priced product's cart item also carries a `billingPeriod` — see "Subscription
+pricing" below for how that changes `amount`/`expires_at`.)
 
 ## Subscription pricing: monthly/yearly, on top of the same one-time flow
 
@@ -395,8 +412,10 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   `?product=`/`?status=`), `POST /api/admin/license-codes/<id>/revoke` (only while unredeemed).
   `POST /api/admin/licenses/<id>/release` (staff-only: frees one machine's seat so a different
   machine can claim it — the manual override for a customer whose PC died; see "Licensing" above).
-- Account: `POST /api/account/checkout` (turns the client-side cart into real `ProductPurchase` rows —
-  no payment collected, see "Checkout" above), `POST /api/account/orders/<id>/refund` (self-service
+- Account: `POST /api/account/checkout` (creates PENDING `ProductPurchase` rows + a Paymob payment
+  intention, returns a `checkoutUrl` to redirect to — see "Checkout" above),
+  `GET /api/account/checkout/status?reference=` (polled by `/checkout/confirmation` to find out once
+  the webhook has confirmed payment), `POST /api/account/orders/<id>/refund` (self-service
   cancel/refund, own orders only, 30-day window — see "Cancel / refund" above),
   `POST /api/account/licenses/redeem` (redeem a
   staff-generated license code onto the caller's own account — see "License codes" above),
@@ -405,6 +424,9 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer, no checkout/payment —
   same bare `.exe`, gated on `Product.has_trial`, also issues a real trial `ProductPurchase`/key;
   see "Free trials" above).
+- **Payment webhook (no auth, HMAC-verified instead): `POST /api/webhooks/paymob`** — registered at
+  the URL root (not under `/api/account/`), the only place a checkout purchase ever becomes `PAID`;
+  see "Checkout" above.
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped
