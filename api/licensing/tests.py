@@ -85,35 +85,54 @@ def test_activate_unknown_product_is_blocked():
     assert body["authorized"] is False and body["status"] == "blocked"
 
 
-# ── Trial lifecycle ──
-def test_first_activation_starts_trial(product):
+# ── Trial lifecycle — a trial key is a real ProductPurchase(is_trial=True),
+# created by AccountPluginBuildTrialDownloadView, not a client-requested
+# length. There's no anonymous/keyless grant anymore — see the "no key at
+# all" test below. ──
+def _trial_purchase(product, user, *, expires_in=None):
+    from datetime import timedelta
+
+    return ProductPurchase.objects.create(
+        user=user, product=product, is_trial=True,
+        payment_status=ProductPurchase.PaymentStatus.PAID,
+        amount=0, expires_at=(timezone.now() + expires_in) if expires_in else None,
+    )
+
+
+def test_no_key_at_all_is_denied(product):
     resp = _activate(Client(), productCode=product.code, machineFingerprintHash=FP)
     body = resp.json()
+    assert body["authorized"] is False
+    assert body["status"] == "blocked"
+    assert not MachineLicense.objects.filter(product=product).exists()
+
+
+def test_trial_key_authorizes_and_reports_remaining_time(product, django_user_model):
+    from datetime import timedelta
+
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    trial = _trial_purchase(product, user, expires_in=timedelta(days=30))
+
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key).json()
     assert body["authorized"] is True
-    assert body["status"] == "active"
+    assert body["status"] == "trial"
     assert body["message"] == "Trial activated"
     assert body["remainingSeconds"] > 0
     ml = MachineLicense.objects.get(product=product)
     assert ml.machine_fingerprint_hash == _protected_hash(FP)  # peppered + uppercased
 
 
-def test_trial_days_clamped_to_server_max(product):
-    # Client asks for 99999 days; server caps at product.default_trial_days (30).
-    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, trialDays=99999)
-    ml = MachineLicense.objects.get(product=product)
-    span_days = (ml.expires_at - ml.started_at).days
-    assert span_days == 30
+def test_repeat_trial_activation_reports_still_active(product, django_user_model):
+    from datetime import timedelta
 
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    trial = _trial_purchase(product, user, expires_in=timedelta(days=30))
+    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key)
 
-def test_trial_clamp_honors_hours_and_minutes_not_just_days():
-    fine_grained = LicensedProduct.objects.create(
-        code="fine-grained-online", name="Fine Grained", default_trial_days=0,
-        default_trial_hours=2, default_trial_minutes=30, is_active=True,
-    )
-    resp = _activate(Client(), productCode=fine_grained.code, machineFingerprintHash=FP, trialMinutes=99999)
-    body = resp.json()
-    assert body["remainingSeconds"] <= 150 * 60  # 2h30m, never more
-    assert body["remainingSeconds"] > 149 * 60  # allow a few seconds of test runtime drift
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key).json()
+    assert body["authorized"] is True
+    assert body["status"] == "trial"
+    assert body["message"] == "Trial active"
 
 
 def test_products_shape_rounds_fractional_days_up(product):
@@ -128,13 +147,12 @@ def test_products_shape_rounds_fractional_days_up(product):
     assert data[0]["defaultTrialDays"] == 2
 
 
-def test_expired_trial_denied(product):
-    _activate(Client(), productCode=product.code, machineFingerprintHash=FP)
-    ml = MachineLicense.objects.get(product=product)
-    ml.started_at = timezone.now() - timezone.timedelta(days=40)
-    ml.expires_at = timezone.now() - timezone.timedelta(days=10)
-    ml.save()
-    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
+def test_expired_trial_denied(product, django_user_model):
+    from datetime import timedelta
+
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    trial = _trial_purchase(product, user, expires_in=timedelta(days=-1))  # already expired
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key).json()
     assert body["authorized"] is False and body["status"] == "expired"
 
 
@@ -207,12 +225,18 @@ def test_repeat_activation_from_an_already_bound_machine_does_not_need_a_free_se
     assert MachineLicense.objects.filter(purchase=purchase).count() == 1
 
 
-def test_manually_blocked_machine_denied(product):
-    _activate(Client(), productCode=product.code, machineFingerprintHash=FP)
+def test_manually_blocked_machine_denied(product, django_user_model):
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    purchase = ProductPurchase.objects.create(
+        user=user, product=product, payment_status=ProductPurchase.PaymentStatus.PAID
+    )
+    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=purchase.license_key)
     ml = MachineLicense.objects.get(product=product)
     ml.status = "blocked"
     ml.save(update_fields=["status"])
-    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
+    body = _activate(
+        Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=purchase.license_key
+    ).json()
     assert body["authorized"] is False and body["status"] == "blocked"
 
 
@@ -271,11 +295,11 @@ def test_response_includes_a_valid_signature_when_signing_key_is_configured(prod
 
 
 def test_signature_reflects_the_actual_decision_not_a_constant(product, _signing):
-    active_body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
+    denied_body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP).json()
     bad_request_body = _activate(Client(), machineFingerprintHash=FP).json()  # missing productCode
-    assert active_body["status"] == "active"
+    assert denied_body["status"] == "blocked"
     assert bad_request_body["status"] == "bad_request"
-    assert active_body["signature"] != bad_request_body["signature"]
+    assert denied_body["signature"] != bad_request_body["signature"]
 
 
 def test_no_signature_field_when_signing_key_is_not_configured(product, settings):

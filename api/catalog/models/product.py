@@ -69,7 +69,14 @@ class Product(TimeStamped):
     description = models.TextField()
 
     # ── Pricing ──
+    # `price` is the one-time price and stays the default for every product —
+    # subscription billing is opt-in: set monthly_price and/or yearly_price
+    # (see is_subscription) to sell this product as a recurring plan instead.
+    # Both null means "not a subscription," not "$0" — a $0 subscription
+    # tier isn't a thing here, only a free one-time product is (see is_free).
     price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    monthly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    yearly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=8, default="USD")
 
     # ── Licensing config (activation records live in licensing.LicensedProduct) ──
@@ -150,12 +157,37 @@ class Product(TimeStamped):
         return value
 
     @property
+    def is_subscription(self):
+        return bool(self.monthly_price or self.yearly_price)
+
+    @property
     def is_free(self):
-        return self.price <= 0
+        # A subscription product's one-time `price` is unused/irrelevant —
+        # it's never actually free just because that field defaults to 0.
+        return self.price <= 0 and not self.is_subscription
 
     @property
     def price_label(self):
+        if self.is_subscription:
+            if self.monthly_price:
+                return f"${self.monthly_price:.2f}/mo"
+            return f"${self.yearly_price:.2f}/yr"
         return "Free" if self.is_free else f"${self.price:.2f}"
+
+    @property
+    def yearly_savings_percent(self):
+        """How much cheaper billing yearly is vs. paying the monthly price
+        for 12 months, rounded to a whole percent for display (the
+        "Save N%" badge on the billing toggle). None when either price
+        isn't set, or when yearly isn't actually cheaper — never shown as a
+        misleading 0%/negative "discount"."""
+        if not self.monthly_price or not self.yearly_price:
+            return None
+        yearly_equivalent_of_monthly = self.monthly_price * 12
+        if self.yearly_price >= yearly_equivalent_of_monthly:
+            return None
+        savings = (yearly_equivalent_of_monthly - self.yearly_price) / yearly_equivalent_of_monthly
+        return round(savings * 100)
 
 
 class ProductMedia(TimeStamped):

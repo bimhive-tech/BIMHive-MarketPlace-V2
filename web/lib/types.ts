@@ -78,6 +78,9 @@ export interface ProductCard {
   cover_image_url: string;
   price: string;
   price_label: string;
+  monthly_price: string | null;
+  yearly_price: string | null;
+  is_subscription: boolean;
   currency: string;
   rating_average: string;
   rating_count: number;
@@ -177,6 +180,7 @@ export interface TrialBuild {
 export interface ProductDetail extends Omit<ProductCard, "category"> {
   description: string;
   is_free: boolean;
+  yearly_savings_percent: number | null;
   default_trial_days: number;
   default_trial_hours: number;
   default_trial_minutes: number;

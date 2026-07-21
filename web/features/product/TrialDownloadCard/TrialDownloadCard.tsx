@@ -18,13 +18,12 @@ function formatTrialLength(days: number, hours: number, minutes: number): string
 }
 
 /** Shown on a plugin product's buy box when staff have configured a trial
- * length above zero (Product.has_trial). Downloads the same on-demand .exe
- * the paid flow builds, minus the license-key zip wrapper — there's no
- * purchase yet, so nothing to attach. The plugin's own first activation
- * call (no license key) is what actually starts the trial clock; this
- * button just gets the installer into the customer's hands. Uses fetch+blob
- * rather than a plain link for the same reason ProductRowActions does: a
- * failed build would otherwise "download" a JSON error body. */
+ * length above zero (Product.has_trial). Downloading issues a real,
+ * account-bound trial key (shown afterward on /account/licenses) — the
+ * plugin still requires that key to be typed in, same as a paid purchase,
+ * it just doesn't cost anything or need checkout. Uses fetch+blob rather
+ * than a plain link for the same reason ProductRowActions does: a failed
+ * build would otherwise "download" a JSON error body. */
 export function TrialDownloadCard({ product }: { product: ProductDetail }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [year, setYear] = useState(product.trial_builds[0]?.revit_year ?? "");
@@ -72,7 +71,7 @@ export function TrialDownloadCard({ product }: { product: ProductDetail }) {
         <Icon name="clock" size={18} className={styles.icon} />
         <div>
           <p className={styles.title}>Try it free</p>
-          <p className={styles.sub}>{trialLength} trial — no purchase needed to start</p>
+          <p className={styles.sub}>{trialLength} trial — free, no payment needed</p>
         </div>
       </div>
 
@@ -109,6 +108,7 @@ export function TrialDownloadCard({ product }: { product: ProductDetail }) {
           {downloading ? "Preparing…" : "Download Trial"}
         </Button>
       )}
+      {user && <p className={styles.hint}>Your free trial key will appear on your Licenses page — type it into the plugin to activate.</p>}
     </div>
   );
 }

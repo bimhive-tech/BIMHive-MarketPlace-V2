@@ -220,29 +220,12 @@ def license_activate_api(request):
         )
 
     now = timezone.now()
-    # SECURITY: the client may *request* a trial length, but the server caps it at the
-    # product's configured maximum (default_trial_days/hours/minutes). A tampered client
-    # asking for a 99999-day trial is clamped; a legitimate request (e.g. 7 days) is unchanged.
-    trial_minutes = int(body.get("trialMinutes") or 0)
-    trial_days = int(body.get("trialDays") or 0)
-    requested_trial_minutes = (
-        trial_minutes if trial_minutes > 0 else ((trial_days * 24 * 60) if trial_days > 0 else None)
-    )
-    server_max_minutes = max(1, product.trial_minutes_total)
-    if requested_trial_minutes is None or requested_trial_minutes > server_max_minutes:
-        effective_trial_minutes = server_max_minutes
-    else:
-        effective_trial_minutes = requested_trial_minutes
-
     fingerprint_version = (body.get("fingerprintVersion") or "HWFP-2").strip() or "HWFP-2"
     plugin_version = (body.get("pluginVersion") or "").strip()
     machine_data = body.get("machineData") or {}
     metadata = {
         "pluginVersion": body.get("pluginVersion"),
         "fingerprintVersion": body.get("fingerprintVersion"),
-        "trialDays": body.get("trialDays"),
-        "trialMinutes": body.get("trialMinutes"),
-        "effectiveTrialMinutes": effective_trial_minutes,
         "ipAddress": body.get("ipAddress"),
     }
     license_key = (body.get("licenseKey") or "").strip()
@@ -341,10 +324,11 @@ def license_activate_api(request):
             )
             return _no_seats_denied_response(reference_machine)
 
-        # A LicenseCode-redeemed purchase carries its own expiry; a normal
-        # (perpetual) purchase has expires_at=None and gets the effectively-
-        # forever date, same as before this field existed.
+        # A LicenseCode-redeemed or trial purchase carries its own expiry; a
+        # normal (perpetual) purchase has expires_at=None and gets the
+        # effectively-forever date, same as before this field existed.
         paid_expires_at = paid_purchase.expires_at or (now + timedelta(days=365 * 100))
+        was_first_activation = machine_license is None
         if machine_license is None:
             machine_license = MachineLicense.objects.create(
                 product=product,
@@ -377,11 +361,29 @@ def license_activate_api(request):
         _log_event(
             product,
             protected_hash,
-            "paid_activation",
+            "trial_activation" if paid_purchase.is_trial else "paid_activation",
             {"licenseKey": paid_purchase.license_key, "userId": paid_purchase.user_id},
             machine_license=machine_license,
             event_time=now,
         )
+        # A trial purchase still expires (see AccountPluginBuildTrialDownloadView),
+        # so — unlike a real paid purchase, which reports the fixed "forever"
+        # shape below — it needs its actual startedAt/expiresAt/remainingSeconds
+        # so LicLoader can tell the customer how much trial time is left, and so
+        # a lapsed trial denies via the invalid_purchase branch above with a real
+        # "expired" status instead of looking indistinguishable from "paid."
+        if paid_purchase.is_trial:
+            remaining = max(0, int((paid_expires_at - now).total_seconds()))
+            return _signed_response(
+                {
+                    "authorized": True,
+                    "status": "trial",
+                    "message": "Trial activated" if was_first_activation else "Trial active",
+                    "startedAt": _iso_utc(machine_license.started_at),
+                    "expiresAt": _iso_utc(paid_expires_at),
+                    "remainingSeconds": remaining,
+                }
+            )
         return _signed_response(
             {
                 "authorized": True,
@@ -393,82 +395,19 @@ def license_activate_api(request):
             }
         )
 
-    if machine_license is None:
-        expires_at = now + timedelta(minutes=effective_trial_minutes)
-        machine_license = MachineLicense.objects.create(
-            product=product,
-            machine_fingerprint_hash=protected_hash,
-            fingerprint_version=fingerprint_version,
-            status="active",
-            started_at=now,
-            expires_at=expires_at,
-            first_seen_at=now,
-            last_seen_at=now,
-            install_count=1,
-            plugin_version=plugin_version,
-            machine_data=machine_data,
-            metadata=metadata,
-        )
-        _log_event(
-            product,
-            protected_hash,
-            "activate",
-            {
-                "productCode": product_code,
-                "trialDays": trial_days,
-                "trialMinutes": trial_minutes,
-                "effectiveTrialMinutes": effective_trial_minutes,
-            },
-            machine_license=machine_license,
-            event_time=now,
-        )
-        remaining = max(0, int((expires_at - now).total_seconds()))
-        return _signed_response(
-            {
-                "authorized": True,
-                "status": "active",
-                "message": "Trial activated",
-                "startedAt": _iso_utc(machine_license.started_at),
-                "expiresAt": _iso_utc(machine_license.expires_at),
-                "remainingSeconds": remaining,
-            }
-        )
-
-    machine_license.last_seen_at = now
-    machine_license.install_count += 1
-    machine_license.plugin_version = plugin_version or machine_license.plugin_version
-    machine_license.machine_data = {**(machine_license.machine_data or {}), **machine_data}
-    machine_license.metadata = {**(machine_license.metadata or {}), **metadata}
-    normalized_expires_at = machine_license.started_at + timedelta(minutes=effective_trial_minutes)
-    if machine_license.status != "paid" and normalized_expires_at < machine_license.expires_at:
-        machine_license.expires_at = normalized_expires_at
-    machine_license.save()
-
-    if now >= machine_license.expires_at:
-        machine_license.status = "expired"
-        machine_license.last_seen_at = now
-        machine_license.save(update_fields=["status", "last_seen_at"])
-        _log_event(product, protected_hash, "expired", {"reason": "trial_finished"}, machine_license=machine_license, event_time=now)
-        return _signed_response(
-            {
-                "authorized": False,
-                "status": "expired",
-                "message": "Access denied. Trial expired. Please contact BIMHive.",
-                "startedAt": _iso_utc(machine_license.started_at),
-                "expiresAt": _iso_utc(machine_license.expires_at),
-                "remainingSeconds": 0,
-            }
-        )
-
-    _log_event(product, protected_hash, "recheck", {"reason": "still_active"}, machine_license=machine_license, event_time=now)
-    remaining = max(0, int((machine_license.expires_at - now).total_seconds()))
+    # No key at all, or a key that doesn't resolve to an active purchase (a
+    # trial purchase counts here too — see AccountPluginBuildTrialDownloadView,
+    # which is the only way to acquire a trial key). A key is always required
+    # to activate, trial or paid — there's deliberately no anonymous/keyless
+    # grant here anymore.
+    _log_event(product, protected_hash, "denied", {"reason": "no_active_purchase"}, machine_license=machine_license, event_time=now)
     return _signed_response(
         {
-            "authorized": True,
-            "status": "active",
-            "message": "Trial active",
-            "startedAt": _iso_utc(machine_license.started_at),
-            "expiresAt": _iso_utc(machine_license.expires_at),
-            "remainingSeconds": remaining,
+            "authorized": False,
+            "status": "blocked",
+            "message": "Enter a valid BIM Hive license key — including a free trial key from your account — to activate this plugin.",
+            "startedAt": _iso_utc(machine_license.started_at) if machine_license else None,
+            "expiresAt": _iso_utc(machine_license.expires_at) if machine_license else None,
+            "remainingSeconds": 0,
         }
     )

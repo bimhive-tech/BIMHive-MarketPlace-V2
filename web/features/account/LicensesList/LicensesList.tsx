@@ -119,14 +119,20 @@ export function LicensesList() {
               <span className={styles.product}>{license.product_name}</span>
               <span className={styles.code}>{license.product_code}</span>
             </div>
-            <Pill tone={licenseStatusTone(license.license_status)}>{license.license_status}</Pill>
+            <div className={styles.headPills}>
+              {license.is_trial && <Pill tone="gold">Trial</Pill>}
+              {license.billing_period && (
+                <Pill tone="neutral">{license.billing_period === "yearly" ? "Yearly" : "Monthly"}</Pill>
+              )}
+              <Pill tone={licenseStatusTone(license.license_status)}>{license.license_status}</Pill>
+            </div>
           </div>
 
           <div className={styles.meta}>
             <span>
               <Icon name="lock" size={14} /> {license.license_key || "No key issued"}
             </span>
-            <span>Purchased {formatDate(license.paid_at ?? license.requested_at)}</span>
+            <span>{license.is_trial ? "Trial started" : "Purchased"} {formatDate(license.paid_at ?? license.requested_at)}</span>
             {license.expires_at && <span>Expires {formatDate(license.expires_at)}</span>}
             {license.seats > 1 && (
               <span>

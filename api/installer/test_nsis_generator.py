@@ -80,7 +80,9 @@ def test_resource_under_addin_dir_appears_once_as_a_file_entry(build):
     )
     script, payload_paths = generate_nsis_script(build, [resource])
     assert script.count("/oname=icon.png") == 1
-    assert script.count("Addins\\2025\\Resources") == 1
+    # Once in Install (SetOutPath stages it) and once in Uninstall (RMDir
+    # cleans up that subdirectory) — a real second mention, not a duplicate.
+    assert script.count("Addins\\2025\\Resources") == 2
     assert any(p.endswith("icon.png") for p in payload_paths)
 
 

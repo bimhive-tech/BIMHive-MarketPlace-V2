@@ -152,13 +152,14 @@ class ProductCardSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="category.name", read_only=True)
     category_slug = serializers.CharField(source="category.slug", read_only=True)
     price_label = serializers.CharField(read_only=True)
+    is_subscription = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
             "id", "name", "slug", "type", "short_description", "cover_image_url",
-            "price", "price_label", "currency", "rating_average", "rating_count",
-            "download_count", "category", "category_slug", "is_featured",
+            "price", "price_label", "monthly_price", "yearly_price", "is_subscription", "currency",
+            "rating_average", "rating_count", "download_count", "category", "category_slug", "is_featured",
         ]
 
 
@@ -175,6 +176,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     price_label = serializers.CharField(read_only=True)
     is_free = serializers.BooleanField(read_only=True)
     has_trial = serializers.BooleanField(read_only=True)
+    is_subscription = serializers.BooleanField(read_only=True)
+    yearly_savings_percent = serializers.IntegerField(read_only=True)
     rating_breakdown = serializers.SerializerMethodField()
     trial_builds = serializers.SerializerMethodField()
 
@@ -183,6 +186,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "slug", "type", "short_description", "description",
             "price", "currency", "price_label", "is_free",
+            "monthly_price", "yearly_price", "is_subscription", "yearly_savings_percent",
             "default_trial_days", "default_trial_hours", "default_trial_minutes", "has_trial",
             "trial_builds", "cover_image_url", "version", "released_at",
             "rating_average", "rating_count", "download_count", "rating_breakdown",

@@ -26,6 +26,13 @@
   gap: var(--space-3);
 }
 
+.headPills {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
 .product {
   display: block;
   font-weight: var(--fw-semibold);

@@ -182,11 +182,14 @@ Every installer build wraps the real plugin with it, transparently, at packaging
    product's configured trial length from `_license.bin`. A trial never silently renews once its
    `MachineLicense` row exists (server-side, see below) — expiry always means a real key is required
    from then on for that machine.
-5. If a fresh/ongoing trial is granted instead (server-side, no key needed — see below), LicLoader
-   tells the customer so directly with a "your trial is active, N remaining" notice, since that path
-   never shows the key dialog at all otherwise. A "License Key" button LicLoader adds to its own
-   Ribbon tab lets the customer open that same key-entry dialog voluntarily at any time — e.g. to
-   upgrade from a trial to a paid key — without needing to be denied first or restart Revit.
+5. A key is **always** required to activate — trial or paid, there's no anonymous/keyless grant on
+   the plugin side (see "Free trials" below for where a trial key actually comes from). Once
+   authorized, LicLoader tells the customer so with a "your trial is active, N remaining" notice
+   whenever the status isn't a paid key — shown right after the very first successful key entry, and
+   again on later launches once the key is cached and re-validates silently with no prompt. A
+   "License Key" button LicLoader adds to its own Ribbon tab lets the customer open that same
+   key-entry dialog voluntarily at any time — e.g. to upgrade from a trial to a paid key — without
+   needing to be denied first or restart Revit.
 
 Rewriting a `.addin` that doesn't parse as a normal Revit manifest fails the build loudly
 (`AddinRewriteError` → `BuildError`) rather than silently shipping the real plugin unwrapped and
@@ -233,6 +236,15 @@ cost a seat), a new machine only claims a seat if fewer than `seats` are current
 customer-facing label shown on `/account/licenses` — `payment_status` has more states than a buyer
 needs to reason about.
 
+**A key is required to activate, always — including a trial.** `/api/license/activate` has no
+anonymous/keyless path anymore: if the request carries no key, or a key that doesn't resolve to an
+active `ProductPurchase`, the response is a plain `authorized: false, status: "blocked"` denial (see
+"Free trials" below for how a trial actually gets its key). `ProductPurchase.is_trial` marks the one
+kind of purchase that's free — otherwise it's activated through the exact same `paid_purchase`
+branch as a real sale, so seat limits, expiry, and repeat-activation all behave identically; the
+response's `status` is `"trial"` instead of `"paid"` purely so the client can phrase things
+correctly (see LicLoader above), not because the enforcement path differs.
+
 ## Checkout: real purchase flow, one key per copy, no payment processor connected yet
 
 `POST /api/account/checkout` (`CheckoutView`) takes the client-side cart (`web/lib/cart.tsx` — real,
@@ -262,7 +274,35 @@ is the thank-you page, listing every key from the order (reading the just-comple
 `sessionStorage`, since there's no server-side "current order" to fetch — the confirmation data is
 handed off client-side at the moment of purchase). When Stripe/PayPal are actually wired up, this
 view is exactly where real payment collection needs to be inserted before the `ProductPurchase`
-rows are created.
+rows are created. (A subscription-priced product's cart item also carries a `billingPeriod` — see
+"Subscription pricing" below for how that changes `amount`/`expires_at`.)
+
+## Subscription pricing: monthly/yearly, on top of the same one-time flow
+
+A product's normal `price` is one-time and perpetual, unchanged from before. Setting
+`Product.monthly_price` and/or `yearly_price` on the **Pricing & License** tab (either or both —
+leave both blank to keep one-time pricing) turns it into a subscription: `Product.is_subscription`
+flips on, `BuyBox` swaps the single price for a `BillingToggle` (Monthly/Yearly, defaulting to
+Yearly — the better-value option leads), and `Product.yearly_savings_percent` drives the "Save N%"
+badge shown on the Yearly option (computed once, server-side, as `1 - yearly / (monthly × 12)`; not
+shown at all if yearly isn't actually cheaper, so it can never read as a false discount).
+
+The chosen interval rides along in the cart (`CartItem.billingPeriod`, part of the line item's key
+so a Monthly and a Yearly line for the same product never merge into one with an ambiguous price)
+straight through to `CheckoutView`, which is where a subscription purchase turns into something
+the existing licensing system already knows how to enforce: `amount` is the chosen interval's price,
+and `expires_at` is set 30 (monthly) or 365 (yearly) days out — the exact same field a `LicenseCode`
+redemption or a trial already uses to expire a purchase. There's no separate recurring-billing
+system, no webhook, nothing that re-charges a card on renewal (no payment processor is connected at
+all yet, same as one-time checkout) — a subscription purchase is simply a purchase with a shorter
+fuse, reusing 100% of the seat/expiry/activation machinery `/api/license/activate` already has.
+`ProductPurchase.billing_period` (`""` / `"monthly"` / `"yearly"`) is stored purely for display —
+`/account/orders` and `/account/licenses` show it as a small pill next to the price.
+
+A product's one-time `price` still exists and is still what free-claim/checkout falls back to for a
+subscription product that also lists one (buying it with no `billingPeriod` in the cart item), and
+`Product.is_free`/`price_label` both know to ignore a subscription product's (irrelevant, usually
+`$0.00`) one-time `price` field rather than misreporting it as free.
 
 ## Cancel / refund: self-service, 30-day window, abuse-proof by construction
 
@@ -275,17 +315,14 @@ function staff use from `/admin-portal/orders` — so a self-service refund and 
 behave identically. The **Cancel & Refund** button lives on `/account/orders`, next to each
 refund-eligible order.
 
-**Why refunding can't be used to farm a second free trial on the same machine — deliberately not new
-code, just a consequence of how activation already worked:** `revoke_purchase_access` never deletes
-the `MachineLicense` row for a machine that had activated, it only changes its `status` and expires
-it. `/api/license/activate` only ever issues a trial (`status: "active"`, a fresh `expiresAt`) when
-**no** `MachineLicense` row exists yet for that `(product, machine)` pair. Once any machine has
-activated at all — trial or paid — that row exists forever, so a later refund just leaves it
-pointing at an inactive purchase: the next activation call from that same machine is denied
-(`status: "cancelled"`), never handed a new trial. A genuinely different machine is unaffected and
-still gets its own first trial normally — the block is per-machine, not per-account or per-product.
+**Why refunding can't be used to farm a second free trial:** a trial is a real
+`ProductPurchase(is_trial=True)`, and `AccountPluginBuildTrialDownloadView` only ever creates one per
+`(user, product)` — it looks for an existing one first and reuses it, never resets `expires_at`, and
+refunding it (`revoke_purchase_access`) just flips its `payment_status`, it doesn't delete the row or
+let a new one be created. Redownloading the trial installer, or the plugin re-activating after a
+refund, both land on that same purchase — now denied, never a fresh one.
 
-## Free trials: configurable per product, download without buying
+## Free trials: configurable per product, a real key, no purchase needed
 
 Each plugin product has a trial length set on its **Pricing & License** tab as days + hours +
 minutes (`Product.default_trial_days/hours/minutes`, kept in sync onto the activation SKU by
@@ -294,25 +331,23 @@ can change it per product, and setting all three to 0 turns the trial off entire
 (the storefront's "Download Trial" button then just doesn't render — see `Product.has_trial`).
 
 On a plugin product's page, `TrialDownloadCard` (rendered inside `BuyBox` when `has_trial` is true)
-lets any logged-in customer download the installer with **no purchase at all** — `GET
-/api/account/downloads/plugin-builds/<id>/trial` generates the same on-demand `.exe`
-(`installer/builder.py::generate_installer_bytes`) but skips the license-key zip wrapper, since
-there's no purchase yet to draw a key from. The trial clock itself isn't started by this download —
-it starts the moment the installed plugin's first `/api/license/activate` call comes in with no
-`licenseKey`, which already fell into the trial-issuing branch before this feature existed (see
-"Licensing" above); the server caps that trial at the product's configured
-`default_trial_days/hours/minutes` (`ProductPurchase.trial_minutes_total`), same clamping logic as
-always, just now precise to the minute instead of only whole days. Once the trial expires the
-already-installed plugin denies access on its own (the activation response's `expiresAt`/
-`remainingSeconds` is what it enforces against) — buying a real license just means entering that key
-directly in the plugin; nothing needs to be re-downloaded.
+lets any logged-in customer download the installer with **no checkout, no payment** —
+`GET /api/account/downloads/plugin-builds/<id>/trial`
+(`AccountPluginBuildTrialDownloadView`) generates the same on-demand `.exe`
+(`installer/builder.py::generate_installer_bytes`) the paid flow does, still with no key embedded in
+it, but it also creates (idempotently — the same call twice never resets the clock or issues a
+second key) a real `ProductPurchase(is_trial=True, payment_status=PAID, amount=0)` with
+`expires_at` set from the product's configured trial length. That purchase's `license_key` is what
+shows up on `/account/licenses` with a "Trial" pill — **the customer has to copy it into the plugin
+themselves**, exactly like a paid key, because the plugin no longer accepts activating without one
+(see "Licensing" above). Once it expires, `/api/license/activate` denies it through the normal
+`is_license_active`/expiry path — nothing trial-specific, the same code paid keys already go
+through.
 
 The legacy-compatible `GET /api/license/products` endpoint still returns `defaultTrialDays` as a
 single whole integer (rounded **up** from the precise day/hour/minute total, so an old plugin
 reading it as a plain int never sees a shorter trial than configured) — that field's shape is part
-of the locked byte-compatible contract and was never going to change; the real to-the-minute value
-only matters to `/api/license/activate`, which already accepted `trialMinutes` before this feature
-and needed no contract change at all.
+of the locked byte-compatible contract and was never going to change.
 
 ## License codes: redeemable, account-connected replacement for the old key files
 
@@ -367,8 +402,9 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   staff-generated license code onto the caller's own account — see "License codes" above),
   `GET /api/account/downloads/plugin-builds/<id>/get` (generates and streams the bare `.exe` live —
   no zip, no key attached; see "Auto-generated installers" above),
-  `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer, no purchase needed —
-  same bare `.exe`, gated on `Product.has_trial`; see "Free trials" above).
+  `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer, no checkout/payment —
+  same bare `.exe`, gated on `Product.has_trial`, also issues a real trial `ProductPurchase`/key;
+  see "Free trials" above).
 - **Licensing (byte-compatible, do not change): `GET /api/license/products`, `POST /api/license/activate`**
   — the response now additionally includes a `signature` field (HMAC over the decision fields,
   keyed by `LICENSE_SIGNING_KEY`) when that env var is set; this is purely additive; older shipped
@@ -389,6 +425,18 @@ cd api && pytest          # includes golden-master tests for the license API con
 
 `installer/test_builder.py` runs real NSIS builds (no mocking) end to end — needs `makensis` on
 PATH (see Prerequisites). The rest of the suite doesn't touch NSIS and runs anywhere.
+
+No local Postgres? Point `DATABASE_URL` at a throwaway SQLite file (or `:memory:` for a one-off run)
+instead of editing `.env` — `dj_database_url` (used by `config/settings.py`) understands the
+`sqlite://` scheme directly, migrations apply cleanly, and the whole suite runs against it:
+```bash
+DATABASE_URL="sqlite:///:memory:" pytest   # or sqlite:///path/to/file.sqlite3 for a persistent one
+```
+A handful of tests are genuinely Postgres-only and fail under SQLite for reasons unrelated to
+whatever you're testing — not bugs, just what the real deployed database (Postgres, always) does
+differently: `AccountDownloadListView`'s `distinct("product__product_id")` (Postgres `DISTINCT ON`,
+unsupported elsewhere), and a couple of assertions on `Sum()`-aggregated `Decimal` string formatting
+(`"25"` vs `"25.00"`).
 
 ---
 

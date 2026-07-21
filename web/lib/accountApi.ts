@@ -49,6 +49,8 @@ export interface AccountOrder {
   payment_status: string;
   license_key: string;
   seats: number;
+  is_trial: boolean;
+  billing_period: "" | "monthly" | "yearly";
   requested_at: string;
   paid_at: string | null;
 }
@@ -71,6 +73,8 @@ export interface AccountLicense {
   license_status: "active" | "inactive" | "expired";
   license_key: string;
   seats: number;
+  is_trial: boolean;
+  billing_period: "" | "monthly" | "yearly";
   expires_at: string | null;
   requested_at: string;
   paid_at: string | null;
@@ -117,6 +121,7 @@ export const refundOrder = (id: string) => postJSON<AccountOrder>(`/api/account/
 export interface CheckoutItem {
   slug: string;
   qty: number;
+  billingPeriod?: "" | "monthly" | "yearly";
 }
 export const checkout = (items: CheckoutItem[]) =>
   postJSON<{ purchases: AccountOrder[] }>("/api/account/checkout", { items });

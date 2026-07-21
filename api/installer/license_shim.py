@@ -80,10 +80,13 @@ def build_license_config(build) -> bytes:
 
     trialMinutes carries the full days+hours+minutes total; trialDays is
     left at 0 so the shim's own fallback (`TrialMinutes > 0 ? TrialMinutes :
-    TrialDays * 1440`) always prefers the precise value. Either way this is
-    only what the client *requests* — the server clamps to its own
-    configured max regardless (see api_views.py's trial clamp), so this
-    can't be tampered with to extend a trial."""
+    TrialDays * 1440`) always prefers the precise value. This is display-only
+    now (LicLoader's DescribeConfiguredTrialLength(), used to say "Your
+    {N}-day trial has ended" by name) — the server no longer reads a
+    client-requested trial length at all (see licensing/api_views.py: a key
+    is always required to activate, trial or paid; the actual trial length
+    lives on the ProductPurchase created at trial-download time, see
+    licensing/account_api.py::AccountPluginBuildTrialDownloadView)."""
     config = {
         "onlineLicense": {
             "enabled": True,

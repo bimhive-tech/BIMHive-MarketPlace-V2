@@ -9,8 +9,17 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "bimhive.cart.v1";
 
+// "" = one-time price (every item before this field existed, and any
+// non-subscription product) — matches licensing.ProductPurchase.BillingPeriod
+// on the backend so a cart item's billingPeriod can be sent straight through
+// to checkout unchanged.
+export type BillingPeriod = "" | "monthly" | "yearly";
+
 export interface CartItem {
-  key: string; // String(productId) — one line item per product
+  // productId + billingPeriod — a monthly and a yearly line for the same
+  // product are distinct line items, not one that silently merges (they
+  // have different prices and durations).
+  key: string;
   productId: number;
   slug: string;
   name: string;
@@ -19,6 +28,9 @@ export interface CartItem {
   coverImageUrl?: string;
   unitPrice: number;
   currency: string;
+  // Optional so carts persisted before this field existed still parse fine —
+  // missing means "" (one-time), same as an explicit "".
+  billingPeriod?: BillingPeriod;
   qty: number;
 }
 
@@ -60,7 +72,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items, hydrated]);
 
   function addItem(item: Omit<CartItem, "qty" | "key">, qty = 1) {
-    const key = String(item.productId);
+    const key = `${item.productId}:${item.billingPeriod ?? ""}`;
     setItems((prev) => {
       const existing = prev.find((i) => i.key === key);
       if (existing) {

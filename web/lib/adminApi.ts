@@ -101,6 +101,7 @@ export interface AdminProductRow {
   partner: string;
   partner_verified: boolean;
   price: string;
+  price_label: string;
   status: string;
   download_count: number;
   rating_average: string;
@@ -168,6 +169,8 @@ export interface AdminProductDetail {
   partner: number;
   tags: number[];
   price: string;
+  monthly_price: string | null;
+  yearly_price: string | null;
   download_count: number;
   default_trial_days: number;
   default_trial_hours: number;

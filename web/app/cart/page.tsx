@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
 import { Button } from "@/components/Button/Button";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
+import { Pill } from "@/components/Pill/Pill";
 import { WireframeThumb } from "@/components/WireframeThumb/WireframeThumb";
 import { formatPrice } from "@/config/site";
 import { useCart } from "@/lib/cart";
@@ -46,6 +47,9 @@ export default function CartPage() {
                   <Link href={`/products/${item.slug}`} className={styles.itemName}>
                     {item.name}
                   </Link>
+                  {item.billingPeriod && (
+                    <Pill tone="gold">{item.billingPeriod === "yearly" ? "Yearly" : "Monthly"}</Pill>
+                  )}
                   <button className={styles.remove} onClick={() => removeItem(item.key)}>
                     <Icon name="trash" size={14} />
                     Remove

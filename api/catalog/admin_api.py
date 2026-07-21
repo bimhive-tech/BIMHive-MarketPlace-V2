@@ -53,12 +53,13 @@ class AdminProductRowSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="category.name", read_only=True)
     partner = serializers.CharField(source="partner.name", read_only=True, default="")
     partner_verified = serializers.BooleanField(source="partner.is_verified", read_only=True, default=False)
+    price_label = serializers.CharField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
             "id", "name", "slug", "product_code", "type", "short_description", "category",
-            "partner", "partner_verified", "price", "status", "download_count",
+            "partner", "partner_verified", "price", "price_label", "status", "download_count",
             "rating_average", "rating_count", "updated_at", "cover_image_url",
         ]
 
@@ -142,7 +143,7 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             "id", "name", "slug", "product_code", "short_description", "description", "type",
-            "category", "partner", "tags", "price", "download_count",
+            "category", "partner", "tags", "price", "monthly_price", "yearly_price", "download_count",
             "default_trial_days", "default_trial_hours", "default_trial_minutes",
             "status", "rejection_note", "visibility", "is_featured",
             "cover_image_url", "version", "released_at", "seo_title", "seo_description",

@@ -124,3 +124,74 @@ def test_checkout_works_for_a_free_product_too(buyer_client, category):
     purchase = ProductPurchase.objects.get(user=user, product__product=free_product)
     assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
     assert str(purchase.amount) == "0.00"
+
+
+# ── Subscription (monthly/yearly) checkout ──
+@pytest.fixture
+def subscription_product(category):
+    return Product.objects.create(
+        name="Subscription Test", product_code="subscription-test", category=category,
+        short_description="s", description="d", status=ProductStatus.PUBLISHED,
+        price="0.00", monthly_price="19.00", yearly_price="179.00",
+    )
+
+
+def test_monthly_checkout_uses_monthly_price_and_expires_in_30_days(buyer_client, subscription_product):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    client, user = buyer_client
+    resp = _checkout(client, [{"slug": subscription_product.slug, "qty": 1, "billingPeriod": "monthly"}])
+    assert resp.status_code == 201, resp.json()
+
+    purchase = ProductPurchase.objects.get(user=user, product__product=subscription_product)
+    assert str(purchase.amount) == "19.00"
+    assert purchase.billing_period == "monthly"
+    assert purchase.expires_at is not None
+    assert abs((purchase.expires_at - timezone.now()) - timedelta(days=30)) < timedelta(minutes=1)
+
+
+def test_yearly_checkout_uses_yearly_price_and_expires_in_365_days(buyer_client, subscription_product):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    client, user = buyer_client
+    resp = _checkout(client, [{"slug": subscription_product.slug, "qty": 1, "billingPeriod": "yearly"}])
+    assert resp.status_code == 201, resp.json()
+
+    purchase = ProductPurchase.objects.get(user=user, product__product=subscription_product)
+    assert str(purchase.amount) == "179.00"
+    assert purchase.billing_period == "yearly"
+    assert abs((purchase.expires_at - timezone.now()) - timedelta(days=365)) < timedelta(minutes=1)
+
+
+def test_checkout_rejects_a_billing_period_for_a_non_subscription_product(buyer_client, product):
+    client, _ = buyer_client
+    resp = _checkout(client, [{"slug": product.slug, "qty": 1, "billingPeriod": "monthly"}])
+    assert resp.status_code == 400
+
+
+def test_checkout_rejects_an_invalid_billing_period(buyer_client, subscription_product):
+    client, _ = buyer_client
+    resp = _checkout(client, [{"slug": subscription_product.slug, "qty": 1, "billingPeriod": "weekly"}])
+    assert resp.status_code == 400
+
+
+def test_one_time_checkout_of_a_subscription_product_falls_back_to_the_one_time_price(buyer_client, category):
+    # A subscription product can still list a one-time price too — omitting
+    # billingPeriod entirely just buys it outright, perpetual, same as any
+    # other product.
+    hybrid = Product.objects.create(
+        name="Hybrid Pricing Test", product_code="hybrid-pricing-test", category=category,
+        short_description="s", description="d", status=ProductStatus.PUBLISHED,
+        price="99.00", monthly_price="9.00", yearly_price="89.00",
+    )
+    client, user = buyer_client
+    resp = _checkout(client, [{"slug": hybrid.slug, "qty": 1}])
+    assert resp.status_code == 201, resp.json()
+    purchase = ProductPurchase.objects.get(user=user, product__product=hybrid)
+    assert str(purchase.amount) == "99.00"
+    assert purchase.billing_period == ""
+    assert purchase.expires_at is None

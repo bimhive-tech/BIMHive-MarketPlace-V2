@@ -76,9 +76,11 @@ export function OrdersList() {
           <span className={styles.date}>{formatDate(order.paid_at ?? order.requested_at)}</span>
           <span className={styles.amount}>
             {order.amount} {order.currency}
+            {order.billing_period && <span className={styles.interval}>/{order.billing_period === "yearly" ? "yr" : "mo"}</span>}
           </span>
+          {order.is_trial && <Pill tone="gold">Trial</Pill>}
           <Pill tone={paymentStatusTone(order.payment_status)}>{order.payment_status}</Pill>
-          {order.payment_status === "paid" && isWithinRefundWindow(order) && (
+          {!order.is_trial && order.payment_status === "paid" && isWithinRefundWindow(order) && (
             <button
               type="button"
               className={styles.refundBtn}

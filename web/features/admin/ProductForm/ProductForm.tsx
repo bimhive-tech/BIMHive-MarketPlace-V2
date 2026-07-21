@@ -68,6 +68,8 @@ const EMPTY_FORM = {
   partner: "",
   product_code: "",
   price: "0",
+  monthly_price: "",
+  yearly_price: "",
   default_trial_days: "7",
   default_trial_hours: "0",
   default_trial_minutes: "0",
@@ -138,6 +140,8 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           partner: String(p.partner),
           product_code: p.product_code,
           price: p.price,
+          monthly_price: p.monthly_price ?? "",
+          yearly_price: p.yearly_price ?? "",
           default_trial_days: String(p.default_trial_days),
           default_trial_hours: String(p.default_trial_hours),
           default_trial_minutes: String(p.default_trial_minutes),
@@ -194,6 +198,10 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       ...(mode === "admin" ? { partner: Number(form.partner) } : {}),
       product_code: form.product_code.trim(),
       price: form.price || "0",
+      // Blank means "not a subscription" — sent as null, not "0" (a $0/mo
+      // plan isn't a thing here, see Product.is_subscription).
+      monthly_price: form.monthly_price.trim() ? form.monthly_price : null,
+      yearly_price: form.yearly_price.trim() ? form.yearly_price : null,
       default_trial_days: Number(form.default_trial_days) || 0,
       default_trial_hours: Number(form.default_trial_hours) || 0,
       default_trial_minutes: Number(form.default_trial_minutes) || 0,
@@ -499,6 +507,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                 <label className={styles.label}>
                   Price (USD)
                   <input className={styles.input} type="number" min="0" step="0.01" value={form.price} onChange={(e) => set("price", e.target.value)} />
+                  <span className={styles.hint}>The one-time price, used unless a monthly or yearly price is set below.</span>
                 </label>
                 <label className={styles.label}>
                   Product Type
@@ -507,6 +516,35 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                   </select>
                 </label>
               </div>
+              <label className={styles.label}>
+                Subscription Pricing (optional)
+                <div className={styles.row}>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    aria-label="Monthly price"
+                    placeholder="Monthly price"
+                    value={form.monthly_price}
+                    onChange={(e) => set("monthly_price", e.target.value)}
+                  />
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    aria-label="Yearly price"
+                    placeholder="Yearly price"
+                    value={form.yearly_price}
+                    onChange={(e) => set("yearly_price", e.target.value)}
+                  />
+                </div>
+                <span className={styles.hint}>
+                  Set either or both to sell this as a subscription — buyers get a Monthly/Yearly toggle on
+                  the product page instead of a single price. Leave both blank to keep one-time pricing.
+                </span>
+              </label>
               <label className={styles.label}>
                 Trial Duration
                 <div className={styles.trialRow}>

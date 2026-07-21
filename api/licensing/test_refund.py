@@ -146,7 +146,11 @@ def test_refunding_does_not_hand_the_same_machine_a_fresh_trial(buyer_and_purcha
     assert MachineLicense.objects.filter(product__code=product.product_code).count() == 1  # no new row created
 
 
-def test_a_different_machine_is_unaffected_by_someone_elses_refund(buyer_and_purchase):
+def test_a_different_machines_own_purchase_is_unaffected_by_someone_elses_refund(buyer_and_purchase):
+    """A key is always required to activate now — there's no more keyless
+    trial for "a genuinely new machine" to fall back on — so what's worth
+    proving here is narrower: refunding one purchase never reaches into a
+    different, still-valid purchase/machine pair."""
     user, product, purchase = buyer_and_purchase
     _activate(productCode=product.product_code, machineFingerprintHash=FP, licenseKey=purchase.license_key)
 
@@ -154,10 +158,17 @@ def test_a_different_machine_is_unaffected_by_someone_elses_refund(buyer_and_pur
     client.force_login(user)
     _refund(client, purchase.pk)
 
-    fresh_machine = _activate(productCode=product.product_code, machineFingerprintHash="A-DIFFERENT-MACHINE")
+    sku = LicensedProduct.objects.get(code=product.product_code)
+    other_purchase = ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+    )
+    fresh_machine = _activate(
+        productCode=product.product_code, machineFingerprintHash="A-DIFFERENT-MACHINE",
+        licenseKey=other_purchase.license_key,
+    )
     body = fresh_machine.json()
     assert body["authorized"] is True
-    assert body["status"] == "active"  # a genuinely new machine still gets its own trial
+    assert body["status"] == "paid"
 
 
 def test_refund_logs_a_license_event_for_the_bound_machine(buyer_and_purchase):

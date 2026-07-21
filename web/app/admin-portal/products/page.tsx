@@ -8,7 +8,6 @@ import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { WireframeThumb } from "@/components/WireframeThumb/WireframeThumb";
-import { formatPrice } from "@/config/site";
 import { ProductRowActions } from "@/features/admin/ProductRowActions/ProductRowActions";
 import { getAdminProducts, type AdminProductRow } from "@/lib/adminApi";
 
@@ -111,7 +110,7 @@ export default function AdminProductsPage() {
                   </span>
                 </td>
                 <td className={styles.muted}>{row.category}</td>
-                <td className={styles.price}>{formatPrice(row.price)}</td>
+                <td className={styles.price}>{row.price_label}</td>
                 <td>
                   <Pill tone={STATUS_TONE[row.status] ?? "neutral"}>{row.status}</Pill>
                 </td>

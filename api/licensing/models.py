@@ -83,6 +83,11 @@ class ProductPurchase(models.Model):
         CANCELLED = "cancelled", "Cancelled"
         REVOKED = "revoked", "Revoked"
 
+    class BillingPeriod(models.TextChoices):
+        ONE_TIME = "", "One-time"
+        MONTHLY = "monthly", "Monthly"
+        YEARLY = "yearly", "Yearly"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="product_purchases"
@@ -99,9 +104,20 @@ class ProductPurchase(models.Model):
     # AdminOrderSeatsView) without that being the normal checkout path.
     seats = models.PositiveIntegerField(default=1)
     # Null = perpetual (the default for a normal purchase). Set when this
-    # purchase came from a time-limited LicenseCode redemption — the whole
-    # purchase expires at this instant, not just one machine's binding.
+    # purchase came from a time-limited LicenseCode redemption, a trial
+    # grant, or a subscription checkout — the whole purchase expires at this
+    # instant, not just one machine's binding.
     expires_at = models.DateTimeField(null=True, blank=True)
+    # True for the one free-trial purchase AccountPluginBuildTrialDownloadView
+    # creates per (user, product) — behaves exactly like any other PAID
+    # purchase for activation purposes (see license_activate_api), just
+    # flagged so the account UI can label it "Trial" and so
+    # /api/license/activate can report status "trial" instead of "paid".
+    is_trial = models.BooleanField(default=False)
+    # "" = one-time/perpetual (the default, and every purchase before this
+    # field existed) — set by CheckoutView when the buyer picks a recurring
+    # interval; drives how far out `expires_at` is set at checkout time.
+    billing_period = models.CharField(max_length=10, choices=BillingPeriod.choices, blank=True, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=8, default="USD")
     license_key = models.CharField(max_length=64, unique=True, blank=True)

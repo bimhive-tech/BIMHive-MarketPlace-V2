@@ -32,7 +32,9 @@ export default function CheckoutPage() {
     setError("");
     setPlacing(true);
     try {
-      const { purchases } = await checkout(items.map((i) => ({ slug: i.slug, qty: i.qty })));
+      const { purchases } = await checkout(
+        items.map((i) => ({ slug: i.slug, qty: i.qty, billingPeriod: i.billingPeriod })),
+      );
       sessionStorage.setItem(CONFIRMATION_STORAGE_KEY, JSON.stringify(purchases));
       clear();
       router.push("/checkout/confirmation");
@@ -84,7 +86,10 @@ export default function CheckoutPage() {
             <li key={item.key} className={styles.item}>
               <div className={styles.itemInfo}>
                 <span className={styles.itemName}>{item.name}</span>
-                <span className={styles.itemQty}>Qty {item.qty}</span>
+                <span className={styles.itemQty}>
+                  Qty {item.qty}
+                  {item.billingPeriod && ` · ${item.billingPeriod === "yearly" ? "Yearly" : "Monthly"}`}
+                </span>
               </div>
               <span className={styles.lineTotal}>{formatPrice(item.unitPrice * item.qty, item.currency)}</span>
             </li>

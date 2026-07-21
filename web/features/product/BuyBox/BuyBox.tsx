@@ -3,13 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { BillingToggle } from "@/components/BillingToggle/BillingToggle";
 import { Button } from "@/components/Button/Button";
 import { Icon, type IconName } from "@/components/Icon/Icon";
 import { QtyStepper } from "@/components/QtyStepper/QtyStepper";
 import { AccountApiError, claimFreeProduct } from "@/lib/accountApi";
 import { me } from "@/lib/auth";
 import { formatPrice } from "@/config/site";
-import { useCart } from "@/lib/cart";
+import { type BillingPeriod, useCart } from "@/lib/cart";
 import { TrialDownloadCard } from "@/features/product/TrialDownloadCard/TrialDownloadCard";
 import type { ProductDetail, User } from "@/lib/types";
 
@@ -96,7 +97,16 @@ function FreeBuyBox({ product }: { product: ProductDetail }) {
 function PaidBuyBox({ product }: { product: ProductDetail }) {
   const router = useRouter();
   const { items, addItem, setQty } = useCart();
-  const cartItem = items.find((i) => i.productId === product.id);
+  // Defaults to yearly — the better-value plan is what gets led with, same
+  // as most subscription pricing pages. Named billingInterval, not
+  // "interval", so it doesn't shadow window.setInterval.
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("yearly");
+
+  const billingPeriod: BillingPeriod = product.is_subscription ? billingInterval : "";
+  const unitPrice = !product.is_subscription
+    ? Number(product.price)
+    : Number((billingInterval === "yearly" ? product.yearly_price : product.monthly_price) ?? 0);
+  const cartItem = items.find((i) => i.productId === product.id && (i.billingPeriod ?? "") === billingPeriod);
 
   function handleAddToCart() {
     addItem({
@@ -104,8 +114,9 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
       slug: product.slug,
       name: product.name,
       coverImageUrl: product.cover_image_url,
-      unitPrice: Number(product.price),
+      unitPrice,
       currency: product.currency,
+      billingPeriod,
     });
   }
 
@@ -116,7 +127,25 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
 
   return (
     <aside className={styles.box}>
-      <div className={styles.price}>{formatPrice(product.price, product.currency)}</div>
+      {product.is_subscription && (
+        <BillingToggle
+          value={billingInterval}
+          onChange={setBillingInterval}
+          yearlySavingsPercent={product.yearly_savings_percent}
+        />
+      )}
+
+      <div className={styles.price}>
+        {formatPrice(unitPrice, product.currency)}
+        {product.is_subscription && (
+          <span className={styles.priceInterval}>/{billingInterval === "yearly" ? "yr" : "mo"}</span>
+        )}
+      </div>
+      {product.is_subscription && billingInterval === "yearly" && Number(product.yearly_price) > 0 && (
+        <p className={styles.priceEquivalent}>
+          {formatPrice(Number(product.yearly_price) / 12, product.currency)}/mo billed annually
+        </p>
+      )}
 
       <div className={styles.actions}>
         {cartItem ? (

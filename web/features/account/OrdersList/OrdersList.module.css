@@ -55,6 +55,11 @@
   white-space: nowrap;
 }
 
+.interval {
+  color: var(--color-muted);
+  font-weight: var(--fw-regular);
+}
+
 .refundBtn {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--error-fg);

@@ -28,7 +28,7 @@ class AccountOrderSerializer(serializers.ModelSerializer):
         model = ProductPurchase
         fields = [
             "id", "product_name", "product_code", "amount", "currency", "payment_status",
-            "license_key", "seats", "requested_at", "paid_at",
+            "license_key", "seats", "is_trial", "billing_period", "requested_at", "paid_at",
         ]
 
 
@@ -114,7 +114,7 @@ class AccountLicenseSerializer(serializers.ModelSerializer):
         model = ProductPurchase
         fields = [
             "id", "product_name", "product_code", "payment_status", "license_status", "license_key",
-            "seats", "expires_at", "requested_at", "paid_at", "machines",
+            "seats", "is_trial", "billing_period", "expires_at", "requested_at", "paid_at", "machines",
         ]
 
 
@@ -336,19 +336,25 @@ class AccountPluginBuildDownloadView(APIView):
 
 
 class AccountPluginBuildTrialDownloadView(APIView):
-    """No purchase required — any logged-in customer can grab a trial build,
-    as long as the product has a trial configured (Product.has_trial). Unlike
-    the paid download, this streams the raw .exe with no license-key zip —
-    there's no key yet. The plugin's own first `/api/license/activate` call
-    (sent with no licenseKey) falls into the server's trial-issuing branch
-    on its own; nothing about that flow needs to know this came from a
-    trial download specifically."""
+    """Any logged-in customer can grab a trial build, as long as the product
+    has a trial configured (Product.has_trial) — no checkout involved. Unlike
+    the paid download this still streams a bare .exe with no key attached,
+    but it DOES create (idempotently, once per user+product — re-downloading
+    never resets the clock) a real, account-bound trial ProductPurchase with
+    its own license_key and an expires_at set from the product's configured
+    trial length. A key — the trial key shown on /account/licenses, or a real
+    purchased one — is required to activate; there's no anonymous/keyless
+    grant on the plugin side anymore (see license_activate_api)."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, build_id):
+        from datetime import timedelta
+        from decimal import Decimal
+
         from django.db.models import F
         from django.http import HttpResponse
+        from django.utils import timezone
 
         from catalog.models import Product
         from catalog.models.product import ProductStatus
@@ -364,6 +370,23 @@ class AccountPluginBuildTrialDownloadView(APIView):
             raise ValidationError({"detail": "File not found."})
         if not build.product.has_trial:
             raise ValidationError({"detail": "This product doesn't offer a trial."})
+
+        sku = LicensedProduct.objects.filter(product=build.product).first()
+        if not sku:
+            raise ValidationError({"detail": "This product isn't ready for trials yet — try again shortly."})
+
+        trial_purchase = ProductPurchase.objects.filter(user=request.user, product=sku, is_trial=True).first()
+        if not trial_purchase:
+            trial_purchase = ProductPurchase.objects.create(
+                user=request.user,
+                product=sku,
+                is_trial=True,
+                payment_status=ProductPurchase.PaymentStatus.PAID,
+                amount=Decimal("0.00"),
+                currency=build.product.currency,
+                expires_at=timezone.now() + timedelta(minutes=build.product.trial_minutes_total),
+            )
+            log_activity(request.user, ActivityVerb.CLAIMED_FREE_PRODUCT, target_label=f"{build.product.name} — Trial")
 
         success, log, installer_bytes, installer_name = generate_installer_bytes(build)
         if not success:
@@ -445,12 +468,22 @@ class CheckoutView(APIView):
     several independent keys for the same product is now the normal case.)
     Every checkout call creates fresh purchases/keys — re-checking out a
     product you already own just adds more, it never edits an existing one.
+
+    Each cart item optionally carries a `billingPeriod` ("monthly"/"yearly")
+    for a subscription-priced product (Product.is_subscription) — the created
+    purchase's `amount` comes from that interval's price and its `expires_at`
+    is set 30/365 days out accordingly. Omitted (or "") means the product's
+    normal one-time price and a perpetual purchase, exactly as before this
+    existed.
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        from datetime import timedelta
+
         from django.db import transaction
+        from django.utils import timezone
 
         from catalog.models import Product
 
@@ -458,32 +491,63 @@ class CheckoutView(APIView):
         if not isinstance(raw_items, list) or not raw_items:
             raise ValidationError({"items": "Your cart is empty."})
 
-        qty_by_slug: dict[str, int] = {}
+        valid_periods = {choice for choice, _ in ProductPurchase.BillingPeriod.choices}
+        # Keyed by (slug, billingPeriod) rather than just slug — a customer
+        # can hold a monthly cart line and a yearly cart line for the same
+        # product at once (e.g. mid-decision), and those must never merge
+        # into one purchase with an ambiguous price/duration.
+        qty_by_key: dict[tuple[str, str], int] = {}
         for entry in raw_items:
             slug = (entry or {}).get("slug")
             if not slug:
                 raise ValidationError({"items": "Each cart item needs a slug."})
+            billing_period = (entry.get("billingPeriod") or "").strip()
+            if billing_period not in valid_periods:
+                raise ValidationError({"items": f"Invalid billing period for {slug!r}."})
             try:
                 qty = int(entry.get("qty") or 1)
             except (TypeError, ValueError):
                 raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
             if qty < 1:
                 raise ValidationError({"items": f"Invalid quantity for {slug!r}."})
-            qty_by_slug[slug] = qty_by_slug.get(slug, 0) + qty
+            key = (slug, billing_period)
+            qty_by_key[key] = qty_by_key.get(key, 0) + qty
 
-        resolved: list[tuple[Product, LicensedProduct, int]] = []
-        for slug, qty in qty_by_slug.items():
+        resolved = []  # list[tuple[Product, LicensedProduct, str, Decimal, int]]
+        for (slug, billing_period), qty in qty_by_key.items():
             product = Product.objects.published().filter(slug=slug).first()
             if not product:
                 raise ValidationError({"items": f"'{slug}' isn't available to purchase right now."})
             sku = LicensedProduct.objects.filter(product=product).first()
             if not sku:
                 raise ValidationError({"items": f"'{product.name}' isn't ready to purchase yet — try again shortly."})
-            resolved.append((product, sku, qty))
+            if billing_period and not product.is_subscription:
+                raise ValidationError({"items": f"'{product.name}' isn't sold as a subscription."})
+            if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
+                unit_price = product.monthly_price
+            elif billing_period == ProductPurchase.BillingPeriod.YEARLY:
+                unit_price = product.yearly_price
+            else:
+                unit_price = product.price
+            if unit_price is None:
+                raise ValidationError({"items": f"'{product.name}' doesn't have a price for that billing option."})
+            resolved.append((product, sku, billing_period, unit_price, qty))
 
+        now = timezone.now()
         purchases = []
         with transaction.atomic():
-            for product, sku, qty in resolved:
+            for product, sku, billing_period, unit_price, qty in resolved:
+                # Same mechanism a LicenseCode redemption already uses
+                # (expires_at) — a subscription purchase is just a purchase
+                # with a shorter fuse than the perpetual default, not a
+                # separate recurring-billing system requiring its own
+                # renewal/webhook machinery.
+                if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
+                    expires_at = now + timedelta(days=30)
+                elif billing_period == ProductPurchase.BillingPeriod.YEARLY:
+                    expires_at = now + timedelta(days=365)
+                else:
+                    expires_at = None
                 for _ in range(qty):
                     purchases.append(
                         ProductPurchase.objects.create(
@@ -491,8 +555,10 @@ class CheckoutView(APIView):
                             product=sku,
                             payment_status=ProductPurchase.PaymentStatus.PAID,
                             seats=1,
-                            amount=product.price,
+                            amount=unit_price,
                             currency=product.currency,
+                            billing_period=billing_period,
+                            expires_at=expires_at,
                             payment_reference="test-checkout-no-payment-processor",
                         )
                     )

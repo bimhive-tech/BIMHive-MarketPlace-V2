@@ -99,6 +99,73 @@ def test_price_and_trial_changes_propagate_to_sku(category, partner):
     assert sku.default_trial_days == 14
 
 
+# ── Subscription pricing (Product.monthly_price/yearly_price) ──
+# .refresh_from_db() everywhere below: a freshly-.create()'d instance still
+# holds the raw string it was assigned (Django only coerces DecimalField to
+# a real Decimal on the way back out of the database), and price_label's
+# ":.2f" formatting needs a real Decimal — exactly the state every real
+# caller is actually in, since they always read from a queryset.
+def test_a_plain_product_is_not_a_subscription(category, partner):
+    product = Product.objects.create(
+        name="Plain", short_description="s", description="d",
+        category=category, partner=partner, price="10.00",
+    )
+    product.refresh_from_db()
+    assert product.is_subscription is False
+    assert product.price_label == "$10.00"
+
+
+def test_setting_a_monthly_price_makes_it_a_subscription(category, partner):
+    product = Product.objects.create(
+        name="Sub", short_description="s", description="d",
+        category=category, partner=partner, price="0.00", monthly_price="19.00",
+    )
+    product.refresh_from_db()
+    assert product.is_subscription is True
+    # A subscription's $0 one-time price never reads as "free" — the
+    # one-time price field is simply unused when subscription pricing is set.
+    assert product.is_free is False
+    assert product.price_label == "$19.00/mo"
+
+
+def test_yearly_only_subscription_uses_yearly_label(category, partner):
+    product = Product.objects.create(
+        name="Yearly Only", short_description="s", description="d",
+        category=category, partner=partner, price="0.00", yearly_price="179.00",
+    )
+    product.refresh_from_db()
+    assert product.price_label == "$179.00/yr"
+
+
+def test_yearly_savings_percent_computed_from_both_prices(category, partner):
+    product = Product.objects.create(
+        name="Savings", short_description="s", description="d",
+        category=category, partner=partner, price="0.00",
+        monthly_price="20.00", yearly_price="180.00",  # 240/yr equiv -> 180 = 25% off
+    )
+    product.refresh_from_db()
+    assert product.yearly_savings_percent == 25
+
+
+def test_yearly_savings_percent_is_none_when_yearly_isnt_actually_cheaper(category, partner):
+    product = Product.objects.create(
+        name="No Savings", short_description="s", description="d",
+        category=category, partner=partner, price="0.00",
+        monthly_price="10.00", yearly_price="150.00",  # 120/yr equiv, yearly is worse
+    )
+    product.refresh_from_db()
+    assert product.yearly_savings_percent is None
+
+
+def test_yearly_savings_percent_is_none_without_both_prices(category, partner):
+    product = Product.objects.create(
+        name="Monthly Only", short_description="s", description="d",
+        category=category, partner=partner, price="0.00", monthly_price="19.00",
+    )
+    product.refresh_from_db()
+    assert product.yearly_savings_percent is None
+
+
 def test_product_code_auto_generated_from_name(category, partner):
     product = Product.objects.create(
         name="My Cool Tool!", short_description="s", description="d",

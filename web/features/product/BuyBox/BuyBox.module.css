@@ -15,6 +15,18 @@
   color: var(--color-price);
 }
 
+.priceInterval {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+}
+
+.priceEquivalent {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+}
+
 .actions {
   display: flex;
   flex-direction: column;
