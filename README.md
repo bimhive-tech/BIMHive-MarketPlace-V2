@@ -277,8 +277,10 @@ non-pending. See `api/installer/vendor/README.md`-style reasoning: a client-side
 is never sufficient for something that grants a real license.
 
 **Test mode specifics, worth knowing before testing:**
-- Paymob's test/sandbox card (from their published test-credentials docs): `4987654321098769`,
-  expiry `12/25`, CVV `123`, any cardholder name.
+- Paymob's test/sandbox card (from their published test-credentials docs): `4987654321098769`.
+  The card *number* is the fixed part sandboxes actually check — expiry just needs to be any real
+  future month/year (e.g. `12/29`) and CVV any 3 digits (e.g. `123`); update the month/year as time
+  passes rather than reusing a fixed date that'll eventually read as expired. Any cardholder name.
 - The Paymob merchant account behind the current test keys is Egypt-only (settles in EGP) —
   `PAYMOB_CURRENCY` (default `"EGP"`) is what's actually sent, regardless of a product's own
   `currency` field. The cart's real numeric total still flows through end-to-end, just relabeled;
