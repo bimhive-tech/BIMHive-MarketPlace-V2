@@ -7,7 +7,9 @@ A prebuilt binary, not source we own in this repo. It's the activation shim ever
 products) — Revit loads `LicLoader.dll` first, it calls `/api/license/activate`, shows a real
 "enter your license key" dialog if needed (also reachable anytime via a "License Key" button
 LicLoader adds to its own Ribbon tab), and only then loads the actual plugin `.dll` via reflection.
-A successful trial grant shows a one-time "trial active, N remaining" notice.
+A successful trial grant shows a one-time "trial active, N remaining" notice; a denial caused
+specifically by an expired trial says so by name ("Your 7-day free trial has ended...") instead of a
+generic "Access denied."
 
 **Source lives outside this repo**, in a separate .NET Framework 4.8 / Revit API project:
 `E:\Eng. Youssef Sami\Installer Generator 3\Installer Generator 2\InstallerGenerator\LoaderShim\`

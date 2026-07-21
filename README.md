@@ -176,7 +176,12 @@ Every installer build wraps the real plugin with it, transparently, at packaging
 4. If activation comes back unauthorized, LicLoader shows a real "BIM Hive Activation" Windows
    dialog with a text box for the key — **this is where the customer actually types the key** they
    copied from `/account/licenses`. A successful key gets cached to
-   `%APPDATA%\BIMHive\Licenses\<productCode>.key` so it's not re-typed on every launch.
+   `%APPDATA%\BIMHive\Licenses\<productCode>.key` so it's not re-typed on every launch. When the
+   denial is specifically an expired trial (not a missing/blocked one), the dialog says so by name —
+   "Your {N}-day free trial has ended..." — rather than a generic "Access denied," using the
+   product's configured trial length from `_license.bin`. A trial never silently renews once its
+   `MachineLicense` row exists (server-side, see below) — expiry always means a real key is required
+   from then on for that machine.
 5. If a fresh/ongoing trial is granted instead (server-side, no key needed — see below), LicLoader
    tells the customer so directly with a "your trial is active, N remaining" notice, since that path
    never shows the key dialog at all otherwise. A "License Key" button LicLoader adds to its own
