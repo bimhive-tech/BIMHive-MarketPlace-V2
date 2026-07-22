@@ -51,16 +51,40 @@ export class AuthError extends Error {
   }
 }
 
-export function register(email: string, password: string, fullName: string) {
-  return request<User>("/api/auth/register", "POST", { email, password, full_name: fullName });
+// Client components that show the signed-in state (AuthNav's navbar avatar)
+// fetch `me()` once on mount and have no other way to learn a *different*
+// component just signed the user in/out — a client-side route change alone
+// doesn't remount them or re-run their effects. This is a tiny pub/sub so
+// any such component can ask to be told right when it happens, instead of
+// staying stale until a full page reload.
+const AUTH_CHANGE_EVENT = "bimhive:auth-changed";
+
+function notifyAuthChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
-export function login(email: string, password: string) {
-  return request<User>("/api/auth/login", "POST", { email, password });
+export function onAuthChanged(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(AUTH_CHANGE_EVENT, callback);
+  return () => window.removeEventListener(AUTH_CHANGE_EVENT, callback);
 }
 
-export function logout() {
-  return request<{ detail: string }>("/api/auth/logout", "POST");
+export async function register(email: string, password: string, fullName: string) {
+  const user = await request<User>("/api/auth/register", "POST", { email, password, full_name: fullName });
+  notifyAuthChanged();
+  return user;
+}
+
+export async function login(email: string, password: string) {
+  const user = await request<User>("/api/auth/login", "POST", { email, password });
+  notifyAuthChanged();
+  return user;
+}
+
+export async function logout() {
+  const result = await request<{ detail: string }>("/api/auth/logout", "POST");
+  notifyAuthChanged();
+  return result;
 }
 
 export async function me(): Promise<User | null> {

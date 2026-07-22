@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/Button/Button";
 import { Icon } from "@/components/Icon/Icon";
-import { logout, me } from "@/lib/auth";
+import { logout, me, onAuthChanged } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 import styles from "./AuthNav.module.css";
@@ -19,6 +19,13 @@ export function AuthNav() {
 
   useEffect(() => {
     me().then(setUser);
+    // Sign in/out can happen from a different component (SignInForm,
+    // SignUpForm) that navigates here client-side afterward — that alone
+    // doesn't remount this component or re-run this effect, so without this
+    // the avatar would keep showing "logged out" until a real page reload.
+    return onAuthChanged(() => {
+      me().then(setUser);
+    });
   }, []);
 
   useEffect(() => {
