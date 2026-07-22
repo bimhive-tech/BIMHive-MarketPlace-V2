@@ -139,6 +139,21 @@ class ProductPurchase(models.Model):
         # one independent key for the same product — one purchase per seat
         # bought, each with its own license_key (which IS still globally
         # unique, see above) — see CheckoutView.
+        constraints = [
+            # Partial unique index — only one row per (user, product) may ever
+            # have is_trial=True. Without this at the DB level, two concurrent
+            # trial-download requests (e.g. a double-click) could both pass
+            # AccountPluginBuildTrialDownloadView's "does a trial already
+            # exist?" check before either commits, minting two separate trial
+            # keys for the same account. get_or_create() there relies on this
+            # constraint to make the second writer retry into the first row
+            # instead of inserting a duplicate.
+            models.UniqueConstraint(
+                fields=["user", "product"],
+                condition=models.Q(is_trial=True),
+                name="one_trial_purchase_per_user_product",
+            )
+        ]
 
     def __str__(self):
         return f"{self.user} -> {self.product.code} ({self.payment_status})"
@@ -307,6 +322,15 @@ class MachineLicense(models.Model):
     plugin_version = models.TextField(blank=True)
     machine_data = models.JSONField(default=dict)
     metadata = models.JSONField(default=dict)
+    # Permanent, one-way flag: set True the first time this machine ever binds
+    # to a trial purchase and never cleared afterward — independent of which
+    # purchase currently owns this row. `purchase` gets reassigned whenever a
+    # *different* valid key activates on the same machine (see
+    # license_activate_api), which without this flag would let a machine that
+    # already burned its trial get a fresh one just by presenting a new trial
+    # key from a new account. A real paid key can still always bind here;
+    # this only blocks handing out a second trial to an already-used device.
+    used_trial = models.BooleanField(default=False)
 
     class Meta:
         db_table = "machine_licenses"

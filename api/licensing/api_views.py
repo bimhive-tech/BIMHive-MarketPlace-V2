@@ -146,6 +146,19 @@ def _no_seats_denied_response(machine_license):
     )
 
 
+def _trial_already_used_response(machine_license):
+    return _signed_response(
+        {
+            "authorized": False,
+            "status": "trial_used",
+            "message": "This device has already used its free trial for this product. Enter a purchased license key to continue.",
+            "startedAt": _iso_utc(machine_license.started_at) if machine_license else None,
+            "expiresAt": _iso_utc(machine_license.expires_at) if machine_license else None,
+            "remainingSeconds": 0,
+        }
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 # GET /api/license/products
 # ─────────────────────────────────────────────────────────────
@@ -299,6 +312,32 @@ def license_activate_api(request):
         return _denied_purchase_response(machine_license, invalid_purchase)
 
     if paid_purchase:
+        # A machine that has ever consumed a trial for this product (see
+        # MachineLicense.used_trial) stays locked out of any *other* trial
+        # purchase forever, regardless of which account/key presents it —
+        # without this, a machine's binding just gets silently reassigned to
+        # whichever new valid key shows up (see the block below), which is
+        # exactly how a new account + the same PC could mint itself an
+        # unlimited string of fresh trials. Re-activating the SAME trial
+        # purchase it already used (a reinstall, e.g.) is unaffected — that's
+        # not a new trial, and its own expiry is enforced separately via
+        # invalid_purchase above once it lapses.
+        if (
+            paid_purchase.is_trial
+            and machine_license is not None
+            and machine_license.used_trial
+            and machine_license.purchase_id != paid_purchase.pk
+        ):
+            _log_event(
+                product,
+                protected_hash,
+                "trial_denied_device_already_used",
+                {"licenseKey": paid_purchase.license_key, "purchaseId": str(paid_purchase.pk)},
+                machine_license=machine_license,
+                event_time=now,
+            )
+            return _trial_already_used_response(machine_license)
+
         # `has_seat_for` is True either because this exact machine already
         # holds one of the purchase's seats (a repeat/heartbeat activation —
         # doesn't consume a new one) or because a seat is still free. A
@@ -345,6 +384,7 @@ def license_activate_api(request):
                 plugin_version=plugin_version,
                 machine_data=machine_data,
                 metadata=metadata,
+                used_trial=paid_purchase.is_trial,
             )
         else:
             machine_license.user = paid_purchase.user
@@ -356,6 +396,8 @@ def license_activate_api(request):
             machine_license.plugin_version = plugin_version or machine_license.plugin_version
             machine_license.machine_data = {**(machine_license.machine_data or {}), **machine_data}
             machine_license.metadata = {**(machine_license.metadata or {}), **metadata}
+            if paid_purchase.is_trial:
+                machine_license.used_trial = True
             machine_license.save()
 
         _log_event(

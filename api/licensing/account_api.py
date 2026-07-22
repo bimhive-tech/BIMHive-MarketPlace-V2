@@ -15,7 +15,13 @@ from activity.models import ActivityVerb
 from activity.services import log_activity
 from licensing import paymob
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
-from licensing.services import LicenseCodeError, redeem_license_code, revoke_purchase_access
+from licensing.services import (
+    LicenseCodeError,
+    expires_at_for,
+    redeem_license_code,
+    revoke_purchase_access,
+    subscription_duration,
+)
 
 # Matches the "30-Day Money Back Guarantee" copy already shown on every buy
 # box (web/features/product/BuyBox/BuyBox.tsx) — self-service refund gives
@@ -378,17 +384,24 @@ class AccountPluginBuildTrialDownloadView(APIView):
         if not sku:
             raise ValidationError({"detail": "This product isn't ready for trials yet — try again shortly."})
 
-        trial_purchase = ProductPurchase.objects.filter(user=request.user, product=sku, is_trial=True).first()
-        if not trial_purchase:
-            trial_purchase = ProductPurchase.objects.create(
-                user=request.user,
-                product=sku,
-                is_trial=True,
-                payment_status=ProductPurchase.PaymentStatus.PAID,
-                amount=Decimal("0.00"),
-                currency=build.product.currency,
-                expires_at=timezone.now() + timedelta(minutes=build.product.trial_minutes_total),
-            )
+        # get_or_create + the DB-level partial unique constraint on
+        # (user, product) WHERE is_trial=True (see ProductPurchase.Meta) is
+        # what actually closes the race — a plain filter-then-create here let
+        # two near-simultaneous requests (e.g. a double-click) both pass the
+        # "no trial yet" check before either had committed, each minting its
+        # own trial purchase/key for the same account.
+        trial_purchase, created = ProductPurchase.objects.get_or_create(
+            user=request.user,
+            product=sku,
+            is_trial=True,
+            defaults={
+                "payment_status": ProductPurchase.PaymentStatus.PAID,
+                "amount": Decimal("0.00"),
+                "currency": build.product.currency,
+                "expires_at": timezone.now() + timedelta(minutes=build.product.trial_minutes_total),
+            },
+        )
+        if created:
             log_activity(request.user, ActivityVerb.CLAIMED_FREE_PRODUCT, target_label=f"{build.product.name} — Trial")
 
         success, log, installer_bytes, installer_name = generate_installer_bytes(build)
@@ -452,23 +465,12 @@ class ClaimFreeProductView(APIView):
         return Response(AccountOrderSerializer(purchase).data, status=status_code)
 
 
-# How long a subscription purchase's `expires_at` runs for, keyed by
-# billing_period. TEMPORARY TEST OVERRIDE for the monthly interval — see the
-# comment on MONTHLY below. Revert MONTHLY back to timedelta(days=30) once
-# the Paymob payment -> webhook -> license-revocation flow has been proven
-# out with the fast interval; nothing else about billing_period changes.
-def _subscription_duration(billing_period: str):
-    from datetime import timedelta
-
-    if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
-        # TEMPORARY (test only): really 30 days — shortened to 10 minutes
-        # so a real Paymob test payment can be watched through to license
-        # revocation without waiting a month. Change back to
-        # timedelta(days=30) once that's confirmed working end to end.
-        return timedelta(minutes=10)
-    if billing_period == ProductPurchase.BillingPeriod.YEARLY:
-        return timedelta(days=365)
-    return None
+# Moved to licensing/services.py (subscription_duration/expires_at_for) so
+# restore_purchase_access can compute the same expiry when staff manually
+# marks a still-PENDING subscription order paid — kept as local aliases here
+# so the rest of this module's call sites (_subscription_duration,
+# _expires_at_for) didn't need to change.
+_subscription_duration = subscription_duration
 
 
 def _resolve_checkout_items(raw_items):
@@ -563,6 +565,19 @@ class CheckoutView(APIView):
 
         purchases = []
         with transaction.atomic():
+            # Superseded by this fresh attempt — a customer who abandons or
+            # fails a checkout (e.g. their card gets declined) and then
+            # retries left the previous attempt's PENDING purchases stranded
+            # forever with no cleanup, silently piling up unusable license
+            # keys on their account every retry. A late webhook for one of
+            # these can still land after this — PaymobWebhookView matches by
+            # payment_reference and only skips rows already PAID, so it'll
+            # still correctly grant a license if Paymob reports the OLD
+            # attempt actually succeeded.
+            ProductPurchase.objects.filter(
+                user=request.user, payment_status=ProductPurchase.PaymentStatus.PENDING
+            ).update(payment_status=ProductPurchase.PaymentStatus.CANCELLED)
+
             for product, sku, billing_period, unit_price, qty in resolved:
                 for _ in range(qty):
                     purchases.append(
@@ -702,6 +717,4 @@ class PaymobWebhookView(APIView):
         return Response({"ok": True})
 
 
-def _expires_at_for(billing_period, now):
-    duration = _subscription_duration(billing_period)
-    return now + duration if duration else None
+_expires_at_for = expires_at_for

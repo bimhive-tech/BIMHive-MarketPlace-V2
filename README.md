@@ -336,10 +336,22 @@ refund-eligible order.
 
 **Why refunding can't be used to farm a second free trial:** a trial is a real
 `ProductPurchase(is_trial=True)`, and `AccountPluginBuildTrialDownloadView` only ever creates one per
-`(user, product)` — it looks for an existing one first and reuses it, never resets `expires_at`, and
-refunding it (`revoke_purchase_access`) just flips its `payment_status`, it doesn't delete the row or
-let a new one be created. Redownloading the trial installer, or the plugin re-activating after a
-refund, both land on that same purchase — now denied, never a fresh one.
+`(user, product)` — backed by a DB partial-unique index (`one_trial_purchase_per_user_product`), not
+just an app-level check, so even two near-simultaneous requests can't slip through and mint two. It
+looks for an existing one first and reuses it, never resets `expires_at`, and refunding it
+(`revoke_purchase_access`) just flips its `payment_status`, it doesn't delete the row or let a new
+one be created. Redownloading the trial installer, or the plugin re-activating after a refund, both
+land on that same purchase — now denied, never a fresh one.
+
+**Why a second *account* on the same machine can't get a second trial either:**
+`MachineLicense.used_trial` is a permanent, one-way flag — set the first time a trial purchase ever
+binds a given `(product, machine)`, never cleared. `license_activate_api` denies (`status:
+"trial_used"`) any attempt to bind a *different* trial purchase to a machine that already has it,
+regardless of which account/key presents it — closing a real gap the keyed-trial redesign above
+introduced: without this, a machine whose first trial lapsed could get "rebound" to a brand-new
+trial purchase from a second account, since the machine→purchase link is resolved by whichever valid
+key shows up, not by which machine has already used its one trial. A real paid key still always
+works on that machine (the upgrade path is unaffected); only a second *trial* is blocked.
 
 ## Free trials: configurable per product, a real key, no purchase needed
 

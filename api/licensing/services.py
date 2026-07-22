@@ -15,6 +15,32 @@ class LicenseCodeError(Exception):
     """Raised with a user-facing message when a code can't be redeemed."""
 
 
+# How long a subscription purchase's `expires_at` runs for, keyed by
+# billing_period. Shared by PaymobWebhookView (a real payment confirming) and
+# restore_purchase_access below (staff manually marking a still-PENDING
+# subscription order paid, e.g. to test the flow without a live payment) so
+# both compute the same expiry the same way. TEMPORARY TEST OVERRIDE for the
+# monthly interval — see the comment on MONTHLY below. Revert MONTHLY back to
+# timedelta(days=30) once the Paymob payment -> webhook -> license-revocation
+# flow has been proven out with the fast interval; nothing else about
+# billing_period changes.
+def subscription_duration(billing_period: str):
+    if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
+        # TEMPORARY (test only): really 30 days — shortened to 10 minutes
+        # so a real Paymob test payment can be watched through to license
+        # revocation without waiting a month. Change back to
+        # timedelta(days=30) once that's confirmed working end to end.
+        return timedelta(minutes=10)
+    if billing_period == ProductPurchase.BillingPeriod.YEARLY:
+        return timedelta(days=365)
+    return None
+
+
+def expires_at_for(billing_period, now):
+    duration = subscription_duration(billing_period)
+    return now + duration if duration else None
+
+
 def sync_license_sku(product):
     """
     Create or update the activation SKU (licensing.LicensedProduct) for a
@@ -109,11 +135,25 @@ def release_machine_binding(machine_license, event_time=None):
 
 
 def restore_purchase_access(purchase, event_time=None):
-    """Re-activate a purchase (e.g. after a webhook confirms payment) and its machines."""
+    """Re-activate a purchase (e.g. after a webhook confirms payment, or a
+    staff member manually marking a still-PENDING order paid from the Admin
+    Orders page) and its machines."""
     event_time = event_time or timezone.now()
     if purchase.payment_status != ProductPurchase.PaymentStatus.PAID:
         purchase.payment_status = ProductPurchase.PaymentStatus.PAID
-        purchase.save(update_fields=["payment_status", "paid_at", "updated_at"])
+        # A subscription purchase's expires_at is deliberately left unset by
+        # CheckoutView until payment actually confirms — mirrors what
+        # PaymobWebhookView does, so staff clicking "Mark Paid" on a PENDING
+        # subscription order (the only way to test the flow while blocked on
+        # a real Paymob transaction) correctly starts its billing period
+        # instead of leaving it looking perpetual. A purchase that already
+        # has an expires_at (already confirmed once before, or a
+        # LicenseCode-limited grant) keeps it as-is — see the comment below.
+        if purchase.billing_period and purchase.expires_at is None:
+            purchase.expires_at = expires_at_for(purchase.billing_period, event_time)
+            purchase.save(update_fields=["payment_status", "expires_at", "paid_at", "updated_at"])
+        else:
+            purchase.save(update_fields=["payment_status", "paid_at", "updated_at"])
 
     # A time-limited purchase (e.g. from a LicenseCode redemption) keeps its
     # own expiry on restore instead of being reset to "forever" — only an

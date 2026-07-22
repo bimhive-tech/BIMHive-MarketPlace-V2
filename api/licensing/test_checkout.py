@@ -152,6 +152,43 @@ def test_checking_out_again_adds_more_separate_purchases(buyer_client, product, 
     assert len({p.license_key for p in purchases}) == 3
 
 
+def test_retrying_checkout_cancels_the_previous_attempts_pending_purchases(buyer_client, product, mock_intention):
+    # A customer whose card gets declined (or who just abandons the Paymob
+    # page) and then retries used to leave the first attempt's PENDING
+    # purchases stranded forever — every retry piled on more unusable keys.
+    # A fresh checkout call now closes out any of the user's still-PENDING
+    # purchases from earlier attempts instead of leaving them dangling.
+    client, user = buyer_client
+    first = _checkout(client, [{"slug": product.slug, "qty": 1}])
+    first_purchase = ProductPurchase.objects.get(user=user, product__product=product)
+
+    second = _checkout(client, [{"slug": product.slug, "qty": 1}])
+    assert second.status_code == 201, second.json()
+
+    first_purchase.refresh_from_db()
+    assert first_purchase.payment_status == ProductPurchase.PaymentStatus.CANCELLED
+    new_purchase = ProductPurchase.objects.get(payment_reference=second.json()["reference"])
+    assert new_purchase.payment_status == ProductPurchase.PaymentStatus.PENDING
+
+
+def test_a_late_webhook_for_a_cancelled_attempt_still_grants_the_license(buyer_client, product, mock_intention):
+    # If Paymob reports the OLD (now-cancelled-by-retry) attempt actually
+    # succeeded, the webhook should still honor it — our local bookkeeping
+    # status shouldn't override what really happened at the payment gateway.
+    client, user = buyer_client
+    first = _checkout(client, [{"slug": product.slug, "qty": 1}])
+    first_reference = first.json()["reference"]
+    _checkout(client, [{"slug": product.slug, "qty": 1}])  # supersedes/cancels the first
+
+    first_purchase = ProductPurchase.objects.get(payment_reference=first_reference)
+    assert first_purchase.payment_status == ProductPurchase.PaymentStatus.CANCELLED
+
+    resp = _send_webhook(client, _webhook_payload(first_reference, success=True))
+    assert resp.status_code == 200
+    first_purchase.refresh_from_db()
+    assert first_purchase.payment_status == ProductPurchase.PaymentStatus.PAID
+
+
 def test_checkout_requires_login(product):
     resp = _checkout(Client(), [{"slug": product.slug, "qty": 1}])
     assert resp.status_code in (401, 403)
@@ -356,6 +393,32 @@ def test_checkout_rejects_an_invalid_billing_period(buyer_client, subscription_p
     client, _ = buyer_client
     resp = _checkout(client, [{"slug": subscription_product.slug, "qty": 1, "billingPeriod": "weekly"}])
     assert resp.status_code == 400
+
+
+def test_staff_marking_a_pending_subscription_order_paid_starts_its_billing_period(
+    buyer_client, subscription_product, mock_intention, django_user_model
+):
+    # Admin Orders' existing "Mark Paid" button (AdminOrderStatusView action
+    # "restore" -> services.restore_purchase_access) is the only way to test
+    # the payment -> license -> revocation flow while blocked on a live
+    # Paymob transaction (see paymob-integration project notes). It must
+    # compute expires_at the same way the real webhook would, or a
+    # subscription "confirmed" this way would look perpetual and never
+    # revoke.
+    client, user = buyer_client
+    _checkout(client, [{"slug": subscription_product.slug, "qty": 1, "billingPeriod": "monthly"}])
+    purchase = ProductPurchase.objects.get(user=user, product__product=subscription_product)
+    assert purchase.expires_at is None  # unset until confirmed, same as always
+
+    staff = django_user_model.objects.create_user(username="staff", email="staff@x.com", password="x", is_staff=True)
+    staff_client = Client()
+    staff_client.force_login(staff)
+    resp = staff_client.post(f"/api/admin/orders/{purchase.pk}/status", {"action": "restore"})
+    assert resp.status_code == 200, resp.json()
+
+    purchase.refresh_from_db()
+    assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
+    assert purchase.expires_at is not None  # now correctly started, not left perpetual
 
 
 def test_one_time_checkout_of_a_subscription_product_falls_back_to_the_one_time_price(buyer_client, category, mock_intention):

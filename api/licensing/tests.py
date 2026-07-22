@@ -156,6 +156,62 @@ def test_expired_trial_denied(product, django_user_model):
     assert body["authorized"] is False and body["status"] == "expired"
 
 
+# ── Trial abuse: one machine, one trial, ever — regardless of account ──
+def test_a_second_account_cannot_get_a_fresh_trial_on_a_machine_that_already_used_one(product, django_user_model):
+    from datetime import timedelta
+
+    first_user = django_user_model.objects.create_user(username="u1", email="u1@x.com", password="x")
+    # Must still be active at the moment it's activated, so a machine_license
+    # actually gets bound (an already-expired trial is denied before ever
+    # binding — see test_expired_trial_denied above) — the abuse case this is
+    # guarding is a *used* trial, not one that never got to activate at all.
+    first_trial = _trial_purchase(product, first_user, expires_in=timedelta(days=30))
+    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=first_trial.license_key)
+
+    second_user = django_user_model.objects.create_user(username="u2", email="u2@x.com", password="x")
+    second_trial = _trial_purchase(product, second_user, expires_in=timedelta(days=30))
+    body = _activate(
+        Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=second_trial.license_key
+    ).json()
+
+    assert body["authorized"] is False
+    assert body["status"] == "trial_used"
+    ml = MachineLicense.objects.get(product=product)
+    assert ml.purchase_id == first_trial.pk  # never got reassigned to the new trial
+    assert ml.used_trial is True
+
+
+def test_reactivating_the_same_trial_purchase_is_unaffected_by_the_lock(product, django_user_model):
+    from datetime import timedelta
+
+    user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")
+    trial = _trial_purchase(product, user, expires_in=timedelta(days=30))
+    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key)
+
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key).json()
+    assert body["authorized"] is True
+    assert body["status"] == "trial"
+
+
+def test_a_real_purchased_key_still_works_on_a_machine_that_already_used_a_trial(product, django_user_model):
+    from datetime import timedelta
+
+    trial_user = django_user_model.objects.create_user(username="u1", email="u1@x.com", password="x")
+    trial = _trial_purchase(product, trial_user, expires_in=timedelta(days=-1))  # already expired
+    _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=trial.license_key)
+
+    buyer = django_user_model.objects.create_user(username="u2", email="u2@x.com", password="x")
+    paid = ProductPurchase.objects.create(
+        user=buyer, product=product, payment_status=ProductPurchase.PaymentStatus.PAID
+    )
+    body = _activate(Client(), productCode=product.code, machineFingerprintHash=FP, licenseKey=paid.license_key).json()
+
+    assert body["authorized"] is True
+    assert body["status"] == "paid"
+    ml = MachineLicense.objects.get(product=product)
+    assert ml.purchase_id == paid.pk
+
+
 # ── Paid licenses ──
 def test_paid_license_key_authorizes(product, django_user_model):
     user = django_user_model.objects.create_user(username="u", email="u@x.com", password="x")

@@ -109,6 +109,29 @@ def test_redownloading_the_trial_reuses_the_same_key_and_never_resets_the_clock(
     assert second.expires_at == first.expires_at
 
 
+def test_db_rejects_a_second_trial_purchase_for_the_same_user_and_product(buyer_client, category):
+    # The actual race-safety mechanism behind get_or_create() in
+    # AccountPluginBuildTrialDownloadView — without this DB-level partial
+    # unique index, two near-simultaneous requests could each pass the "no
+    # trial yet" check before either committed and both insert, minting two
+    # trial keys for one account. Exercised directly against the model here
+    # since simulating a real race in a single-threaded test isn't feasible.
+    from django.db import IntegrityError
+
+    _, user = buyer_client
+    product = Product.objects.create(
+        name="Race Test", product_code="race-test", category=category,
+        short_description="s", description="d", status=ProductStatus.PUBLISHED,
+        default_trial_days=7,
+    )
+    sku = LicensedProduct.objects.filter(product=product).first() or LicensedProduct.objects.create(
+        code=product.product_code, name=product.name, price=product.price, currency=product.currency,
+    )
+    ProductPurchase.objects.create(user=user, product=sku, is_trial=True, payment_status=ProductPurchase.PaymentStatus.PAID)
+    with pytest.raises(IntegrityError):
+        ProductPurchase.objects.create(user=user, product=sku, is_trial=True, payment_status=ProductPurchase.PaymentStatus.PAID)
+
+
 def test_trial_download_requires_login(category):
     product = Product.objects.create(
         name="Trial Test", product_code="trial-test-anon", category=category,
