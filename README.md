@@ -339,7 +339,9 @@ setBillingPeriod(key, period)` can recompute the price and re-key the line entir
 API round-trip. Each subscription line shows its own `BillingToggle` (same "Save N%" badge logic as
 the product page) plus an honest "Grants access for 1 month/year — no auto-renewal, check out again
 before it expires" note, since there's genuinely no recurring-charge mechanism yet (see above) and
-the checkout copy should never imply one.
+the checkout copy should never imply one. A gold "Monthly/Yearly subscription" pill next to the item
+name and an order-summary line ("Includes N monthly subscription items…") make the recurring pricing
+model unmistakable at a glance, without ever claiming the payment itself recurs automatically.
 
 ## Cancel / refund: self-service, 30-day window, abuse-proof by construction
 
@@ -414,10 +416,47 @@ can extend a time-limited purchase's date via the existing Extend action on `/ad
 A redeemed code always records `amount: 0` regardless of the product's list price, since it's a
 comp/grant, not a real transaction — Sales/Orders revenue reporting isn't inflated by it.
 
+## Account dashboard: Subscriptions, Security, Notifications, Payment Methods, Support Tickets
+
+The five sidebar items that used to show a "soon" badge (`AccountSidebar.tsx`'s `ready` flag) are
+now real, working pages — each backed by data that already existed, not a new fake system:
+
+- **`/account/subscriptions`** (`AccountSubscriptionListView`) — just the `billing_period != ""`
+  slice of the account's own purchases (same `ProductPurchase` rows `/account/orders` already
+  shows), with `is_expiring_soon` (within 3 days) driving a "Renew now" prompt linking back to the
+  product page. No separate subscription model.
+- **`/account/security`** — `PasswordCard` (moved here from Profile, where "password, active
+  sessions" living together matches the confirmed nav structure) plus a real **Active Sessions**
+  list backed directly by Django's own session store (`django.contrib.sessions.models.Session`),
+  not a parallel tracking table. A session's device/IP gets stashed into its own session data at
+  login time (`accounts/api.py::_remember_session_device` — Django's `Session` model has no columns
+  for either, so there's nowhere else that information could live) and decoded back out
+  (`accounts/security_api.py`) to list/revoke other devices. The caller's own current session can't
+  be revoked from here — that's just the regular Log Out button.
+- **`/account/notifications`** — a real activity feed, not a notification system: reuses the
+  existing `ActivityLog` (see "Activity" logging elsewhere in this app), filtered to verbs a
+  customer could plausibly be the actor of (signed in/up, claimed/bought/downloaded/reviewed) and
+  scoped to their own actions (`activity/account_api.py`). There's no email digest or cross-user
+  "staff did X to your order" event type yet — this is honestly "your recent account activity."
+- **`/account/payment-methods`** — payment-method *history*, not saved cards/tokenization. This app
+  never handles a full card number at all (Paymob's hosted Unified Checkout does, see "Checkout"
+  below); `ProductPurchase.card_brand`/`card_last4` capture only the masked last 4 digits Paymob's
+  webhook reports back once a payment confirms (`PaymobWebhookView`), grouped into a real "cards
+  you've used" list (`AccountPaymentMethodListView`). Nothing to add or remove.
+- **`/account/support`** — a real support-ticket system: new `support` app,
+  `SupportTicket`/`SupportTicketMessage` models (a ticket is just a thread — the first message a
+  customer types is the first row in that thread, same shape as every reply after it), customer
+  create/list/view/reply API (`support/account_api.py`). A customer reply always reopens a resolved
+  ticket. Staff see and respond via Django's own `/admin/` for now (`support/admin.py`, an inline
+  reply form that auto-tags `is_staff_reply`/`author`) — no dedicated Admin Portal page built yet,
+  since that wasn't part of what was actually broken (the customer-facing "soon" tabs).
+
 ## API endpoints
 
 - Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
-- Auth: `GET /api/auth/csrf`, `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,change-password}`
+- Auth: `GET /api/auth/csrf`, `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,change-password}`,
+  `GET /api/auth/sessions` (the caller's own active sessions), `POST /api/auth/sessions/<key>/revoke`
+  (sign out a different device — see "Account dashboard" above)
 - Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
   `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
   CRUD at `/api/admin/{categories,tags,partners,collections,roles}`; `GET /api/admin/{licenses,orders,
@@ -455,7 +494,10 @@ comp/grant, not a real transaction — Sales/Orders revenue reporting isn't infl
   no zip, no key attached; see "Auto-generated installers" above),
   `GET /api/account/downloads/plugin-builds/<id>/trial` (any logged-in customer, no checkout/payment —
   same bare `.exe`, gated on `Product.has_trial`, also issues a real trial `ProductPurchase`/key;
-  see "Free trials" above).
+  see "Free trials" above), `GET /api/account/subscriptions`, `GET /api/account/payment-methods`,
+  `GET /api/account/activity`, `GET|POST /api/account/support/tickets`,
+  `GET /api/account/support/tickets/<id>`, `POST /api/account/support/tickets/<id>/reply` (see
+  "Account dashboard" above).
 - **Payment webhook (no auth, HMAC-verified instead): `POST /api/webhooks/paymob`** — registered at
   the URL root (not under `/api/account/`), the only place a checkout purchase ever becomes `PAID`;
   see "Checkout" above.

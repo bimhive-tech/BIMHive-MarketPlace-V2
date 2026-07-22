@@ -126,6 +126,14 @@ class ProductPurchase(models.Model):
     company_name = models.CharField(max_length=180, blank=True)
     contact_email = models.EmailField(blank=True)
     payment_reference = models.CharField(max_length=120, blank=True)
+    # Captured from the Paymob webhook's source_data at confirmation time
+    # (see PaymobWebhookView) — Paymob only ever sends the last 4 digits,
+    # never a full card number, so there's nothing sensitive being stored
+    # here. Powers the real "Payment Methods" history on /account/payment-methods
+    # (a list of cards actually used, not a saved-card/tokenization feature —
+    # this app never captures a full card number, Paymob's hosted checkout does).
+    card_brand = models.CharField(max_length=40, blank=True)
+    card_last4 = models.CharField(max_length=4, blank=True)
     notes = models.TextField(blank=True)
     requested_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)

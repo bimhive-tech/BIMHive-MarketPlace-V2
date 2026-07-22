@@ -253,6 +253,21 @@ def test_webhook_with_a_valid_signature_marks_matching_purchases_paid(buyer_clie
     assert purchase.expires_at is None  # one-time purchase, perpetual
 
 
+def test_webhook_captures_masked_card_details_for_payment_methods_history(buyer_client, product, mock_intention):
+    # Powers /account/payment-methods (see AccountPaymentMethodListView) —
+    # only ever the masked last 4 digits Paymob itself sends back, never a
+    # full card number.
+    client, user = buyer_client
+    reference = _checkout(client, [{"slug": product.slug, "qty": 1}]).json()["reference"]
+
+    resp = _send_webhook(Client(), _webhook_payload(reference))
+    assert resp.status_code == 200, resp.json()
+
+    purchase = ProductPurchase.objects.get(user=user, product__product=product)
+    assert purchase.card_brand == "MasterCard"
+    assert purchase.card_last4 == "1234"
+
+
 def test_webhook_sets_expires_at_for_a_monthly_purchase(buyer_client, category, mock_intention):
     sub = Product.objects.create(
         name="Sub Webhook Test", product_code="sub-webhook-test", category=category,

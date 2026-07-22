@@ -24,6 +24,23 @@ from activity.models import ActivityVerb
 from activity.services import log_activity
 
 
+def _client_ip(request):
+    # Same XFF-aware lookup as licensing/api_views.py::_client_ip — Railway
+    # sits behind a proxy, so REMOTE_ADDR alone would just be the proxy's IP.
+    xff = (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
+    return xff or request.META.get("REMOTE_ADDR") or "unknown"
+
+
+def _remember_session_device(request):
+    """Stashes who/where a session belongs to, at the moment it's created —
+    Django's own Session model has no device/IP columns, only an opaque
+    encoded blob, so this is the only place that information can ever be
+    captured. Read back by AccountSessionListView (accounts/security_api.py)
+    for the real "active sessions" list."""
+    request.session["ip_address"] = _client_ip(request)
+    request.session["user_agent"] = (request.META.get("HTTP_USER_AGENT") or "")[:200]
+
+
 @method_decorator(ensure_csrf_cookie, name="get")
 class CsrfView(APIView):
     """GET to receive a csrftoken cookie before posting to login/register."""
@@ -44,6 +61,7 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         login(request, user)  # start a session immediately after signup
+        _remember_session_device(request)
         log_activity(user, ActivityVerb.SIGNED_UP)
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
@@ -63,6 +81,7 @@ class LoginView(APIView):
                 {"detail": "Invalid email or password."}, status=status.HTTP_401_UNAUTHORIZED
             )
         login(request, user)
+        _remember_session_device(request)
         log_activity(user, ActivityVerb.SIGNED_IN)
         return Response(UserSerializer(user).data)
 

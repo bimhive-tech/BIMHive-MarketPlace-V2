@@ -3,7 +3,10 @@ Customer-facing account API — "my orders / my licenses / my downloads"
 (mounted under /api/account/). Everything here is scoped to request.user; this is
 the read side of the same ProductPurchase/MachineLicense data the admin API manages.
 """
+from datetime import timedelta
+
 from django.conf import settings
+from django.db.models import Count, Max, Min
 from django.utils import timezone
 from rest_framework import generics, serializers
 from rest_framework.exceptions import ValidationError
@@ -49,6 +52,76 @@ class AccountOrderListView(generics.ListAPIView):
         return (
             ProductPurchase.objects.filter(user=self.request.user)
             .select_related("product")
+            .order_by("-requested_at")
+        )
+
+
+class AccountPaymentMethodListView(APIView):
+    """Real payment-method *history* for /account/payment-methods — which
+    cards have actually been used to pay, not a saved-card/tokenization
+    feature. This app never handles a full card number at all (Paymob's
+    hosted Unified Checkout does — see "Checkout" in the README); the only
+    thing captured server-side is the masked last 4 digits + brand Paymob's
+    webhook reports back once a payment confirms (see PaymobWebhookView),
+    so there's nothing to "add" or "remove" here, only what's real."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rows = (
+            ProductPurchase.objects.filter(user=request.user)
+            .exclude(card_last4="")
+            .values("card_brand", "card_last4")
+            .annotate(first_used=Min("paid_at"), last_used=Max("paid_at"), times_used=Count("id"))
+            .order_by("-last_used")
+        )
+        return Response(list(rows))
+
+
+class AccountSubscriptionSerializer(serializers.ModelSerializer):
+    """Just the recurring-priced slice of the same ProductPurchase rows
+    AccountOrderListView already returns — a subscription isn't a separate
+    model, it's any purchase with billing_period set (see [[subscription-pricing]]
+    in the project's own doc comments above CheckoutView)."""
+
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_code = serializers.CharField(source="product.code", read_only=True)
+    product_slug = serializers.SerializerMethodField()
+    license_status = serializers.CharField(read_only=True)
+    is_expiring_soon = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductPurchase
+        fields = [
+            "id", "product_name", "product_code", "product_slug", "amount", "currency",
+            "payment_status", "license_status", "billing_period", "expires_at",
+            "is_expiring_soon", "requested_at", "paid_at",
+        ]
+
+    def get_product_slug(self, obj):
+        catalog_product = obj.product.product
+        return catalog_product.slug if catalog_product else None
+
+    def get_is_expiring_soon(self, obj):
+        # Lets the frontend nudge "renew now" without duplicating the
+        # threshold logic — 3 days covers the yearly case comfortably and
+        # is still meaningful for the (real) monthly interval once the
+        # TEMPORARY 10-minute test override (see _subscription_duration
+        # above) is reverted.
+        if not obj.expires_at or obj.payment_status != ProductPurchase.PaymentStatus.PAID:
+            return False
+        return timezone.now() <= obj.expires_at <= timezone.now() + timedelta(days=3)
+
+
+class AccountSubscriptionListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = AccountSubscriptionSerializer
+
+    def get_queryset(self):
+        return (
+            ProductPurchase.objects.filter(user=self.request.user)
+            .exclude(billing_period="")
+            .select_related("product", "product__product")
             .order_by("-requested_at")
         )
 
@@ -699,12 +772,20 @@ class PaymobWebhookView(APIView):
             logger.warning("Paymob webhook: no PENDING purchases found for reference %s", reference)
             return Response({"ok": True})
 
+        # Paymob only ever sends the masked last 4 digits here (source_data.pan),
+        # never a full card number — see the field comment on the model.
+        source_data = obj.get("source_data") or {}
+        card_brand = (source_data.get("sub_type") or "")[:40]
+        card_last4 = (source_data.get("pan") or "")[-4:]
+
         now = timezone.now()
         for purchase in purchases:
             if purchase.payment_status == ProductPurchase.PaymentStatus.PAID:
                 continue  # already processed — webhooks can be delivered more than once
             purchase.payment_status = ProductPurchase.PaymentStatus.PAID
             purchase.expires_at = _expires_at_for(purchase.billing_period, now)
+            purchase.card_brand = card_brand
+            purchase.card_last4 = card_last4
             purchase.save()
 
         user = purchases[0].user

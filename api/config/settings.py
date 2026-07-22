@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "licensing",
     "activity",
     "installer",
+    "support",
 ]
 
 MIDDLEWARE = [

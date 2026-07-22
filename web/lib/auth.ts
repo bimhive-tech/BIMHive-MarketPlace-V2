@@ -114,3 +114,21 @@ export function changePassword(currentPassword: string, newPassword: string) {
 export function deleteAccount() {
   return request<void>("/api/auth/me", "DELETE");
 }
+
+export interface AccountSession {
+  id: string;
+  ip_address: string;
+  user_agent: string;
+  expires_at: string;
+  is_current: boolean;
+}
+
+export async function getSessions(): Promise<AccountSession[]> {
+  const res = await fetch("/api/auth/sessions", { credentials: "include" });
+  if (!res.ok) throw new AuthError(await res.json().catch(() => ({})));
+  return res.json();
+}
+
+export function revokeSession(id: string) {
+  return request<{ detail: string }>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`, "POST");
+}

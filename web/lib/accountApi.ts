@@ -84,6 +84,71 @@ export const getAccountLicenses = () => getJSON<AccountLicense[]>("/api/account/
 export const redeemLicenseCode = (code: string) =>
   writeJSON<AccountLicense>("/api/account/licenses/redeem", "POST", { code });
 
+export interface AccountSubscription {
+  id: string;
+  product_name: string;
+  product_code: string;
+  product_slug: string | null;
+  amount: string;
+  currency: string;
+  payment_status: string;
+  license_status: "active" | "inactive" | "expired";
+  billing_period: "monthly" | "yearly";
+  expires_at: string | null;
+  is_expiring_soon: boolean;
+  requested_at: string;
+  paid_at: string | null;
+}
+export const getAccountSubscriptions = () => getJSON<AccountSubscription[]>("/api/account/subscriptions");
+
+export interface AccountActivityEntry {
+  id: number;
+  verb: string;
+  target_label: string;
+  created_at: string;
+}
+export const getAccountActivity = () => getJSON<AccountActivityEntry[]>("/api/account/activity");
+
+export interface AccountPaymentMethod {
+  card_brand: string;
+  card_last4: string;
+  first_used: string;
+  last_used: string;
+  times_used: number;
+}
+export const getAccountPaymentMethods = () => getJSON<AccountPaymentMethod[]>("/api/account/payment-methods");
+
+export interface SupportTicketMessage {
+  id: string;
+  author_label: string;
+  is_staff_reply: boolean;
+  body: string;
+  created_at: string;
+}
+export interface SupportTicketSummary {
+  id: string;
+  subject: string;
+  status: "open" | "awaiting_customer" | "resolved";
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface SupportTicketDetail {
+  id: string;
+  subject: string;
+  status: "open" | "awaiting_customer" | "resolved";
+  messages: SupportTicketMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export const getSupportTickets = () => getJSON<SupportTicketSummary[]>("/api/account/support/tickets");
+export const getSupportTicket = (id: string) => getJSON<SupportTicketDetail>(`/api/account/support/tickets/${id}`);
+export const createSupportTicket = (subject: string, body: string) =>
+  writeJSON<SupportTicketDetail>("/api/account/support/tickets", "POST", { subject, body });
+export const replySupportTicket = (id: string, body: string) =>
+  writeJSON<SupportTicketDetail>(`/api/account/support/tickets/${id}/reply`, "POST", { body });
+
 export interface AccountDownloadFile {
   id: string;
   revit_version: string;

@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { AccountSummaryCard } from "@/features/account/AccountSummaryCard/AccountSummaryCard";
 import { DeleteAccountCard } from "@/features/account/DeleteAccountCard/DeleteAccountCard";
 import { EmailCard } from "@/features/account/EmailCard/EmailCard";
-import { PasswordCard } from "@/features/account/PasswordCard/PasswordCard";
 import { ProfileForm } from "@/features/account/ProfileForm/ProfileForm";
 import { QuickLinksCard } from "@/features/account/QuickLinksCard/QuickLinksCard";
 import { SellerTab } from "@/features/account/SellerTab/SellerTab";
@@ -65,7 +64,6 @@ export default function ProfilePage() {
           <div className={styles.main}>
             <ProfileForm user={user} onSaved={setUser} />
             <EmailCard user={user} onSaved={setUser} />
-            <PasswordCard />
           </div>
           <div className={styles.side}>
             <AccountSummaryCard user={user} />

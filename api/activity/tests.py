@@ -17,6 +17,20 @@ pytestmark = pytest.mark.django_db
 User = get_user_model()
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_throttle():
+    # test_signup_and_login_are_logged posts to the real, throttled
+    # /api/auth/register + /api/auth/login ("auth" scope, 10/min, cache-backed
+    # — see DEFAULT_THROTTLE_RATES in settings.py). That cache is process-wide
+    # and outlives any single test, so other test files making real requests
+    # to those same endpoints earlier in a full test run can leave enough
+    # counted requests behind to 429 this one. Same isolation pattern as
+    # licensing/tests.py::_pepper.
+    from django.core.cache import cache
+
+    cache.clear()
+
+
 @pytest.fixture
 def category():
     return Category.objects.create(name="Revit Plugins")

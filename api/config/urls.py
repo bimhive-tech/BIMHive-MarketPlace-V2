@@ -24,6 +24,8 @@ urlpatterns = [
     # ── Customer account API (my orders / licenses / downloads / reviews) ──
     path("api/account/", include("licensing.account_urls")),
     path("api/account/", include("reviews.account_urls")),
+    path("api/account/", include("activity.account_urls")),
+    path("api/account/", include("support.account_urls")),
     # ── Admin portal API (staff-only) ──
     path("api/admin/", include("catalog.admin_urls")),
     path("api/admin/", include("licensing.admin_urls")),

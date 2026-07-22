@@ -8,6 +8,7 @@ import { Button } from "@/components/Button/Button";
 import { BillingToggle } from "@/components/BillingToggle/BillingToggle";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
+import { Pill } from "@/components/Pill/Pill";
 import { formatPrice } from "@/config/site";
 import { type CartItem, useCart } from "@/lib/cart";
 import { me } from "@/lib/auth";
@@ -26,11 +27,23 @@ function yearlySavingsPercent(item: CartItem): number | null {
   return Math.round((1 - item.yearlyPrice / yearlyEquivalentOfMonthly) * 100);
 }
 
+function subscriptionSummaryLabel(items: CartItem[]): string {
+  const subscriptionItems = items.filter((i) => i.billingPeriod);
+  const periods = new Set(subscriptionItems.map((i) => i.billingPeriod));
+  const noun = subscriptionItems.length === 1 ? "subscription item" : "subscription items";
+  if (periods.size === 1) {
+    const period = periods.has("yearly") ? "yearly" : "monthly";
+    return `Includes ${subscriptionItems.length} ${period} ${noun}`;
+  }
+  return `Includes ${subscriptionItems.length} ${noun} (mixed monthly/yearly)`;
+}
+
 export default function CheckoutPage() {
   const { items, subtotal, setBillingPeriod } = useCart();
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
+  const hasSubscriptionItems = items.some((i) => i.billingPeriod);
 
   useEffect(() => {
     me().then(setUser);
@@ -97,7 +110,12 @@ export default function CheckoutPage() {
               <li key={item.key} className={styles.item}>
                 <div className={styles.itemTop}>
                   <div className={styles.itemInfo}>
-                    <span className={styles.itemName}>{item.name}</span>
+                    <span className={styles.itemNameRow}>
+                      <span className={styles.itemName}>{item.name}</span>
+                      {item.billingPeriod && (
+                        <Pill tone="gold">{item.billingPeriod === "yearly" ? "Yearly subscription" : "Monthly subscription"}</Pill>
+                      )}
+                    </span>
                     <span className={styles.itemQty}>Qty {item.qty}</span>
                   </div>
                   <span className={styles.lineTotal}>
@@ -110,21 +128,17 @@ export default function CheckoutPage() {
 
                 {item.billingPeriod && (
                   <div className={styles.itemBilling}>
-                    {canSwitchInterval ? (
+                    {canSwitchInterval && (
                       <BillingToggle
                         value={item.billingPeriod}
                         onChange={(period) => setBillingPeriod(item.key, period)}
                         yearlySavingsPercent={yearlySavingsPercent(item)}
                       />
-                    ) : (
-                      <span className={styles.recurringNote}>
-                        {item.billingPeriod === "yearly" ? "Yearly" : "Monthly"} plan
-                      </span>
                     )}
                     <span className={styles.recurringNote}>
-                      <Icon name="clock" size={13} /> Grants access for 1{" "}
-                      {item.billingPeriod === "yearly" ? "year" : "month"} from today — no auto-renewal,
-                      check out again before it expires to keep it active.
+                      <Icon name="clock" size={13} /> This payment covers your first{" "}
+                      {item.billingPeriod === "yearly" ? "year" : "month"}. Renewals aren't automatic yet
+                      — you'll need to check out again before it expires to keep your access active.
                     </span>
                   </div>
                 )}
@@ -139,6 +153,12 @@ export default function CheckoutPage() {
             <span>Total</span>
             <span>{formatPrice(subtotal, items[0]?.currency ?? "USD")}</span>
           </div>
+          {hasSubscriptionItems && (
+            <p className={styles.summarySub}>
+              {subscriptionSummaryLabel(items)} — covers the period selected above; renewal isn't
+              automatic yet.
+            </p>
+          )}
 
           <div className={styles.testNotice}>
             <Icon name="help" size={16} className={styles.testNoticeIcon} />

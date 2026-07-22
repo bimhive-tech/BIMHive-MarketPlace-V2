@@ -109,6 +109,127 @@ def test_licenses_reports_bound_machines(django_user_model, sku):
     assert rows[0]["machines"][0]["started_at"] == "2026-01-01T00:00:00Z"
 
 
+# ── Subscriptions (the recurring-priced slice of a customer's purchases) ──
+def test_subscriptions_requires_auth(sku):
+    resp = Client().get("/api/account/subscriptions")
+    assert resp.status_code in (401, 403)
+
+
+def test_subscriptions_excludes_one_time_purchases(django_user_model, sku):
+    user, client = _login(django_user_model)
+    ProductPurchase.objects.create(user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID)
+
+    resp = client.get("/api/account/subscriptions")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_subscriptions_includes_billing_period_purchases(django_user_model, sku):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    user, client = _login(django_user_model)
+    ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        billing_period=ProductPurchase.BillingPeriod.MONTHLY,
+        expires_at=timezone.now() + timedelta(days=20),
+    )
+
+    resp = client.get("/api/account/subscriptions")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 1
+    assert rows[0]["billing_period"] == "monthly"
+    assert rows[0]["license_status"] == "active"
+    assert rows[0]["is_expiring_soon"] is False
+
+
+def test_subscriptions_flags_one_expiring_within_three_days(django_user_model, sku):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    user, client = _login(django_user_model)
+    ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        billing_period=ProductPurchase.BillingPeriod.YEARLY,
+        expires_at=timezone.now() + timedelta(days=1),
+    )
+
+    resp = client.get("/api/account/subscriptions")
+    assert resp.json()[0]["is_expiring_soon"] is True
+
+
+def test_subscriptions_scoped_to_current_user(django_user_model, sku):
+    owner, owner_client = _login(django_user_model, "owner@example.com")
+    other, _ = _login(django_user_model, "other@example.com")
+    ProductPurchase.objects.create(
+        user=owner, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        billing_period=ProductPurchase.BillingPeriod.MONTHLY,
+    )
+    ProductPurchase.objects.create(
+        user=other, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        billing_period=ProductPurchase.BillingPeriod.MONTHLY,
+    )
+
+    resp = owner_client.get("/api/account/subscriptions")
+    assert len(resp.json()) == 1
+
+
+# ── Payment methods (real usage history, not saved cards) ──
+def test_payment_methods_requires_auth(sku):
+    resp = Client().get("/api/account/payment-methods")
+    assert resp.status_code in (401, 403)
+
+
+def test_payment_methods_excludes_purchases_with_no_captured_card(django_user_model, sku):
+    user, client = _login(django_user_model)
+    ProductPurchase.objects.create(user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID)
+
+    resp = client.get("/api/account/payment-methods")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_payment_methods_groups_by_brand_and_last4(django_user_model, sku):
+    user, client = _login(django_user_model)
+    ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        card_brand="MasterCard", card_last4="1234",
+    )
+    ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        card_brand="MasterCard", card_last4="1234",
+    )
+    ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        card_brand="Visa", card_last4="9999",
+    )
+
+    resp = client.get("/api/account/payment-methods")
+    rows = resp.json()
+    assert len(rows) == 2
+    mastercard = next(r for r in rows if r["card_brand"] == "MasterCard")
+    assert mastercard["times_used"] == 2
+
+
+def test_payment_methods_scoped_to_current_user(django_user_model, sku):
+    owner, owner_client = _login(django_user_model, "owner@example.com")
+    other, _ = _login(django_user_model, "other@example.com")
+    ProductPurchase.objects.create(
+        user=owner, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        card_brand="Visa", card_last4="1111",
+    )
+    ProductPurchase.objects.create(
+        user=other, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        card_brand="Visa", card_last4="2222",
+    )
+
+    resp = owner_client.get("/api/account/payment-methods")
+    assert len(resp.json()) == 1
+
+
 # ── Claiming a free product (the no-checkout acquisition path) ──
 def _claim(client, slug):
     return client.post("/api/account/claim-free", data={"slug": slug}, content_type="application/json")
