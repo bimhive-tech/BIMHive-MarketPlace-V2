@@ -60,6 +60,15 @@ Stripe/PayPal are scaffolded but unused; **Paymob is the one actually wired up**
 `PAYMOB_PUBLIC_KEY`, `PAYMOB_HMAC_SECRET`, `PAYMOB_INTEGRATION_ID` — the last has no working default,
 see "Checkout" below). **Never commit `.env`.**
 
+**`R2_PUBLIC_BASE_URL` is still unset**, so product gallery images/covers and partner logos serve
+over a presigned link instead of a real permanent public URL (see `STORAGES["public_media"]` in
+`config/settings.py`) — this is fine functionally (`catalog/storage.py::refresh_storage_url`
+re-signs the URL fresh on every API read, so nothing ever actually goes stale/broken), but it's
+extra signing work on every request that a real public URL wouldn't need. Set it once the R2
+bucket's public access (an `r2.dev` dev URL or a connected custom domain, from the Cloudflare R2
+dashboard) is turned on — no other code change needed, `refresh_storage_url` just becomes a no-op
+and everything switches to permanent URLs automatically.
+
 ---
 
 ## Project structure

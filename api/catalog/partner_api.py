@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from catalog.models import Partner
 from catalog.permissions import IsApprovedPartner, IsPartnerUser
+from catalog.storage import refresh_storage_url
 from licensing.models import ProductPurchase
 
 
@@ -48,6 +49,11 @@ class PartnerProfileSerializer(serializers.ModelSerializer):
         # only ever set through the upload/remove handling in the view below —
         # never a freeform URL a partner can type in (see PartnerProfileView.patch).
         read_only_fields = ["id", "name", "slug", "is_verified", "status", "rejection_note", "logo_url"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["logo_url"] = refresh_storage_url(data.get("logo_url"))
+        return data
 
 
 class PartnerProfileView(APIView):

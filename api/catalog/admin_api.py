@@ -29,6 +29,7 @@ from catalog.models import (
 )
 from catalog.models.product import ProductStatus
 from catalog.permissions import IsStaffOrPartner
+from catalog.storage import refresh_storage_url
 
 
 def _effective_partner_id(request):
@@ -54,6 +55,7 @@ class AdminProductRowSerializer(serializers.ModelSerializer):
     partner = serializers.CharField(source="partner.name", read_only=True, default="")
     partner_verified = serializers.BooleanField(source="partner.is_verified", read_only=True, default=False)
     price_label = serializers.CharField(read_only=True)
+    cover_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -62,6 +64,9 @@ class AdminProductRowSerializer(serializers.ModelSerializer):
             "partner", "partner_verified", "price", "price_label", "status", "download_count",
             "rating_average", "rating_count", "updated_at", "cover_image_url",
         ]
+
+    def get_cover_image_url(self, obj):
+        return refresh_storage_url(obj.cover_image_url)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -77,6 +82,15 @@ class ProductMediaItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductMedia
         fields = ["media_type", "url", "caption", "is_cover", "sort_order"]
+
+    def to_representation(self, instance):
+        # `url` stays a normal writable field (the edit form re-submits
+        # whatever the upload endpoint returned) — only the *outbound* value
+        # is refreshed, so a stored 7-day-old presigned link doesn't show as
+        # broken in the edit form itself. See catalog/storage.py.
+        data = super().to_representation(instance)
+        data["url"] = refresh_storage_url(data.get("url"))
+        return data
 
 
 class ChangelogItemSerializer(serializers.ModelSerializer):
@@ -151,6 +165,11 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "slug", "download_count", "created_at", "updated_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["cover_image_url"] = refresh_storage_url(data.get("cover_image_url"))
+        return data
 
     @staticmethod
     def _is_partner_caller(request):
@@ -569,6 +588,11 @@ class PartnerSerializer(ProductCountMixin, serializers.ModelSerializer):
             "status", "rejection_note", "product_count", "owner_email",
         ]
         read_only_fields = ["slug"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["logo_url"] = refresh_storage_url(data.get("logo_url"))
+        return data
 
     def get_owner_email(self, obj):
         # The account that submitted the seller application (see

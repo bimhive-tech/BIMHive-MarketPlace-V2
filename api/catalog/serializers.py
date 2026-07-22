@@ -19,6 +19,7 @@ from catalog.models import (
     Tag,
 )
 from catalog.models.product import ProductType
+from catalog.storage import refresh_storage_url
 from reviews.models import Review
 
 
@@ -57,15 +58,25 @@ class TagSerializer(serializers.ModelSerializer):
 
 
 class PartnerSerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Partner
         fields = ["id", "name", "slug", "tagline", "bio", "logo_url", "website", "is_verified"]
 
+    def get_logo_url(self, obj):
+        return refresh_storage_url(obj.logo_url)
+
 
 class ProductMediaSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductMedia
         fields = ["id", "media_type", "url", "caption", "is_cover", "sort_order"]
+
+    def get_url(self, obj):
+        return refresh_storage_url(obj.url)
 
 
 class KeyFeatureSerializer(serializers.ModelSerializer):
@@ -112,11 +123,14 @@ class DocumentationListSerializer(serializers.ModelSerializer):
 
     product_name = serializers.CharField(source="product.name", read_only=True)
     product_slug = serializers.CharField(source="product.slug", read_only=True)
-    product_cover_image_url = serializers.CharField(source="product.cover_image_url", read_only=True)
+    product_cover_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Documentation
         fields = ["id", "slug", "title", "summary", "product_name", "product_slug", "product_cover_image_url"]
+
+    def get_product_cover_image_url(self, obj):
+        return refresh_storage_url(obj.product.cover_image_url)
 
 
 class DocumentationDetailSerializer(DocumentationListSerializer):
@@ -153,6 +167,7 @@ class ProductCardSerializer(serializers.ModelSerializer):
     category_slug = serializers.CharField(source="category.slug", read_only=True)
     price_label = serializers.CharField(read_only=True)
     is_subscription = serializers.BooleanField(read_only=True)
+    cover_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -161,6 +176,9 @@ class ProductCardSerializer(serializers.ModelSerializer):
             "price", "price_label", "monthly_price", "yearly_price", "is_subscription", "currency",
             "rating_average", "rating_count", "download_count", "category", "category_slug", "is_featured",
         ]
+
+    def get_cover_image_url(self, obj):
+        return refresh_storage_url(obj.cover_image_url)
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -180,6 +198,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     yearly_savings_percent = serializers.IntegerField(read_only=True)
     rating_breakdown = serializers.SerializerMethodField()
     trial_builds = serializers.SerializerMethodField()
+    cover_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -194,6 +213,9 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "category", "partner", "tags", "media", "features", "changelog",
             "compatibility", "documentation", "reviews",
         ]
+
+    def get_cover_image_url(self, obj):
+        return refresh_storage_url(obj.cover_image_url)
 
     def get_trial_builds(self, obj):
         # Deferred import — installer/models.py imports catalog.models at
