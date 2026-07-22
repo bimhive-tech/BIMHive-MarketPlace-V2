@@ -117,6 +117,12 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
       unitPrice,
       currency: product.currency,
       billingPeriod,
+      // Only set for a subscription — and only when that interval actually
+      // has a price (a monthly-only or yearly-only subscription leaves the
+      // other one null) — lets the cart/checkout switch monthly<->yearly
+      // later without a fresh API call (see lib/cart.tsx).
+      monthlyPrice: product.is_subscription && product.monthly_price != null ? Number(product.monthly_price) : undefined,
+      yearlyPrice: product.is_subscription && product.yearly_price != null ? Number(product.yearly_price) : undefined,
     });
   }
 

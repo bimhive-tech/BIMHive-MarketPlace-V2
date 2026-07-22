@@ -332,6 +332,15 @@ subscription product that also lists one (buying it with no `billingPeriod` in t
 `Product.is_free`/`price_label` both know to ignore a subscription product's (irrelevant, usually
 `$0.00`) one-time `price` field rather than misreporting it as free.
 
+**The interval is also switchable on `/checkout` itself, not just back on the product page.**
+`CartItem` carries `monthlyPrice`/`yearlyPrice` alongside `unitPrice` (set once, at add-to-cart time,
+same snapshot-not-live-fetched approach the rest of the cart already uses) so `useCart().
+setBillingPeriod(key, period)` can recompute the price and re-key the line entirely client-side, no
+API round-trip. Each subscription line shows its own `BillingToggle` (same "Save N%" badge logic as
+the product page) plus an honest "Grants access for 1 month/year — no auto-renewal, check out again
+before it expires" note, since there's genuinely no recurring-charge mechanism yet (see above) and
+the checkout copy should never imply one.
+
 ## Cancel / refund: self-service, 30-day window, abuse-proof by construction
 
 `POST /api/account/orders/<id>/refund` (`AccountOrderRefundView`) is the self-service side of the

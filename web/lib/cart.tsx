@@ -31,6 +31,12 @@ export interface CartItem {
   // Optional so carts persisted before this field existed still parse fine —
   // missing means "" (one-time), same as an explicit "".
   billingPeriod?: BillingPeriod;
+  // Only present for a subscription product — lets setBillingPeriod() switch
+  // monthly<->yearly entirely client-side (recomputing unitPrice) without a
+  // fresh API call, the same way unitPrice itself is already just a snapshot
+  // taken when the item was added.
+  monthlyPrice?: number;
+  yearlyPrice?: number;
   qty: number;
 }
 
@@ -39,6 +45,7 @@ interface CartContextValue {
   addItem: (item: Omit<CartItem, "qty" | "key">, qty?: number) => void;
   removeItem: (key: string) => void;
   setQty: (key: string, qty: number) => void;
+  setBillingPeriod: (key: string, period: "monthly" | "yearly") => void;
   clear: () => void;
   count: number;
   subtotal: number;
@@ -91,6 +98,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, qty } : i)));
   }
 
+  function setBillingPeriod(key: string, period: "monthly" | "yearly") {
+    setItems((prev) => {
+      const current = prev.find((i) => i.key === key);
+      if (!current) return prev;
+      const price = period === "yearly" ? current.yearlyPrice : current.monthlyPrice;
+      if (price == null) return prev; // not a subscription line — nothing to switch
+      const newKey = `${current.productId}:${period}`;
+      if (newKey === key) return prev;
+
+      const conflict = prev.find((i) => i.key === newKey);
+      if (conflict) {
+        // A line for that period already exists (e.g. added separately
+        // earlier) — merge quantities into it instead of ending up with two
+        // rows for the same product, same as addItem()'s own merge rule.
+        return prev
+          .filter((i) => i.key !== key)
+          .map((i) => (i.key === newKey ? { ...i, qty: i.qty + current.qty } : i));
+      }
+      return prev.map((i) =>
+        i.key === key ? { ...i, key: newKey, billingPeriod: period, unitPrice: price } : i,
+      );
+    });
+  }
+
   function clear() {
     setItems([]);
   }
@@ -99,7 +130,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const subtotal = useMemo(() => items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0), [items]);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, setQty, clear, count, subtotal }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, setQty, setBillingPeriod, clear, count, subtotal }}>
       {children}
     </CartContext.Provider>
   );

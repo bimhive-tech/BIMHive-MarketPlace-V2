@@ -5,17 +5,29 @@ import { useEffect, useState } from "react";
 import { AccountApiError, checkout } from "@/lib/accountApi";
 import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
 import { Button } from "@/components/Button/Button";
+import { BillingToggle } from "@/components/BillingToggle/BillingToggle";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
 import { formatPrice } from "@/config/site";
-import { useCart } from "@/lib/cart";
+import { type CartItem, useCart } from "@/lib/cart";
 import { me } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 import styles from "./page.module.css";
 
+// Mirrors Product.yearly_savings_percent's formula server-side (see
+// catalog/models/product.py) so the checkout badge and the product page's
+// own BillingToggle always agree — null (no badge) whenever yearly isn't
+// actually the cheaper option, never a misleading 0%/negative discount.
+function yearlySavingsPercent(item: CartItem): number | null {
+  if (!item.monthlyPrice || !item.yearlyPrice) return null;
+  const yearlyEquivalentOfMonthly = item.monthlyPrice * 12;
+  if (item.yearlyPrice >= yearlyEquivalentOfMonthly) return null;
+  return Math.round((1 - item.yearlyPrice / yearlyEquivalentOfMonthly) * 100);
+}
+
 export default function CheckoutPage() {
-  const { items, subtotal } = useCart();
+  const { items, subtotal, setBillingPeriod } = useCart();
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
@@ -79,18 +91,46 @@ export default function CheckoutPage() {
 
       <div className={styles.layout}>
         <ul className={styles.items}>
-          {items.map((item) => (
-            <li key={item.key} className={styles.item}>
-              <div className={styles.itemInfo}>
-                <span className={styles.itemName}>{item.name}</span>
-                <span className={styles.itemQty}>
-                  Qty {item.qty}
-                  {item.billingPeriod && ` · ${item.billingPeriod === "yearly" ? "Yearly" : "Monthly"}`}
-                </span>
-              </div>
-              <span className={styles.lineTotal}>{formatPrice(item.unitPrice * item.qty, item.currency)}</span>
-            </li>
-          ))}
+          {items.map((item) => {
+            const canSwitchInterval = item.monthlyPrice != null && item.yearlyPrice != null;
+            return (
+              <li key={item.key} className={styles.item}>
+                <div className={styles.itemTop}>
+                  <div className={styles.itemInfo}>
+                    <span className={styles.itemName}>{item.name}</span>
+                    <span className={styles.itemQty}>Qty {item.qty}</span>
+                  </div>
+                  <span className={styles.lineTotal}>
+                    {formatPrice(item.unitPrice * item.qty, item.currency)}
+                    {item.billingPeriod && (
+                      <span className={styles.interval}>/{item.billingPeriod === "yearly" ? "yr" : "mo"}</span>
+                    )}
+                  </span>
+                </div>
+
+                {item.billingPeriod && (
+                  <div className={styles.itemBilling}>
+                    {canSwitchInterval ? (
+                      <BillingToggle
+                        value={item.billingPeriod}
+                        onChange={(period) => setBillingPeriod(item.key, period)}
+                        yearlySavingsPercent={yearlySavingsPercent(item)}
+                      />
+                    ) : (
+                      <span className={styles.recurringNote}>
+                        {item.billingPeriod === "yearly" ? "Yearly" : "Monthly"} plan
+                      </span>
+                    )}
+                    <span className={styles.recurringNote}>
+                      <Icon name="clock" size={13} /> Grants access for 1{" "}
+                      {item.billingPeriod === "yearly" ? "year" : "month"} from today — no auto-renewal,
+                      check out again before it expires to keep it active.
+                    </span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
 
         <aside className={styles.summary}>
