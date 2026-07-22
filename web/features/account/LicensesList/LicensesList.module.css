@@ -59,6 +59,29 @@
   gap: var(--space-1);
 }
 
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+  background: transparent;
+  transition: color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+.copyBtn:hover {
+  color: var(--color-heading);
+  border-color: var(--gold-500);
+  background: var(--gold-100);
+}
+
 .machines {
   display: flex;
   flex-direction: column;

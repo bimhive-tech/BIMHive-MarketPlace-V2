@@ -43,12 +43,19 @@ export function LicensesList() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState("");
   const [redeemSuccess, setRedeemSuccess] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     getAccountLicenses()
       .then(setLicenses)
       .catch(() => setLicenses([]));
   }, []);
+
+  async function onCopyKey(key: string, id: string) {
+    await navigator.clipboard.writeText(key);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500);
+  }
 
   async function onRedeem() {
     if (!redeemCode.trim()) return;
@@ -131,6 +138,17 @@ export function LicensesList() {
           <div className={styles.meta}>
             <span>
               <Icon name="lock" size={14} /> {license.license_key || "No key issued"}
+              {license.license_key && (
+                <button
+                  type="button"
+                  className={styles.copyBtn}
+                  aria-label="Copy license key"
+                  onClick={() => onCopyKey(license.license_key, license.id)}
+                >
+                  <Icon name={copiedId === license.id ? "check" : "copy"} size={13} />
+                  {copiedId === license.id ? "Copied" : "Copy"}
+                </button>
+              )}
             </span>
             <span>{license.is_trial ? "Trial started" : "Purchased"} {formatDate(license.paid_at ?? license.requested_at)}</span>
             {license.expires_at && <span>Expires {formatDate(license.expires_at)}</span>}
