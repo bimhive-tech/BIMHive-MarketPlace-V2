@@ -75,6 +75,22 @@ def test_profession_is_optional_at_signup(client):
     assert resp.status_code == 201, resp.json()
 
 
+def test_login_works_for_an_account_with_no_country_set(client):
+    """Regression: a Profile with a blank CountryField used to 500 on login —
+    DRF auto-builds a ChoiceField for a model field with `choices` (which
+    CountryField carries), and ChoiceField.to_representation's blank-value
+    special case returns the raw Country object instead of a string, which
+    then fails json.dumps(). Covers every account that existed before
+    profession/country were added, not just freshly registered ones."""
+    user = User.objects.create_user(username="old@x.com", email="old@x.com", password="pw12345!")
+    Profile.objects.create(user=user)  # profession/country left blank, like a pre-migration account
+
+    resp = client.post("/api/auth/login", {"email": "old@x.com", "password": "pw12345!"}, content_type="application/json")
+
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["profile"]["country"] == ""
+
+
 def test_me_reports_profession_and_country(client):
     user = User.objects.create_user(username="c@x.com", email="c@x.com", password="x")
     Profile.objects.create(user=user, profession=Profession.ARCHITECT, country="FR")

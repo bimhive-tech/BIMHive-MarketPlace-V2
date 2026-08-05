@@ -24,6 +24,16 @@ def _validate_country_code(value):
 
 class ProfileSerializer(serializers.ModelSerializer):
     profession_label = serializers.CharField(source="get_profession_display", read_only=True)
+    # Declared explicitly rather than left to ModelSerializer's auto-build: a
+    # CountryField carries django_countries' own `choices`, so an auto-built
+    # field here would be a ChoiceField — and DRF's ChoiceField.to_representation
+    # has a blank-value special case ("if value in ('', None): return value")
+    # that, for a blank CountryField, returns the raw Country object instead of
+    # a string (Country('') == '' is true, but str() is never called on the
+    # branch that matches it) — every response serializing a Profile with no
+    # country set 500s on json.dumps(). A plain CharField sidesteps the whole
+    # branch and always renders the code string.
+    country = serializers.CharField(read_only=True)
     country_name = serializers.CharField(source="country.name", read_only=True)
 
     class Meta:
