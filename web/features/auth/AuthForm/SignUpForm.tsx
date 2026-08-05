@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button/Button";
 import { Field } from "@/components/Field/Field";
-import { AuthError, register } from "@/lib/auth";
+import { SelectField } from "@/components/Field/SelectField";
+import {
+  AuthError,
+  getSignupOptions,
+  register,
+  type CountryOption,
+  type SignupOption,
+} from "@/lib/auth";
 
 import styles from "./AuthForm.module.css";
 
@@ -14,6 +21,15 @@ export function SignUpForm() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
+  const [professions, setProfessions] = useState<SignupOption[]>([]);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+
+  useEffect(() => {
+    getSignupOptions().then(({ professions, countries }) => {
+      setProfessions(professions);
+      setCountries(countries);
+    });
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,18 +38,20 @@ export function SignUpForm() {
     setPending(true);
     const form = new FormData(e.currentTarget);
     try {
-      await register(
-        String(form.get("email")),
-        String(form.get("password")),
-        String(form.get("full_name")),
-      );
+      await register({
+        email: String(form.get("email")),
+        password: String(form.get("password")),
+        fullName: String(form.get("full_name")),
+        profession: String(form.get("profession") || ""),
+        country: String(form.get("country") || ""),
+      });
       router.push("/account");
       router.refresh();
     } catch (err) {
       if (err instanceof AuthError) {
         setError(err.detail);
         const fe: Record<string, string> = {};
-        for (const key of ["email", "password"]) {
+        for (const key of ["email", "password", "country"]) {
           if (Array.isArray(err.fields[key])) fe[key] = err.fields[key][0];
         }
         setFieldErrors(fe);
@@ -68,6 +86,31 @@ export function SignUpForm() {
         error={fieldErrors.password}
         hint="Use 8+ characters with a mix of letters and numbers."
       />
+      <SelectField label="Profession" name="profession" defaultValue="">
+        <option value="">Prefer not to say</option>
+        {professions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </SelectField>
+      <SelectField
+        label="Country"
+        name="country"
+        required
+        defaultValue=""
+        error={fieldErrors.country}
+        hint={fieldErrors.country ? undefined : "Used for regional pricing where it's available."}
+      >
+        <option value="" disabled>
+          Select your country
+        </option>
+        {countries.map((country) => (
+          <option key={country.code} value={country.code}>
+            {country.name}
+          </option>
+        ))}
+      </SelectField>
       <Button type="submit" size="lg" fullWidth>
         {pending ? "Creating account…" : "Create account"}
       </Button>

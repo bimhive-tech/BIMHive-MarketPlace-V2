@@ -51,7 +51,16 @@ export function PromoBar() {
     <aside className={styles.bar} aria-label="Limited-time offer">
       <div className={`container ${styles.inner}`}>
         <span className={styles.badge}>{promotion.badge_label}</span>
-        <p className={styles.headline}>{promotion.headline}</p>
+
+        <div className={styles.copy}>
+          {/* Structural, not part of the free-text headline — guarantees the
+              discount and the plan it applies to are always stated correctly,
+              regardless of how staff word the headline itself. */}
+          <p className={styles.discountLine}>
+            <strong>{promotion.discount_percent}% off</strong> {promotion.plan_name}
+          </p>
+          <p className={styles.headline}>{promotion.headline}</p>
+        </div>
 
         <div className={styles.clock}>
           {countdown.days > 0 && <TimeUnit value={countdown.days} label="days" />}
@@ -60,11 +69,11 @@ export function PromoBar() {
           <TimeUnit value={countdown.seconds} label="secs" />
         </div>
 
-        {promotion.cta_label && promotion.cta_url && (
-          <Link href={promotion.cta_url} className={styles.cta}>
-            {promotion.cta_label}
-          </Link>
-        )}
+        {/* Always links somewhere useful — /membership by default — since
+            this bar only ever advertises a plan. */}
+        <Link href={promotion.cta_url || "/membership"} className={styles.cta}>
+          {promotion.cta_label || "View Plan"}
+        </Link>
 
         <button type="button" className={styles.close} onClick={dismiss} aria-label="Dismiss this offer">
           <Icon name="x" size={16} />

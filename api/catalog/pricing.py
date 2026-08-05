@@ -15,7 +15,9 @@ def live_promotions():
     question once per product; `products` is prefetched so a product-scoped
     promotion doesn't cost a query per row.
     """
-    return list(Promotion.objects.live().select_related("category").prefetch_related("products"))
+    return list(
+        Promotion.objects.live().select_related("category", "plan").prefetch_related("products")
+    )
 
 
 def promotion_for(product, promotions=None):
@@ -29,9 +31,56 @@ def promotion_for(product, promotions=None):
 
 
 def banner_promotion():
-    """The promotion the countdown bar should show, or None. Ordering is the
-    model's (priority, then ending soonest)."""
-    return Promotion.objects.live().filter(show_countdown=True).first()
+    """The promotion the countdown bar above the nav should show, or None.
+
+    Plan-scoped only — the banner advertises All-Access, never a per-product
+    sale (product discounts still show on their own cards/pages, just not up
+    here). Ordering is the model's (priority, then ending soonest).
+    """
+    return (
+        Promotion.objects.live()
+        .filter(scope=Promotion.Scope.PLAN, show_countdown=True)
+        .select_related("plan")
+        .first()
+    )
+
+
+def live_plan_promotion(plan, promotions=None):
+    """The live promotion that discounts `plan`, or None. Mirrors
+    `promotion_for`, but for a membership plan instead of a product."""
+    candidates = [
+        p for p in (promotions if promotions is not None else live_promotions()) if p.covers_plan(plan)
+    ]
+    return max(candidates, key=lambda p: p.discount_percent, default=None)
+
+
+def plan_sale_prices(plan, promotion):
+    """`plan`'s monthly/yearly prices with `promotion` applied. Empty dict
+    when nothing is on offer — mirrors `sale_prices` for products."""
+    if promotion is None:
+        return {}
+    return {
+        "monthly_price": apply_discount(plan.monthly_price, promotion.discount_percent),
+        "yearly_price": apply_discount(plan.yearly_price, promotion.discount_percent),
+    }
+
+
+def plan_unit_price_for(plan, billing_period, promotion=None):
+    """What one billing cycle of `plan` actually costs right now, discount
+    included. Returns None when the plan isn't sold on that interval.
+
+    membership.api.MembershipCheckoutView calls this instead of reading
+    plan.monthly_price/yearly_price directly, so the price charged always
+    matches what the pricing page and banner advertised.
+    """
+    from membership.models import Membership
+
+    list_price = plan.monthly_price if billing_period == Membership.BillingPeriod.MONTHLY else plan.yearly_price
+    if list_price is None:
+        return None
+    if promotion is None:
+        promotion = live_plan_promotion(plan)
+    return apply_discount(list_price, promotion.discount_percent) if promotion else list_price
 
 
 def sale_prices(product, promotion):

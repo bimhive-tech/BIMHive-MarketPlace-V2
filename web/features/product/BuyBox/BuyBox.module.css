@@ -27,9 +27,9 @@
   color: var(--color-muted);
 }
 
-/* ── While a promotion is running ── */
+/* ── While a promotion is running (brand gold, not red — see PriceTag) ── */
 .priceSale {
-  color: var(--error-fg);
+  color: var(--gold-700);
 }
 
 .priceWas {
@@ -43,7 +43,7 @@
   margin-top: calc(-1 * var(--space-2));
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
-  color: var(--error-fg);
+  color: var(--gold-700);
 }
 
 .actions {

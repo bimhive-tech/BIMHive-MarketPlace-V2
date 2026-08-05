@@ -23,9 +23,11 @@ export function PlanCard({ plan, interval, user, currentPlanSlug }: PlanCardProp
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
 
-  const price = interval === "yearly" ? plan.yearly_price : plan.monthly_price;
+  const listPrice = interval === "yearly" ? plan.yearly_price : plan.monthly_price;
+  const salePrice = interval === "yearly" ? plan.promotion?.yearly_price : plan.promotion?.monthly_price;
+  const price = salePrice ?? listPrice;
   const isCurrent = currentPlanSlug === plan.slug;
-  const unavailable = price == null;
+  const unavailable = listPrice == null;
 
   async function handleSubscribe() {
     setError("");
@@ -51,13 +53,25 @@ export function PlanCard({ plan, interval, user, currentPlanSlug }: PlanCardProp
           <span className={styles.unavailable}>Not sold {interval}</span>
         ) : (
           <>
-            <span className={styles.amount}>{formatPrice(price, plan.currency)}</span>
+            <span className={`${styles.amount} ${salePrice ? styles.amountSale : ""}`}>
+              {/* `price` can't actually be null here — `unavailable` (guarding
+                  this branch) is true whenever listPrice is null. */}
+              {formatPrice(price as string, plan.currency)}
+            </span>
             <span className={styles.interval}>/{interval === "yearly" ? "yr" : "mo"}</span>
+            {salePrice && <s className={styles.wasPrice}>{formatPrice(listPrice as string, plan.currency)}</s>}
           </>
         )}
       </p>
-      {interval === "yearly" && plan.yearly_savings_percent !== null && (
-        <p className={styles.saving}>Save {plan.yearly_savings_percent}% vs. monthly</p>
+      {plan.promotion ? (
+        <p className={styles.saving}>
+          {plan.promotion.discount_percent}% off — {plan.promotion.headline}
+        </p>
+      ) : (
+        interval === "yearly" &&
+        plan.yearly_savings_percent !== null && (
+          <p className={styles.saving}>Save {plan.yearly_savings_percent}% vs. monthly</p>
+        )
       )}
 
       <ul className={styles.perks}>

@@ -17,6 +17,7 @@ import styles from "@/features/admin/AdminTable/AdminTable.module.css";
 import promo from "./promotions.module.css";
 
 const SCOPES: { value: AdminPromotion["scope"]; label: string }[] = [
+  { value: "plan", label: "One All-Access plan (shows in the countdown bar)" },
   { value: "all", label: "Every product" },
   { value: "category", label: "One category (and its subcategories)" },
   { value: "products", label: "Selected products only" },
@@ -35,6 +36,15 @@ function fromLocalInput(value: string): string {
   return value ? new Date(value).toISOString() : "";
 }
 
+/** The concrete "applies to" cell — the plan/category name when there is one,
+ * rather than just the generic scope label. */
+function scopeSummary(row: AdminPromotion): string {
+  if (row.scope === "plan") return row.plan_name ? `${row.plan_name} plan` : "A plan";
+  if (row.scope === "category") return row.category_name || "A category";
+  if (row.scope === "products") return `${row.products.length} product${row.products.length === 1 ? "" : "s"}`;
+  return "Every product";
+}
+
 function defaultForm() {
   const now = new Date();
   const inAWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -45,9 +55,10 @@ function defaultForm() {
     cta_label: "",
     cta_url: "",
     discount_percent: 20,
-    scope: "all" as AdminPromotion["scope"],
+    scope: "plan" as AdminPromotion["scope"],
     category: "",
     products: [] as number[],
+    plan: "",
     starts_at: toLocalInput(now.toISOString()),
     ends_at: toLocalInput(inAWeek.toISOString()),
     is_active: true,
@@ -101,6 +112,7 @@ export default function AdminPromotionsPage() {
       scope: row.scope,
       category: row.category ? String(row.category) : "",
       products: row.products,
+      plan: row.plan ? String(row.plan) : "",
       starts_at: toLocalInput(row.starts_at),
       ends_at: toLocalInput(row.ends_at),
       is_active: row.is_active,
@@ -122,6 +134,11 @@ export default function AdminPromotionsPage() {
       ...form,
       category: form.scope === "category" && form.category ? Number(form.category) : null,
       products: form.scope === "products" ? form.products : [],
+      plan: form.scope === "plan" && form.plan ? Number(form.plan) : null,
+      // Only a plan-scoped promotion can drive the countdown bar — the
+      // server rejects the flag otherwise (see catalog.admin_api
+      // .PromotionSerializer.validate), so keep the two in sync here too.
+      show_countdown: form.scope === "plan" && form.show_countdown,
       starts_at: fromLocalInput(form.starts_at),
       ends_at: fromLocalInput(form.ends_at),
     };
@@ -157,7 +174,9 @@ export default function AdminPromotionsPage() {
           <h1 className={styles.title}>Promotions</h1>
           <p className={styles.sub}>
             Time-boxed discounts. Prices drop while a promotion runs and go back to normal on their
-            own when it ends — no follow-up needed.
+            own when it ends — no follow-up needed. Only a plan-scoped promotion can show in the
+            countdown bar above the nav; product/category/all-product discounts still apply on the
+            storefront, just not up there.
           </p>
         </div>
         <button className={styles.primaryBtn} onClick={startNew}>
@@ -210,6 +229,17 @@ export default function AdminPromotionsPage() {
                 </option>
               ))}
             </select>
+
+            {form.scope === "plan" && (
+              <select className={styles.select} value={form.plan} onChange={(e) => set("plan", e.target.value)}>
+                <option value="">Pick a plan</option>
+                {options?.membership_plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {form.scope === "category" && (
               <select
@@ -282,14 +312,16 @@ export default function AdminPromotionsPage() {
               />
               Active
             </label>
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={form.show_countdown}
-                onChange={(e) => set("show_countdown", e.target.checked)}
-              />
-              Show in the countdown bar
-            </label>
+            {form.scope === "plan" && (
+              <label className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={form.show_countdown}
+                  onChange={(e) => set("show_countdown", e.target.checked)}
+                />
+                Show in the countdown bar above the nav
+              </label>
+            )}
           </div>
 
           <div className={styles.formActions}>
@@ -325,9 +357,7 @@ export default function AdminPromotionsPage() {
                   <div className={styles.muted}>{row.headline}</div>
                 </td>
                 <td className={promo.discount}>−{row.discount_percent}%</td>
-                <td className={styles.muted}>
-                  {SCOPES.find((s) => s.value === row.scope)?.label ?? row.scope}
-                </td>
+                <td className={styles.muted}>{scopeSummary(row)}</td>
                 <td className={promo.window}>
                   {new Date(row.starts_at).toLocaleDateString()} →{" "}
                   {new Date(row.ends_at).toLocaleDateString()}

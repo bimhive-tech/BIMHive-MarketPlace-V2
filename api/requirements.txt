@@ -12,6 +12,10 @@ boto3==1.35.71
 # ── CORS (dev: Next.js on :3000 → Django on :8000) ──
 django-cors-headers==4.6.0
 
+# ── Country reference data (signup — see accounts.models.Profile.country,
+# used for regional pricing) ──
+django-countries==9.0.0
+
 # ── Images ──
 Pillow==11.0.0
 

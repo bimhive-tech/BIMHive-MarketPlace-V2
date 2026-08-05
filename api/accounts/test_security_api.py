@@ -30,7 +30,7 @@ def _register_and_login(email="buyer@example.com", password="pw12345!strong", us
     client = Client()
     client.post(
         "/api/auth/register",
-        data={"email": email, "password": password, "full_name": "Buyer"},
+        data={"email": email, "password": password, "full_name": "Buyer", "country": "US"},
         content_type="application/json",
         HTTP_USER_AGENT=user_agent,
     )

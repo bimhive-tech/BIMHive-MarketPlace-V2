@@ -12,8 +12,9 @@ from django.utils import timezone
 
 from catalog.models import Category, Product, Promotion
 from catalog.models.product import ProductStatus
-from catalog.pricing import promotion_for, unit_price_for
+from catalog.pricing import live_plan_promotion, plan_unit_price_for, promotion_for, unit_price_for
 from licensing.models import ProductPurchase
+from membership.models import MembershipPlan
 
 pytestmark = pytest.mark.django_db
 User = get_user_model()
@@ -36,6 +37,13 @@ def product(root):
     return Product.objects.create(
         name="Sheet Machine", short_description="s", description="d",
         category=root, price="100.00", status=ProductStatus.PUBLISHED,
+    )
+
+
+@pytest.fixture
+def plan():
+    return MembershipPlan.objects.create(
+        name="Pro", rank=2, monthly_price="39.00", yearly_price="390.00"
     )
 
 
@@ -136,16 +144,130 @@ def test_product_without_a_promotion_reports_none(client, product):
     assert card["promotion"] is None
 
 
-def test_banner_endpoint_returns_the_live_countdown_promotion(client):
-    make_promotion(headline="Ends soon")
+def test_banner_endpoint_returns_the_live_plan_promotion(client, plan):
+    make_promotion(headline="Ends soon", scope=Promotion.Scope.PLAN, plan=plan)
 
-    assert client.get("/api/promotions/banner").json()["promotion"]["headline"] == "Ends soon"
+    body = client.get("/api/promotions/banner").json()["promotion"]
+    assert body["headline"] == "Ends soon"
+    assert body["plan_name"] == "Pro"
 
 
-def test_banner_endpoint_is_null_when_nothing_is_running(client):
-    make_promotion(show_countdown=False)
+def test_banner_endpoint_is_null_when_nothing_is_running(client, plan):
+    make_promotion(scope=Promotion.Scope.PLAN, plan=plan, show_countdown=False)
 
     assert client.get("/api/promotions/banner").json()["promotion"] is None
+
+
+def test_banner_endpoint_ignores_a_product_scoped_promotion_even_with_show_countdown(client, product):
+    """The banner is plan-only, full stop — a sitewide product discount
+    (however it was flagged) must never surface there."""
+    make_promotion(scope=Promotion.Scope.ALL, show_countdown=True)
+
+    assert client.get("/api/promotions/banner").json()["promotion"] is None
+
+
+# ── Plan-scoped promotions ──
+def test_a_plan_promotion_discounts_the_plan_not_any_product(client, product, plan):
+    make_promotion(scope=Promotion.Scope.PLAN, plan=plan, discount_percent=20)
+
+    assert promotion_for(product) is None
+    assert live_plan_promotion(plan) is not None
+
+
+def test_plan_promotion_discounts_both_billing_intervals(plan):
+    from membership.models import Membership
+
+    make_promotion(scope=Promotion.Scope.PLAN, plan=plan, discount_percent=50)
+
+    assert plan_unit_price_for(plan, Membership.BillingPeriod.MONTHLY) == Decimal("19.50")
+    assert plan_unit_price_for(plan, Membership.BillingPeriod.YEARLY) == Decimal("195.00")
+
+
+def test_a_promotion_on_one_plan_does_not_discount_another(plan):
+    from membership.models import Membership
+
+    other_plan = MembershipPlan.objects.create(name="Standard", rank=1, monthly_price="19.00")
+    make_promotion(scope=Promotion.Scope.PLAN, plan=plan, discount_percent=50)
+
+    assert live_plan_promotion(other_plan) is None
+    assert Decimal(plan_unit_price_for(other_plan, Membership.BillingPeriod.MONTHLY)) == Decimal("19.00")
+
+
+def test_membership_plans_endpoint_reports_the_live_discount(client, plan):
+    make_promotion(scope=Promotion.Scope.PLAN, plan=plan, discount_percent=25)
+
+    body = client.get("/api/membership/plans").json()["plans"][0]
+
+    assert body["promotion"]["discount_percent"] == 25
+    assert body["promotion"]["monthly_price"] == "29.25"
+
+
+def test_membership_checkout_charges_the_discounted_price(client, plan, monkeypatch):
+    make_promotion(scope=Promotion.Scope.PLAN, plan=plan, discount_percent=50)
+    user = User.objects.create_user(username="m@x.com", email="m@x.com", password="x")
+    client.force_login(user)
+    monkeypatch.setattr("licensing.paymob.create_intention", lambda **kwargs: {"client_secret": "secret"})
+    monkeypatch.setattr("licensing.paymob.checkout_url", lambda secret: "https://pay.test/x")
+
+    resp = client.post(
+        "/api/account/membership/checkout",
+        {"plan": plan.slug, "billingPeriod": "monthly"},
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 201, resp.json()
+    from membership.models import Membership
+
+    membership = Membership.objects.get(user=user)
+    assert membership.amount == Decimal("19.50")
+
+
+# ── Admin validation ──
+def test_admin_promotion_requires_a_plan_for_plan_scope(staff_client):
+    now = timezone.now()
+    resp = staff_client.post(
+        "/api/admin/promotions",
+        {
+            "name": "No plan", "headline": "x", "discount_percent": 10, "scope": "plan",
+            "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=1)).isoformat(),
+        },
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert "plan" in resp.json()
+
+
+def test_admin_promotion_rejects_countdown_on_a_non_plan_scope(staff_client, product):
+    now = timezone.now()
+    resp = staff_client.post(
+        "/api/admin/promotions",
+        {
+            "name": "Not allowed", "headline": "x", "discount_percent": 10, "scope": "all",
+            "show_countdown": True,
+            "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=1)).isoformat(),
+        },
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert "show_countdown" in resp.json()
+
+
+def test_admin_can_create_a_plan_scoped_promotion(staff_client, plan):
+    now = timezone.now()
+    resp = staff_client.post(
+        "/api/admin/promotions",
+        {
+            "name": "Pro launch", "headline": "x", "discount_percent": 20, "scope": "plan",
+            "plan": plan.id, "show_countdown": True,
+            "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=1)).isoformat(),
+        },
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["plan_name"] == "Pro"
 
 
 # ── Cart re-quoting ──

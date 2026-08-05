@@ -7,13 +7,14 @@ from membership.models import Membership, MembershipPlan
 class MembershipPlanSerializer(serializers.ModelSerializer):
     yearly_savings_percent = serializers.IntegerField(read_only=True)
     product_count = serializers.SerializerMethodField()
+    promotion = serializers.SerializerMethodField()
 
     class Meta:
         model = MembershipPlan
         fields = [
             "id", "name", "slug", "rank", "tagline", "description",
             "monthly_price", "yearly_price", "currency", "yearly_savings_percent",
-            "seats_per_product", "is_featured", "product_count",
+            "seats_per_product", "is_featured", "product_count", "promotion",
         ]
 
     def get_product_count(self, obj):
@@ -22,6 +23,25 @@ class MembershipPlanSerializer(serializers.ModelSerializer):
         tiers cover, since higher ranks are cumulative."""
         counts = self.context.get("product_counts_by_rank") or {}
         return sum(count for rank, count in counts.items() if rank <= obj.rank)
+
+    def get_promotion(self, obj):
+        """The live plan-scoped discount, if any — same shape as a product's
+        `promotion` field (catalog.serializers.ProductPromotionMixin), so the
+        pricing-page card can reuse the same struck-through-price treatment."""
+        from catalog.pricing import live_plan_promotion, plan_sale_prices
+
+        promo = live_plan_promotion(obj, self.context.get("promotions"))
+        if promo is None:
+            return None
+        prices = plan_sale_prices(obj, promo)
+        return {
+            "label": promo.badge_label,
+            "headline": promo.headline,
+            "discount_percent": promo.discount_percent,
+            "ends_at": promo.ends_at,
+            "monthly_price": None if prices["monthly_price"] is None else f"{prices['monthly_price']:.2f}",
+            "yearly_price": None if prices["yearly_price"] is None else f"{prices['yearly_price']:.2f}",
+        }
 
 
 class AccountMembershipSerializer(serializers.ModelSerializer):

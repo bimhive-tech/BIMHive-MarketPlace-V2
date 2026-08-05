@@ -8,11 +8,13 @@ from accounts.api import (
     LogoutView,
     MeView,
     RegisterView,
+    SignupOptionsView,
 )
 from accounts.security_api import AccountSessionListView, AccountSessionRevokeView
 
 urlpatterns = [
     path("csrf", CsrfView.as_view(), name="auth-csrf"),
+    path("signup-options", SignupOptionsView.as_view(), name="auth-signup-options"),
     path("register", RegisterView.as_view(), name="auth-register"),
     path("login", LoginView.as_view(), name="auth-login"),
     path("logout", LogoutView.as_view(), name="auth-logout"),

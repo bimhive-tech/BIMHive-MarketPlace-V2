@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from catalog.models import Product
+from catalog.pricing import live_promotions, plan_unit_price_for
 from catalog.serializers import ProductCardSerializer
 from licensing import paymob
 from membership.models import Membership, MembershipPlan
@@ -24,15 +25,19 @@ from membership.services import active_membership_for, covered_products, end_mem
 
 
 def _plan_context():
-    """One grouped COUNT for the whole plans list, rather than a query per
-    plan (see MembershipPlanSerializer.get_product_count)."""
+    """One grouped COUNT for the whole plans list, and the live promotions
+    fetched once rather than once per plan (see MembershipPlanSerializer
+    .get_product_count/.get_promotion)."""
     rows = (
         Product.objects.published()
         .filter(membership_plan__isnull=False)
         .values("membership_plan__rank")
         .annotate(total=Count("id"))
     )
-    return {"product_counts_by_rank": {row["membership_plan__rank"]: row["total"] for row in rows}}
+    return {
+        "product_counts_by_rank": {row["membership_plan__rank"]: row["total"] for row in rows},
+        "promotions": live_promotions(),
+    }
 
 
 class MembershipPlanListView(APIView):
@@ -103,7 +108,10 @@ class MembershipCheckoutView(APIView):
         if billing_period not in {choice for choice, _ in Membership.BillingPeriod.choices}:
             raise ValidationError({"billingPeriod": "Pick monthly or yearly."})
 
-        amount = plan.monthly_price if billing_period == Membership.BillingPeriod.MONTHLY else plan.yearly_price
+        # Priced server-side, discount included — mirrors how product
+        # checkout re-derives its price from catalog.pricing rather than
+        # trusting anything the client sent.
+        amount = plan_unit_price_for(plan, billing_period)
         if amount is None:
             raise ValidationError({"billingPeriod": f"{plan.name} isn't sold on that interval."})
 

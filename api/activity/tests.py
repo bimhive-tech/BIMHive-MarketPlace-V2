@@ -64,7 +64,7 @@ def test_signup_and_login_are_logged():
     client = Client()
     resp = client.post(
         "/api/auth/register",
-        data={"email": "new@example.com", "password": "pw12345!strong", "full_name": "New User"},
+        data={"email": "new@example.com", "password": "pw12345!strong", "full_name": "New User", "country": "US"},
         content_type="application/json",
     )
     assert resp.status_code == 201

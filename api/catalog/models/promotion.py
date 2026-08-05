@@ -42,6 +42,12 @@ class Promotion(TimeStamped):
         ALL = "all", "Every product"
         CATEGORY = "category", "One category (and its subcategories)"
         PRODUCTS = "products", "Selected products only"
+        # A plan-scoped promotion discounts an All-Access membership plan
+        # instead of any product — see membership_pricing.py. It's the ONLY
+        # scope the countdown bar above the nav will ever show (see
+        # catalog.pricing.banner_promotion): the banner advertises the
+        # membership, never a per-product sale.
+        PLAN = "plan", "One All-Access membership plan"
 
     # ── Staff-facing identity ──
     name = models.CharField(max_length=140, help_text="Internal name, e.g. 'Back to school 2026'.")
@@ -77,6 +83,14 @@ class Promotion(TimeStamped):
         blank=True,
         help_text="Required when scope is 'products'.",
     )
+    plan = models.ForeignKey(
+        "membership.MembershipPlan",
+        on_delete=models.CASCADE,
+        related_name="promotions",
+        null=True,
+        blank=True,
+        help_text="Required when scope is 'plan'.",
+    )
 
     # ── When ──
     starts_at = models.DateTimeField()
@@ -111,7 +125,8 @@ class Promotion(TimeStamped):
 
     def covers(self, product):
         """Whether this promotion discounts `product`. Reads only prefetched
-        relations so pricing a whole product grid stays query-free."""
+        relations so pricing a whole product grid stays query-free. A
+        plan-scoped promotion never covers a product — see covers_plan."""
         if self.scope == self.Scope.ALL:
             return True
         if self.scope == self.Scope.CATEGORY:
@@ -120,4 +135,11 @@ class Promotion(TimeStamped):
             return product.category_id == self.category_id or (
                 product.category and product.category.parent_id == self.category_id
             )
-        return any(p.pk == product.pk for p in self.products.all())
+        if self.scope == self.Scope.PRODUCTS:
+            return any(p.pk == product.pk for p in self.products.all())
+        return False
+
+    def covers_plan(self, plan):
+        """Whether this promotion discounts `plan` — the plan-scoped mirror
+        of `covers`."""
+        return self.scope == self.Scope.PLAN and self.plan_id == plan.pk

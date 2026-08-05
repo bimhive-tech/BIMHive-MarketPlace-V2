@@ -19,9 +19,11 @@
 }
 
 /* A live sale price is the number that matters — coloured so it reads as a
-   change from the struck-through list price next to it. */
+   change from the struck-through list price next to it. Brand gold (the
+   text-on-white shade — see tokens.css), not red: red is reserved for
+   error/rejected status elsewhere in the app, and a sale isn't one. */
 .sale {
-  color: var(--error-fg);
+  color: var(--gold-700);
 }
 
 .was {

@@ -462,6 +462,18 @@ now real, working pages — each backed by data that already existed, not a new 
   reply form that auto-tags `is_staff_reply`/`author`) — no dedicated Admin Portal page built yet,
   since that wasn't part of what was actually broken (the customer-facing "soon" tabs).
 
+## Signup: profession + country (groundwork for regional pricing)
+
+`/signup` collects a profession (optional — `accounts.Profession`, a fixed AEC-role choices list,
+not free text, the same reason `catalog.ProductType` is a choices field) and a country (**required**
+— `accounts.Profile.country`, an ISO 3166-1 alpha-2 `CountryField` from `django-countries`). Both
+dropdowns are populated from `GET /api/auth/signup-options`, so the backend is the single source of
+truth for what's in them — nothing about the list is duplicated in the frontend. Country is required
+because it's what regional pricing (not yet built) will key off; profession is optional
+segmentation only. Both are editable afterward on `/account/profile`. Country codes are validated
+server-side against the real `django_countries` list (case-normalized), not just trusted from the
+`<select>`.
+
 ## Homepage hero: staff-curated, with an automatic fallback
 
 The rotating hero on `/` picks its slides from `catalog.views._spotlight_products` — and staff
@@ -486,19 +498,31 @@ Categories page (`/admin-portal/categories`) lets staff assign a `parent` — ca
 the API rejects nesting a subcategory under another subcategory, or turning a category that already
 has children into someone else's child.
 
-## Promotions: time-boxed discounts + the countdown bar
+## Promotions: time-boxed discounts + the plans-only countdown bar
 
-`catalog.Promotion` is a percentage discount with a `[starts_at, ends_at)` window, a scope (every
-product / one category+its subcategories / a hand-picked list), and its own banner copy. Nothing
-about it is a cron job — a promotion is "live" purely by being inside its own window at request
-time (`Promotion.is_live`, `catalog/pricing.py`), so a discount turns on and off on its own with no
-scheduled task to run. Every storefront surface that shows or charges a price reads through
-`catalog/pricing.py` (`ProductCardSerializer`/`ProductDetailSerializer`'s `promotion` field, the
-cart's `POST /api/cart/quote` re-pricing, and `CheckoutView`) — so the price a customer sees is
-always the price checkout actually charges, never a client-side calculation. The countdown strip
-above the nav (`PromoBar.tsx`) polls `GET /api/promotions/banner` for whichever live promotion has
-`show_countdown=True` and the highest priority, and is dismissible for the session
-(`sessionStorage`, not permanent) via `X`. Manage campaigns at `/admin-portal/promotions`.
+`catalog.Promotion` is a percentage discount with a `[starts_at, ends_at)` window and a scope:
+every product / one category+its subcategories / a hand-picked list of products / **one All-Access
+membership plan** (`Promotion.Scope.PLAN`, discounting `MembershipPlan.monthly_price`/`yearly_price`
+via `catalog.pricing.plan_unit_price_for` — the same server-authoritative pattern as product
+pricing, applied at `MembershipCheckoutView` too). Nothing about a promotion is a cron job — it's
+"live" purely by being inside its own window at request time (`Promotion.is_live`), so a discount
+turns on and off on its own with no scheduled task to run.
+
+**The countdown bar above the nav only ever shows a plan promotion** — `GET /api/promotions/banner`
+(`catalog.pricing.banner_promotion`) filters to `scope="plan"` specifically, so a product/category/
+sitewide sale never appears up there (those still discount their products normally, just not in the
+banner). The admin form enforces the same rule (`show_countdown` can only be set on a plan-scoped
+promotion). The bar states the discount and which plan it's for as **structural fields**
+(`discount_percent` + `plan_name`), not just whatever staff happened to type into the free-text
+headline, so "25% off Pro" is always accurate regardless of the headline's wording. Manage campaigns
+at `/admin-portal/promotions`; manage the plans themselves at `/admin-portal/membership-plans`.
+
+**Color:** the bar (and every discount badge/price elsewhere) is deliberately not the semantic
+`--error-fg` red — that's reserved for error/rejected status per `style.md`, and a sale isn't one.
+The bar is `--ink-900` (near-black) with `--gold-500` countdown digits and a `--gold-500` bottom
+border; product discount badges use the same dark-ink-on-gold-text treatment as the strongest of the
+badge trio (New = solid gold, Updated = light gold tint), and sale prices read in `--gold-700`
+(the text-on-white shade). One consistent "dark/gold = a live deal" identity across the whole site.
 
 ## Freshness badges: New / Updated, self-expiring
 
@@ -547,9 +571,10 @@ every product that plan covers — the new `membership` app.
   (the live countdown-bar promotion, or `{"promotion": null}`), `POST /api/cart/quote` (re-prices a
   localStorage cart's items against today's promotions — no auth needed, nothing it returns isn't
   already public), `GET /api/membership/plans` (the `/membership` pricing page)
-- Auth: `GET /api/auth/csrf`, `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,change-password}`,
-  `GET /api/auth/sessions` (the caller's own active sessions), `POST /api/auth/sessions/<key>/revoke`
-  (sign out a different device — see "Account dashboard" above)
+- Auth: `GET /api/auth/csrf`, `GET /api/auth/signup-options` (the profession/country dropdowns' contents
+  — see "Signup" above), `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,
+  change-password}`, `GET /api/auth/sessions` (the caller's own active sessions),
+  `POST /api/auth/sessions/<key>/revoke` (sign out a different device — see "Account dashboard" above)
 - Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
   `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
   CRUD at `/api/admin/{categories,tags,partners,collections,promotions,membership-plans,roles}`;

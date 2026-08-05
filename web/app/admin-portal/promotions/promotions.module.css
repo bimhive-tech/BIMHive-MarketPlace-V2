@@ -12,7 +12,7 @@
 
 .discount {
   font-weight: var(--fw-bold);
-  color: var(--error-fg);
+  color: var(--gold-700);
   font-variant-numeric: tabular-nums;
 }
 

@@ -86,7 +86,25 @@ MEMBERSHIP_PLANS = [
 # /admin-portal/promotions afterwards, nothing about a live offer is baked into
 # the frontend. `starts_at` is always "an hour ago" so re-running the seed
 # script always leaves each promotion live right now.
+#
+# Only a plan-scoped promotion (scope="plan") can show in the countdown bar
+# above the nav — see catalog.pricing.banner_promotion. Product/category/
+# all-product discounts still apply on the storefront, they just don't drive
+# that banner.
 PROMOTIONS = [
+    {
+        "name": "Pro Launch Offer",
+        "badge_label": "SPECIAL OFFER",
+        "headline": "Go all-access before this price is gone.",
+        "discount_percent": 25,
+        "scope": Promotion.Scope.PLAN,
+        "plan": "Pro",
+        "duration_days": 5,
+        "cta_label": "View Plan",
+        "cta_url": "/membership",
+        "show_countdown": True,
+        "priority": 10,
+    },
     {
         "name": "Launch Week",
         "badge_label": "SPECIAL OFFER",
@@ -96,8 +114,8 @@ PROMOTIONS = [
         "duration_days": 5,
         "cta_label": "Shop Now",
         "cta_url": "/catalog",
-        "show_countdown": True,
-        "priority": 10,
+        "show_countdown": False,
+        "priority": 8,
     },
     {
         "name": "Automation Tools Flash Sale",
@@ -416,7 +434,7 @@ class Command(BaseCommand):
                 spec, categories, partners, collections, plans
             )
 
-        self._seed_promotions(products_by_slug, categories)
+        self._seed_promotions(products_by_slug, categories, plans)
 
         self.stdout.write(self.style.SUCCESS(
             f"Seeded 1 category + {len(SUBCATEGORIES)} subcategories, {len(PARTNERS)} partners, "
@@ -443,7 +461,7 @@ class Command(BaseCommand):
             plans[name] = plan
         return plans
 
-    def _seed_promotions(self, products_by_slug, categories):
+    def _seed_promotions(self, products_by_slug, categories, plans):
         now = timezone.now()
         for spec in PROMOTIONS:
             promo, _ = Promotion.objects.update_or_create(
@@ -454,6 +472,7 @@ class Command(BaseCommand):
                     "discount_percent": spec["discount_percent"],
                     "scope": spec["scope"],
                     "category": categories[spec["category"]] if spec.get("category") else None,
+                    "plan": plans[spec["plan"]] if spec.get("plan") else None,
                     # Always "an hour ago" so re-running the seed leaves every
                     # promotion live right now, regardless of when it's run.
                     "starts_at": now - timedelta(hours=1),

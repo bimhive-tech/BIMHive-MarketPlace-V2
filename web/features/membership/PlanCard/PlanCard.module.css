@@ -63,6 +63,18 @@
   color: var(--color-price);
 }
 
+/* A live plan promotion — same gold-on-sale treatment as a discounted
+   product price (see PriceTag), not red. */
+.amountSale {
+  color: var(--gold-700);
+}
+
+.wasPrice {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-regular);
+  color: var(--color-muted);
+}
+
 .interval {
   font-size: var(--fs-md);
   color: var(--color-muted);

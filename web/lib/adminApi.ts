@@ -305,9 +305,12 @@ export interface AdminPromotion {
   cta_label: string;
   cta_url: string;
   discount_percent: number;
-  scope: "all" | "category" | "products";
+  scope: "all" | "category" | "products" | "plan";
   category: number | null;
+  category_name: string;
   products: number[];
+  plan: number | null;
+  plan_name: string;
   starts_at: string;
   ends_at: string;
   is_active: boolean;

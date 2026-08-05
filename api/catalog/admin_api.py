@@ -687,12 +687,14 @@ class AdminCollectionViewSet(viewsets.ModelViewSet):
 class PromotionSerializer(serializers.ModelSerializer):
     products = serializers.PrimaryKeyRelatedField(many=True, queryset=Product.objects.all(), required=False)
     is_live = serializers.BooleanField(read_only=True)
+    plan_name = serializers.CharField(source="plan.name", read_only=True, default="")
+    category_name = serializers.CharField(source="category.name", read_only=True, default="")
 
     class Meta:
         model = Promotion
         fields = [
             "id", "name", "badge_label", "headline", "cta_label", "cta_url",
-            "discount_percent", "scope", "category", "products",
+            "discount_percent", "scope", "category", "category_name", "products", "plan", "plan_name",
             "starts_at", "ends_at", "is_active", "show_countdown", "priority", "is_live",
         ]
 
@@ -715,6 +717,16 @@ class PromotionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"products": "Pick at least one product for a product-scoped promotion."}
                 )
+        if scope == Promotion.Scope.PLAN and not merged.get("plan") and not merged.get("plan_id"):
+            raise serializers.ValidationError({"plan": "Pick a plan for a plan-scoped promotion."})
+        # The countdown bar only ever shows a plan-scoped promotion (see
+        # catalog.pricing.banner_promotion) — leaving this on for a
+        # product/category/all promotion would just be a checkbox that does
+        # nothing, so reject it rather than let staff believe it'll show.
+        if merged.get("show_countdown") and scope != Promotion.Scope.PLAN:
+            raise serializers.ValidationError(
+                {"show_countdown": "Only a plan-scoped promotion can show in the countdown bar."}
+            )
         return attrs
 
 
@@ -723,4 +735,4 @@ class AdminPromotionViewSet(viewsets.ModelViewSet):
     serializer_class = PromotionSerializer
 
     def get_queryset(self):
-        return Promotion.objects.select_related("category").prefetch_related("products")
+        return Promotion.objects.select_related("category", "plan").prefetch_related("products")

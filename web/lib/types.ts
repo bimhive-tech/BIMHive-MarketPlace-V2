@@ -23,6 +23,11 @@ export interface User {
     bio: string;
     avatar_url: string;
     account_type: string;
+    profession: string;
+    profession_label: string;
+    /** ISO 3166-1 alpha-2, e.g. "US". Empty string when unset. */
+    country: string;
+    country_name: string;
   } | null;
   partner: {
     id: number;
@@ -88,7 +93,8 @@ export interface ProductPromotion {
   yearly_price: string | null;
 }
 
-/** The site-wide countdown offer above the nav (`/api/promotions/banner`). */
+/** The site-wide countdown offer above the nav (`/api/promotions/banner`).
+ * Always a discount on an All-Access plan — never a per-product sale. */
 export interface PromotionBanner {
   id: number;
   badge_label: string;
@@ -97,6 +103,18 @@ export interface PromotionBanner {
   ends_at: string;
   cta_label: string;
   cta_url: string;
+  plan_name: string;
+  plan_slug: string;
+}
+
+/** A live discount on a membership plan — same shape as ProductPromotion. */
+export interface PlanPromotion {
+  label: string;
+  headline: string;
+  discount_percent: number;
+  ends_at: string;
+  monthly_price: string | null;
+  yearly_price: string | null;
 }
 
 /** The All-Access tier a product belongs to, if any. */
@@ -124,6 +142,7 @@ export interface MembershipPlan {
   is_featured: boolean;
   /** Live products this tier unlocks, including lower tiers'. */
   product_count: number;
+  promotion: PlanPromotion | null;
 }
 
 /** The signed-in customer's own membership, universal key included. */

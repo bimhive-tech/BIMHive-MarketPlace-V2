@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
-import { updateProfile } from "@/lib/auth";
+import { getSignupOptions, updateProfile, type CountryOption, type SignupOption } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 import styles from "./ProfileForm.module.css";
@@ -15,10 +15,21 @@ export function ProfileForm({ user, onSaved }: { user: User; onSaved: (user: Use
   const [company, setCompany] = useState(user.profile?.company ?? "");
   const [jobTitle, setJobTitle] = useState(user.profile?.job_title ?? "");
   const [bio, setBio] = useState(user.profile?.bio ?? "");
+  const [profession, setProfession] = useState(user.profile?.profession ?? "");
+  const [country, setCountry] = useState(user.profile?.country ?? "");
+  const [professions, setProfessions] = useState<SignupOption[]>([]);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [avatarNote, setAvatarNote] = useState(false);
+
+  useEffect(() => {
+    getSignupOptions().then(({ professions, countries }) => {
+      setProfessions(professions);
+      setCountries(countries);
+    });
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,7 +40,7 @@ export function ProfileForm({ user, onSaved }: { user: User; onSaved: (user: Use
       const updated = await updateProfile({
         first_name: first || "",
         last_name: rest.join(" "),
-        profile: { company, job_title: jobTitle, bio },
+        profile: { company, job_title: jobTitle, bio, profession, country },
       });
       onSaved(updated);
       setSaved(true);
@@ -89,6 +100,32 @@ export function ProfileForm({ user, onSaved }: { user: User; onSaved: (user: Use
         <label className={styles.field}>
           Job Title <span className={styles.optional}>(Optional)</span>
           <input className={styles.input} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+        </label>
+      </div>
+
+      <div className={styles.row}>
+        <label className={styles.field}>
+          Profession <span className={styles.optional}>(Optional)</span>
+          <select className={styles.input} value={profession} onChange={(e) => setProfession(e.target.value)}>
+            <option value="">Prefer not to say</option>
+            {professions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          Country
+          <select className={styles.input} value={country} onChange={(e) => setCountry(e.target.value)}>
+            <option value="">Select your country</option>
+            {countries.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <span className={styles.hint}>Used for regional pricing where it's available.</span>
         </label>
       </div>
 

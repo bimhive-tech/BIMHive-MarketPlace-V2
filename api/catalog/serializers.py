@@ -198,13 +198,20 @@ def _money(amount):
 
 class PromotionBannerSerializer(serializers.ModelSerializer):
     """What the countdown bar above the nav needs — copy, the deadline it counts
-    down to, and where its button goes. Deliberately not the scope/product list:
-    the bar advertises the offer, individual cards show who's actually in it."""
+    down to, where its button goes, and which plan it's actually discounting.
+    Only ever built from a plan-scoped Promotion (see catalog.pricing
+    .banner_promotion) — `plan_name`/`plan_slug` are what let the bar say
+    "25% off Pro" structurally, not just however staff happened to word the
+    free-text headline."""
+
+    plan_name = serializers.CharField(source="plan.name", read_only=True)
+    plan_slug = serializers.CharField(source="plan.slug", read_only=True)
 
     class Meta:
         model = Promotion
         fields = [
             "id", "badge_label", "headline", "discount_percent", "ends_at", "cta_label", "cta_url",
+            "plan_name", "plan_slug",
         ]
 
 

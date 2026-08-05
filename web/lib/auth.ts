@@ -69,8 +69,42 @@ export function onAuthChanged(callback: () => void): () => void {
   return () => window.removeEventListener(AUTH_CHANGE_EVENT, callback);
 }
 
-export async function register(email: string, password: string, fullName: string) {
-  const user = await request<User>("/api/auth/register", "POST", { email, password, full_name: fullName });
+export interface SignupOption {
+  value: string;
+  label: string;
+}
+
+export interface CountryOption {
+  code: string;
+  name: string;
+}
+
+/** The profession/country dropdowns' contents — backend-driven so the list
+ * only ever needs to change in one place (see accounts.api.SignupOptionsView). */
+export async function getSignupOptions(): Promise<{ professions: SignupOption[]; countries: CountryOption[] }> {
+  const res = await fetch("/api/auth/signup-options");
+  if (!res.ok) return { professions: [], countries: [] };
+  return res.json();
+}
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  fullName: string;
+  /** Required — regional pricing is keyed off this. */
+  country: string;
+  /** Optional. */
+  profession?: string;
+}
+
+export async function register(input: RegisterInput) {
+  const user = await request<User>("/api/auth/register", "POST", {
+    email: input.email,
+    password: input.password,
+    full_name: input.fullName,
+    country: input.country,
+    profession: input.profession || "",
+  });
   notifyAuthChanged();
   return user;
 }
@@ -97,7 +131,7 @@ export interface ProfileUpdate {
   first_name?: string;
   last_name?: string;
   email?: string;
-  profile?: { company?: string; job_title?: string; bio?: string };
+  profile?: { company?: string; job_title?: string; bio?: string; profession?: string; country?: string };
 }
 
 export function updateProfile(data: ProfileUpdate) {

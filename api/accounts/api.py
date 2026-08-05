@@ -8,12 +8,14 @@ client fetches a token from /api/auth/csrf first). See ARCHITECTURE §7.
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django_countries import countries
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from accounts.models import Profession
 from accounts.serializers import (
     ChangePasswordSerializer,
     MeUpdateSerializer,
@@ -49,6 +51,22 @@ class CsrfView(APIView):
 
     def get(self, request):
         return Response({"detail": "CSRF cookie set."})
+
+
+class SignupOptionsView(APIView):
+    """The profession and country dropdowns on /signup. Backend is the single
+    source of truth for both lists — the frontend never hardcodes them, so a
+    new profession or a country-list update only ever needs to change here."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(
+            {
+                "professions": [{"value": v, "label": l} for v, l in Profession.choices],
+                "countries": [{"code": code, "name": name} for code, name in countries],
+            }
+        )
 
 
 class RegisterView(APIView):

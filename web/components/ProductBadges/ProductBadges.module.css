@@ -21,9 +21,15 @@
   animation: badge-drop var(--dur-base) var(--ease-out) both;
 }
 
+/* Three badges share one gold family, ranked by how strongly each should
+   read: a live discount is the most concrete reason to buy right now, so it
+   gets the darkest, highest-contrast treatment (mirrors the countdown bar's
+   dark-ink + gold-number pairing) — followed by New (solid gold, like the
+   primary button) and Updated (the lightest, informational tint). No red:
+   style.md reserves that for error/rejected status, and a sale isn't one. */
 .discount {
-  background: var(--error-fg);
-  color: var(--surface-0);
+  background: var(--ink-900);
+  color: var(--gold-500);
 }
 
 /* "New" is the loudest signal on the card, so it gets the brand gold plus a

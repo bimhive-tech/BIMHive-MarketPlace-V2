@@ -4,6 +4,7 @@ plus a Profile for storefront-facing details shown on the account pages.
 """
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django_countries.fields import CountryField
 
 
 class Role(models.Model):
@@ -44,6 +45,28 @@ class User(AbstractUser):
         return self.get_full_name() or self.username
 
 
+class Profession(models.TextChoices):
+    """The AEC roles collected at signup — a fixed, curated list (not a free-text
+    field) so it's actually usable for segmentation/reporting later, the same
+    reason catalog.ProductType is a choices field rather than free text."""
+
+    ARCHITECT = "architect", "Architect"
+    STRUCTURAL_ENGINEER = "structural_engineer", "Structural Engineer"
+    MEP_ENGINEER = "mep_engineer", "MEP Engineer"
+    CIVIL_ENGINEER = "civil_engineer", "Civil Engineer"
+    BIM_MANAGER = "bim_manager", "BIM Manager"
+    BIM_COORDINATOR = "bim_coordinator", "BIM Coordinator"
+    BIM_MODELER = "bim_modeler", "BIM Modeler / Technician"
+    CONTRACTOR = "contractor", "Contractor"
+    PROJECT_MANAGER = "project_manager", "Project Manager"
+    INTERIOR_DESIGNER = "interior_designer", "Interior Designer"
+    CONSTRUCTION_MANAGER = "construction_manager", "Construction Manager"
+    ESTIMATOR = "estimator", "Estimator"
+    EDUCATOR = "educator", "Educator / Trainer"
+    STUDENT = "student", "Student"
+    OTHER = "other", "Other"
+
+
 class Profile(models.Model):
     """Extra, optional details surfaced on the account Profile page (see mockups)."""
 
@@ -59,6 +82,11 @@ class Profile(models.Model):
     account_type = models.CharField(
         max_length=20, choices=AccountType.choices, default=AccountType.INDIVIDUAL
     )
+    profession = models.CharField(max_length=30, choices=Profession.choices, blank=True)
+    # ISO 3166-1 alpha-2 (e.g. "US", "EG"). Collected at signup for regional
+    # pricing (not yet built) — nothing downstream reads this today besides
+    # display, but it's the field that pricing work will key off later.
+    country = CountryField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
