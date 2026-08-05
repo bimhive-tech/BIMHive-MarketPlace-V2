@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/Button/Button";
 import { PriceTag } from "@/components/PriceTag/PriceTag";
@@ -20,6 +20,11 @@ const AUTOPLAY_MS = 6000;
  * catalog.views._spotlight_products), in the same spirit as the FOMO-driven
  * carousels on marketplaces like Domestika.
  *
+ * Rotates entirely on its own with no manual dot/arrow controls — the
+ * transition itself (not the rotation) is what backs off under
+ * prefers-reduced-motion (see Hero.module.css): a slide still needs to change
+ * for its content to ever be seen, since there's no other way to reach it.
+ *
  * Falls back to a single static slide when there's nothing to spotlight yet
  * (an empty catalog) — never an empty carousel.
  */
@@ -27,17 +32,16 @@ export function Hero({ products }: { products: ProductCard[] }) {
   const slideCount = products.length;
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const prefersReducedMotion = usePrefersReducedMotion();
 
   const advance = useCallback(() => {
     setIndex((current) => (current + 1) % Math.max(slideCount, 1));
   }, [slideCount]);
 
   useEffect(() => {
-    if (slideCount <= 1 || paused || prefersReducedMotion) return;
+    if (slideCount <= 1 || paused) return;
     const timer = setInterval(advance, AUTOPLAY_MS);
     return () => clearInterval(timer);
-  }, [advance, slideCount, paused, prefersReducedMotion]);
+  }, [advance, slideCount, paused]);
 
   if (slideCount === 0) return <StaticHero />;
 
@@ -56,22 +60,6 @@ export function Hero({ products }: { products: ProductCard[] }) {
           <Slide key={product.id} product={product} active={slideIndex === index} />
         ))}
       </div>
-
-      {slideCount > 1 && (
-        <div className={styles.dots} role="tablist" aria-label="Choose a slide">
-          {products.map((product, dotIndex) => (
-            <button
-              key={product.id}
-              type="button"
-              role="tab"
-              aria-selected={dotIndex === index}
-              aria-label={`Show ${product.name}`}
-              className={`${styles.dot} ${dotIndex === index ? styles.dotActive : ""}`}
-              onClick={() => setIndex(dotIndex)}
-            />
-          ))}
-        </div>
-      )}
     </section>
   );
 }
@@ -139,16 +127,4 @@ function StaticHero() {
       </div>
     </section>
   );
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(query.matches);
-    const onChange = () => setReduced(query.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
 }

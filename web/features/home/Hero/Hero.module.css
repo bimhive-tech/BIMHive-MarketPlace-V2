@@ -120,36 +120,6 @@
   right: var(--space-3);
 }
 
-/* ── Dots ── */
-.dots {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: center;
-  gap: var(--space-2);
-  padding-bottom: var(--space-5);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  border: none;
-  background: var(--line-300);
-  cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-standard),
-    width var(--dur-fast) var(--ease-standard);
-}
-
-.dot:hover {
-  background: var(--gold-400);
-}
-
-.dotActive {
-  width: 22px;
-  background: var(--gold-600);
-}
-
 /* Tablet/phone: stack the media above the copy instead of side by side. */
 @media (max-width: 900px) {
   .slide {
@@ -175,8 +145,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .slide,
-  .slideActive,
-  .dot {
+  .slideActive {
     transition: none;
   }
 }

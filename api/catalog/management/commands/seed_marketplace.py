@@ -6,11 +6,12 @@ Idempotent: safe to run repeatedly (uses get_or_create / update_or_create).
 
     python manage.py seed_marketplace
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from catalog.models import (
     Category,
@@ -22,9 +23,11 @@ from catalog.models import (
     KeyFeature,
     Partner,
     Product,
+    Promotion,
     Tag,
 )
 from catalog.models.product import ProductStatus, ProductType
+from membership.models import MembershipPlan
 from reviews.models import Review, refresh_product_rating
 
 # The storefront has exactly ONE top-level category; everything else is a
@@ -56,6 +59,59 @@ COLLECTIONS = [
     ("Data & Analytics", "chart", "Turn your BIM models into actionable insight."),
 ]
 
+# All-Access membership tiers. rank is cumulative — a Pro membership covers
+# everything Standard does, plus anything only Pro-ranked products point at
+# (see catalog.models.product.Product.membership_plan / membership.models
+# .MembershipPlan.covers_plan). Configured here only as realistic starter
+# data — every field is admin-editable at /admin-portal/membership-plans,
+# nothing about a plan is hardcoded in the frontend.
+MEMBERSHIP_PLANS = [
+    # name, rank, monthly_price, yearly_price, seats_per_product, tagline, description, featured
+    (
+        "Standard", 1, Decimal("19.00"), Decimal("190.00"), 2,
+        "Everything you need to get started",
+        "One universal key unlocks the Standard-tier catalog — no separate purchase per plugin.",
+        True,
+    ),
+    (
+        "Pro", 2, Decimal("39.00"), Decimal("390.00"), 3,
+        "For power users and teams",
+        "Everything in Standard, plus the advanced tools reserved for the Pro tier and an extra machine seat per product.",
+        False,
+    ),
+]
+
+# Time-boxed discount campaigns (catalog.models.Promotion). Seeded as realistic
+# starter content, same as everything else here — fully admin-editable at
+# /admin-portal/promotions afterwards, nothing about a live offer is baked into
+# the frontend. `starts_at` is always "an hour ago" so re-running the seed
+# script always leaves each promotion live right now.
+PROMOTIONS = [
+    {
+        "name": "Launch Week",
+        "badge_label": "SPECIAL OFFER",
+        "headline": "This price won't last long...",
+        "discount_percent": 25,
+        "scope": Promotion.Scope.ALL,
+        "duration_days": 5,
+        "cta_label": "Shop Now",
+        "cta_url": "/catalog",
+        "show_countdown": True,
+        "priority": 10,
+    },
+    {
+        "name": "Automation Tools Flash Sale",
+        "badge_label": "FLASH SALE",
+        "headline": "35% off every automation tool this week.",
+        "discount_percent": 35,
+        "scope": Promotion.Scope.CATEGORY,
+        "category": "Automation Tools",
+        "duration_days": 3,
+        "show_countdown": False,
+        "priority": 5,
+    },
+]
+
 # Each product: name, type, category, partner, price, short, desc, version,
 # released, rating_avg, rating_count, downloads, tags, features, changelog,
 # compatibility, collection names.
@@ -72,12 +128,13 @@ PRODUCTS = [
             "every BIM professional deals with daily. Save time, reduce errors, and focus on "
             "what matters most—design."
         ),
-        "version": "2.1.0",
+        "version": "2.2.0",
         "released": date(2023, 1, 10),
         "rating": [85, 10, 3, 1, 1],  # % per 5..1 star, from the mockup
         "rating_count": 120,
         "downloads": 1250,
         "featured": True,
+        "plan": None,
         "tags": ["Productivity", "Automation", "Documentation", "Model Management"],
         "features": [
             ("Model Cleanup", "Remove unused items, purge, and audit your model to keep it light and efficient.", "broom"),
@@ -85,6 +142,7 @@ PRODUCTS = [
             ("Documentation", "Automate sheet creation, naming, parameter checks, and exports.", "document"),
         ],
         "changelog": [
+            ("2.2.0", date.today(), "Performance tuning for very large models\nNew batch rename presets\nMinor bug fixes"),
             ("2.1.0", date(2024, 5, 14), "Improved performance for larger models\nNew sheet naming presets\nAdded support for Revit 2025\nBug fixes and stability improvements"),
             ("2.0.0", date(2023, 11, 2), "Redesigned interface\nBatch view creation\nParameter check engine"),
         ],
@@ -111,12 +169,13 @@ PRODUCTS = [
             "Sheet Manager Pro takes the tedium out of sheet set-up. Batch-create, rename, and "
             "renumber sheets from a spreadsheet, and keep your titleblocks consistent across the project."
         ),
-        "version": "1.6.2",
+        "version": "1.7.0",
         "released": date(2023, 3, 22),
         "rating": [80, 12, 5, 2, 1],
         "rating_count": 85,
         "downloads": 890,
         "featured": True,
+        "plan": None,
         "tags": ["Automation", "Documentation", "Sheets"],
         "features": [
             ("Batch Sheet Creation", "Create hundreds of sheets from a spreadsheet in one step.", "layers"),
@@ -124,6 +183,7 @@ PRODUCTS = [
             ("Titleblock Sync", "Keep titleblock data consistent across every sheet.", "grid"),
         ],
         "changelog": [
+            ("1.7.0", date.today(), "Added CSV import alongside Excel\nFaster batch creation for 500+ sheets\nFixed titleblock sync on linked models"),
             ("1.6.2", date(2024, 5, 10), "Excel import improvements\nRevit 2025 support\nFixed renumber edge cases"),
         ],
         "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows"), ("Language", "English")],
@@ -147,6 +207,7 @@ PRODUCTS = [
         "rating_count": 210,
         "downloads": 2100,
         "featured": True,
+        "plan": None,
         "tags": ["Automation", "Dynamo", "Productivity"],
         "features": [
             ("Geometry Nodes", "Robust helpers for complex geometry operations.", "workflow"),
@@ -177,6 +238,7 @@ PRODUCTS = [
         "rating_count": 67,
         "downloads": 320,
         "featured": True,
+        "plan": "Pro",
         "tags": ["Analytics", "Data", "Reporting"],
         "features": [
             ("Live Metrics", "Real-time quantity and completeness tracking.", "chart"),
@@ -207,6 +269,7 @@ PRODUCTS = [
         "rating_count": 54,
         "downloads": 640,
         "featured": False,
+        "plan": "Standard",
         "tags": ["Productivity", "Automation"],
         "features": [
             ("Rule-based Numbering", "Define numbering rules per category.", "hash"),
@@ -234,6 +297,7 @@ PRODUCTS = [
         "rating_count": 41,
         "downloads": 560,
         "featured": False,
+        "plan": "Standard",
         "tags": ["Content", "Productivity", "Library"],
         "features": [
             ("Batch Load", "Load whole folders of families at once.", "layers"),
@@ -242,6 +306,70 @@ PRODUCTS = [
         "changelog": [("1.1.0", date(2024, 5, 7), "Folder watch\nRevit 2025 support")],
         "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows")],
         "collections": ["BIM Management"],
+        "doc": None,
+    },
+    {
+        "name": "Revit-Excel Live Sync",
+        "type": ProductType.PLUGIN,
+        "category": "Integrations",
+        "partner": "DataBuild",
+        "price": Decimal("45.00"),
+        "short": "Two-way live sync between Revit schedules and Excel",
+        "description": (
+            "Push a Revit schedule to Excel, edit it there, and sync changes straight back into "
+            "the model — no CSV round-tripping, no re-mapping columns every time. Edits on either "
+            "side that conflict are flagged before anything gets overwritten."
+        ),
+        "version": "1.0.0",
+        "released": date.today(),
+        "rating": [70, 20, 7, 2, 1],
+        "rating_count": 12,
+        "downloads": 45,
+        "featured": False,
+        "plan": "Pro",
+        "tags": ["Integrations", "Automation", "Data"],
+        "features": [
+            ("Two-Way Sync", "Push a schedule out to Excel and pull edits back into the model.", "refresh"),
+            ("Conflict Detection", "Flags cells changed on both sides before anything is overwritten.", "shield"),
+            ("Live Link", "Keep a workbook connected to a schedule across a whole session.", "link"),
+        ],
+        "changelog": [
+            ("1.0.0", date.today(), "Initial release\nTwo-way schedule sync\nConflict detection on edited cells"),
+        ],
+        "compatibility": [("Revit", "2023–2025"), ("Excel", "365 / 2021+"), ("Platform", "Windows")],
+        "collections": ["Data & Analytics"],
+        "doc": None,
+    },
+    {
+        "name": "Sheet Set Templates Pack",
+        "type": ProductType.TEMPLATE,
+        "category": "Templates",
+        "partner": "BIM Solutions",
+        "price": Decimal("25.00"),
+        "short": "Ready-made sheet and titleblock templates for common project types",
+        "description": (
+            "A starter set of sheet and titleblock templates covering the project types most "
+            "firms set up from scratch every time — plans, sections, details, and schedules, "
+            "with matching view templates so a new sheet looks right the moment it's created."
+        ),
+        "version": "1.0.0",
+        "released": date.today(),
+        "rating": [65, 22, 9, 3, 1],
+        "rating_count": 8,
+        "downloads": 30,
+        "featured": False,
+        "plan": None,
+        "tags": ["Templates", "Documentation", "Sheets"],
+        "features": [
+            ("Titleblock Set", "Pre-built titleblocks for the common paper sizes.", "grid"),
+            ("Sheet Templates", "Starter sheets for plans, sections, details, and schedules.", "document"),
+            ("View Templates", "Matching view templates so a new sheet looks consistent immediately.", "eye"),
+        ],
+        "changelog": [
+            ("1.0.0", date.today(), "Initial release\n12 starter sheet templates\n4 titleblock variants"),
+        ],
+        "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows")],
+        "collections": ["Revit Essentials"],
         "doc": None,
     },
 ]
@@ -280,16 +408,67 @@ class Command(BaseCommand):
             )[0]
             for i, (name, icon, desc) in enumerate(COLLECTIONS)
         }
+        plans = self._seed_plans()
 
+        products_by_slug = {}
         for spec in PRODUCTS:
-            self._seed_product(spec, categories, partners, collections)
+            products_by_slug[self._slug(spec["name"])] = self._seed_product(
+                spec, categories, partners, collections, plans
+            )
+
+        self._seed_promotions(products_by_slug, categories)
 
         self.stdout.write(self.style.SUCCESS(
             f"Seeded 1 category + {len(SUBCATEGORIES)} subcategories, {len(PARTNERS)} partners, "
-            f"{len(COLLECTIONS)} collections, {len(PRODUCTS)} products."
+            f"{len(COLLECTIONS)} collections, {len(PRODUCTS)} products, {len(plans)} membership plans, "
+            f"{len(PROMOTIONS)} promotions."
         ))
 
-    def _seed_product(self, spec, categories, partners, collections):
+    def _seed_plans(self):
+        plans = {}
+        for name, rank, monthly, yearly, seats, tagline, description, featured in MEMBERSHIP_PLANS:
+            plan, _ = MembershipPlan.objects.update_or_create(
+                name=name,
+                defaults={
+                    "rank": rank,
+                    "monthly_price": monthly,
+                    "yearly_price": yearly,
+                    "seats_per_product": seats,
+                    "tagline": tagline,
+                    "description": description,
+                    "is_featured": featured,
+                    "is_active": True,
+                },
+            )
+            plans[name] = plan
+        return plans
+
+    def _seed_promotions(self, products_by_slug, categories):
+        now = timezone.now()
+        for spec in PROMOTIONS:
+            promo, _ = Promotion.objects.update_or_create(
+                name=spec["name"],
+                defaults={
+                    "badge_label": spec["badge_label"],
+                    "headline": spec["headline"],
+                    "discount_percent": spec["discount_percent"],
+                    "scope": spec["scope"],
+                    "category": categories[spec["category"]] if spec.get("category") else None,
+                    # Always "an hour ago" so re-running the seed leaves every
+                    # promotion live right now, regardless of when it's run.
+                    "starts_at": now - timedelta(hours=1),
+                    "ends_at": now + timedelta(days=spec["duration_days"]),
+                    "cta_label": spec.get("cta_label", ""),
+                    "cta_url": spec.get("cta_url", ""),
+                    "show_countdown": spec.get("show_countdown", False),
+                    "priority": spec.get("priority", 0),
+                    "is_active": True,
+                },
+            )
+            if spec["scope"] == Promotion.Scope.PRODUCTS:
+                promo.products.set(products_by_slug[slug] for slug in spec["product_slugs"])
+
+    def _seed_product(self, spec, categories, partners, collections, plans):
         product, _ = Product.objects.update_or_create(
             slug=self._slug(spec["name"]),
             defaults={
@@ -307,6 +486,7 @@ class Command(BaseCommand):
                 "is_featured": spec["featured"],
                 "status": ProductStatus.PUBLISHED,
                 "default_trial_days": 30,
+                "membership_plan": plans.get(spec.get("plan")),
             },
         )
 
@@ -338,6 +518,7 @@ class Command(BaseCommand):
         self._seed_reviews(product, spec["rating"], spec["rating_count"])
         # Activation SKU (licensing.LicensedProduct) syncs automatically on save
         # via catalog/signals.py — no separate seeding step needed here.
+        return product
 
     def _seed_doc(self, product, doc):
         documentation, _ = Documentation.objects.update_or_create(
