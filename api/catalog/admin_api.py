@@ -163,6 +163,7 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             "category", "partner", "tags", "price", "monthly_price", "yearly_price", "download_count",
             "default_trial_days", "default_trial_hours", "default_trial_minutes",
             "status", "rejection_note", "visibility", "is_featured", "membership_plan",
+            "is_hero_featured", "hero_sort_order",
             "cover_image_url", "version", "released_at", "seo_title", "seo_description",
             "features", "media", "changelog", "compatibility", "documentation", "files",
             "created_at", "updated_at",

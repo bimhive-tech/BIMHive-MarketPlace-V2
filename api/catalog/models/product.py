@@ -146,6 +146,17 @@ class Product(TimeStamped):
         max_length=20, choices=ProductVisibility.choices, default=ProductVisibility.PUBLIC
     )
     is_featured = models.BooleanField(default=False)
+    # Explicit homepage-hero curation — separate from is_featured (which drives
+    # the "Featured Products" grid further down the page). When no product has
+    # this on, the hero falls back to an automatic pick (discounted, then
+    # featured, products — see catalog.views._spotlight_products) rather than
+    # showing nothing; staff only need to reach for this to override that.
+    is_hero_featured = models.BooleanField(
+        default=False, help_text="Show in the homepage hero carousel."
+    )
+    hero_sort_order = models.PositiveIntegerField(
+        default=0, help_text="Lower numbers show first in the hero carousel."
+    )
     published_at = models.DateTimeField(null=True, blank=True)
     rejection_note = models.TextField(
         blank=True, help_text="Shown to the submitting partner when status is set to Rejected."

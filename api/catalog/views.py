@@ -242,9 +242,20 @@ def home_api(request):
 
 
 def _spotlight_products(promotions, limit=6):
-    """What the hero carousel rotates through: discounted products first (a live
-    price is the most compelling thing to lead with), topped up with featured
-    ones so the hero never runs short on a day with no promotion."""
+    """What the hero carousel rotates through.
+
+    Staff-curated first: any product with `is_hero_featured` set, in
+    `hero_sort_order`. Only when nobody has curated anything does this fall
+    back to an automatic pick — discounted products first (a live price is
+    the most compelling thing to lead with), topped up with featured ones —
+    so the hero never runs short, but a real admin choice always wins.
+    """
+    curated = list(
+        _published_products().filter(is_hero_featured=True).order_by("hero_sort_order", "-published_at")
+    )
+    if curated:
+        return curated[:limit]
+
     products = list(_published_products())
     discounted = [p for p in products if promotion_for(p, promotions)]
     rest = [p for p in products if p not in discounted and p.is_featured]

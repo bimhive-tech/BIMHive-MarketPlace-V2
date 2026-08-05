@@ -78,6 +78,8 @@ const EMPTY_FORM = {
   rejection_note: "",
   visibility: "public",
   is_featured: false,
+  is_hero_featured: false,
+  hero_sort_order: "0",
   seo_title: "",
   seo_description: "",
 };
@@ -151,6 +153,8 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           rejection_note: p.rejection_note,
           visibility: p.visibility,
           is_featured: p.is_featured,
+          is_hero_featured: p.is_hero_featured,
+          hero_sort_order: String(p.hero_sort_order),
           seo_title: p.seo_title,
           seo_description: p.seo_description,
         });
@@ -216,6 +220,8 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       ...(mode === "admin" ? { rejection_note: form.rejection_note } : {}),
       visibility: form.visibility,
       is_featured: form.is_featured,
+      is_hero_featured: form.is_hero_featured,
+      hero_sort_order: Number(form.hero_sort_order) || 0,
       seo_title: form.seo_title.trim(),
       seo_description: form.seo_description.trim(),
       tags,
@@ -394,21 +400,6 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                     {options?.categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.parent_name ? `— ${c.name}` : c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={styles.label}>
-                  All-Access tier
-                  <select
-                    className={styles.input}
-                    value={form.membership_plan}
-                    onChange={(e) => set("membership_plan", e.target.value)}
-                  >
-                    <option value="">Not in All-Access (buy-only)</option>
-                    {options?.membership_plans.map((plan) => (
-                      <option key={plan.id} value={plan.id}>
-                        {plan.name}
                       </option>
                     ))}
                   </select>
@@ -611,6 +602,27 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                   "Download Trial" button on the product page).
                 </span>
               </label>
+              <label className={styles.label}>
+                All-Access tier
+                <select
+                  className={styles.input}
+                  value={form.membership_plan}
+                  onChange={(e) => set("membership_plan", e.target.value)}
+                >
+                  <option value="">Not in All-Access (buy-only)</option>
+                  {options?.membership_plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </option>
+                  ))}
+                </select>
+                <span className={styles.hint}>
+                  Lowest All-Access plan that includes this product — a member on that plan or a
+                  higher one can activate it with their universal key instead of buying it. Manage the
+                  plans themselves under Membership Plans in the sidebar. Leave as "buy-only" to keep
+                  this product out of All-Access entirely.
+                </span>
+              </label>
             </div>
           )}
 
@@ -709,6 +721,33 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
               <input type="checkbox" checked={form.is_featured} onChange={(e) => set("is_featured", e.target.checked)} />
               Featured product
             </label>
+            <span className={styles.hint}>Shows in the "Featured Products" grid on the homepage.</span>
+
+            <label className={styles.checkboxRow}>
+              <input
+                type="checkbox"
+                checked={form.is_hero_featured}
+                onChange={(e) => set("is_hero_featured", e.target.checked)}
+              />
+              Show in homepage hero
+            </label>
+            {form.is_hero_featured && (
+              <label className={styles.label}>
+                Hero order
+                <input
+                  className={styles.input}
+                  type="number"
+                  min={0}
+                  value={form.hero_sort_order}
+                  onChange={(e) => set("hero_sort_order", e.target.value)}
+                />
+              </label>
+            )}
+            <span className={styles.hint}>
+              {form.is_hero_featured
+                ? "Lower numbers show first. Once any product has this on, the hero carousel shows only curated products — turn it off everywhere to go back to an automatic pick."
+                : "The rotating homepage banner. If nothing is curated, it auto-picks discounted then featured products instead."}
+            </span>
           </div>
           <div className={styles.notice}>
             <Icon name="shield" size={18} />

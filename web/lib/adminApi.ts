@@ -180,6 +180,8 @@ export interface AdminProductDetail {
   visibility: string;
   is_featured: boolean;
   membership_plan: number | null;
+  is_hero_featured: boolean;
+  hero_sort_order: number;
   cover_image_url: string;
   version: string;
   released_at: string | null;

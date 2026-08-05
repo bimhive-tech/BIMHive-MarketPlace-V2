@@ -1,9 +1,12 @@
-/* Deliberately the one saturated, full-bleed band on the site — it has to
-   out-shout the nav below it without borrowing the brand gold, which means
-   "selected / you are here" everywhere else. */
+/* Deliberately the one full-bleed dark band on the site — near-black rather
+   than a stock "sale red", with the countdown numbers and CTA in the brand
+   gold as the single accent (style.md §9's "line art + one gold accent"
+   signature, reused here as "dark band + one gold accent"). Reads as
+   premium urgency rather than a discount sticker. */
 .bar {
-  background: var(--error-fg);
+  background: var(--ink-900);
   color: var(--surface-0);
+  border-bottom: 2px solid var(--gold-500);
   animation: slide-down var(--dur-slow) var(--ease-out) both;
 }
 
@@ -19,8 +22,8 @@
 .badge {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--surface-0);
-  color: var(--error-fg);
+  background: var(--gold-600);
+  color: var(--surface-0);
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);
   letter-spacing: var(--tracking-eyebrow);
@@ -32,6 +35,8 @@
   flex: 1;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
+  color: var(--surface-0);
+  opacity: 0.92;
 }
 
 /* ── Clock ── */
@@ -51,6 +56,7 @@
 .value {
   font-size: var(--fs-md);
   font-weight: var(--fw-bold);
+  color: var(--gold-500);
   /* Tabular figures stop the whole strip shifting as each digit changes. */
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
@@ -58,21 +64,24 @@
 
 .unitLabel {
   font-size: var(--fs-xs);
-  opacity: 0.75;
+  color: var(--surface-0);
+  opacity: 0.6;
 }
 
 .cta {
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--surface-0);
-  color: var(--error-fg);
+  background: var(--gold-600);
+  color: var(--surface-0);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
-  transition: transform var(--dur-fast) var(--ease-out),
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-standard);
 }
 
 .cta:hover {
+  background: var(--gold-700);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }

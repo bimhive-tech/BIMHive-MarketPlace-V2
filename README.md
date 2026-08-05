@@ -462,6 +462,18 @@ now real, working pages — each backed by data that already existed, not a new 
   reply form that auto-tags `is_staff_reply`/`author`) — no dedicated Admin Portal page built yet,
   since that wasn't part of what was actually broken (the customer-facing "soon" tabs).
 
+## Homepage hero: staff-curated, with an automatic fallback
+
+The rotating hero on `/` picks its slides from `catalog.views._spotlight_products` — and staff
+curation always wins. Any product with `Product.is_hero_featured` set appears, ordered by
+`hero_sort_order` (lower first); set it on the product's edit page, **Publishing** panel on the
+right ("Show in homepage hero" + a "Hero order" number). Only when nobody has curated anything does
+it fall back to an automatic pick (discounted products first, then featured ones) — so the hero
+never sits empty, but a real admin choice is never overridden by it. The countdown bar above the nav
+is styled dark-ink-with-one-gold-accent (`--ink-900` band, `--gold-500` numbers/border, `--gold-600`
+badge/CTA) rather than a stock red "sale" banner, matching the brand's "line art + one gold accent"
+signature from `style.md` §9.
+
 ## Categories: one root, subcategories underneath
 
 The storefront only sells one kind of thing — Revit plugins — so the taxonomy is exactly two
