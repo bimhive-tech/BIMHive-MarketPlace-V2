@@ -179,6 +179,7 @@ export interface AdminProductDetail {
   rejection_note: string;
   visibility: string;
   is_featured: boolean;
+  membership_plan: number | null;
   cover_image_url: string;
   version: string;
   released_at: string | null;
@@ -193,10 +194,13 @@ export interface AdminProductDetail {
 }
 
 export interface AdminOptions {
-  categories: { id: number; name: string }[];
+  /** `parent_name` is empty for a top-level category — the picker uses it to
+   * group subcategories under the root they belong to. */
+  categories: { id: number; name: string; parent_name: string | null }[];
   partners: { id: number; name: string }[];
   tags: { id: number; name: string }[];
   types: { value: string; label: string }[];
+  membership_plans: { id: number; name: string; rank: number }[];
 }
 
 export const getAdminOptions = () => getJSON<AdminOptions>("/api/admin/options");
@@ -243,6 +247,7 @@ export interface AdminCategory {
   description: string;
   icon: string;
   parent: number | null;
+  parent_name: string;
   sort_order: number;
   product_count: number;
 }
@@ -290,7 +295,75 @@ function crud<T>(basePath: string) {
   };
 }
 
+export interface AdminPromotion {
+  id: number;
+  name: string;
+  badge_label: string;
+  headline: string;
+  cta_label: string;
+  cta_url: string;
+  discount_percent: number;
+  scope: "all" | "category" | "products";
+  category: number | null;
+  products: number[];
+  starts_at: string;
+  ends_at: string;
+  is_active: boolean;
+  show_countdown: boolean;
+  priority: number;
+  /** Server-computed: inside its window AND active right now. */
+  is_live: boolean;
+}
+
+export interface AdminMembershipPlan {
+  id: number;
+  name: string;
+  slug: string;
+  rank: number;
+  tagline: string;
+  description: string;
+  monthly_price: string | null;
+  yearly_price: string | null;
+  currency: string;
+  seats_per_product: number;
+  is_active: boolean;
+  is_featured: boolean;
+  sort_order: number;
+  /** Products assigned to this exact tier (not cumulative). */
+  product_count: number;
+  member_count: number;
+}
+
+export interface AdminMembership {
+  id: string;
+  user_email: string;
+  plan: number;
+  plan_name: string;
+  status: string;
+  display_status: string;
+  billing_period: "monthly" | "yearly";
+  license_key: string;
+  amount: string;
+  currency: string;
+  started_at: string | null;
+  expires_at: string | null;
+  cancelled_at: string | null;
+  /** Products this universal key has actually been activated on. */
+  granted_count: number;
+  note: string;
+}
+
 export const categoriesApi = crud<AdminCategory>("/api/admin/categories");
+export const promotionsApi = crud<AdminPromotion>("/api/admin/promotions");
+export const membershipPlansApi = crud<AdminMembershipPlan>("/api/admin/membership-plans");
+
+export const getAdminMemberships = () => getJSON<AdminMembership[]>("/api/admin/memberships");
+/** Ends a membership and revokes every license its universal key opened. */
+export const revokeMembership = (id: string, status: string) =>
+  request<AdminMembership>(`/api/admin/memberships/${id}/revoke`, "POST", { status });
+/** Turns one back on — also the way to test the flow without a live payment. */
+export const reinstateMembership = (id: string) =>
+  request<AdminMembership>(`/api/admin/memberships/${id}/reinstate`, "POST", {});
 export const tagsApi = crud<AdminTag>("/api/admin/tags");
 export const partnersApi = crud<AdminPartner>("/api/admin/partners");
 export const collectionsApi = crud<AdminCollection>("/api/admin/collections");

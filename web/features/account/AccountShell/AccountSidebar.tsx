@@ -11,6 +11,7 @@ const GROUPS: SidebarNavGroup[] = [
     items: [
       { label: "Overview", href: "/account", icon: "grid", ready: true },
       { label: "Licenses", href: "/account/licenses", icon: "library", ready: true },
+      { label: "All-Access", href: "/account/membership", icon: "wallet", ready: true },
       { label: "Subscriptions", href: "/account/subscriptions", icon: "refresh", ready: true },
       { label: "Orders & Invoices", href: "/account/orders", icon: "document", ready: true },
       { label: "Payment Methods", href: "/account/payment-methods", icon: "lock", ready: true },

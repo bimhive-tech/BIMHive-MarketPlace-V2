@@ -2,11 +2,13 @@ import Link from "next/link";
 
 import { Icon } from "@/components/Icon/Icon";
 import { CATEGORY_ICON_BY_SLUG } from "@/config/site";
-import type { Category } from "@/lib/types";
+import type { Subcategory } from "@/lib/types";
 
 import styles from "./CategoryCard.module.css";
 
-export function CategoryCard({ category }: { category: Category }) {
+/** Renders either level of the taxonomy — `Category` is a `Subcategory` plus
+ * its children, which this card doesn't show. */
+export function CategoryCard({ category }: { category: Subcategory }) {
   return (
     <Link href={`/catalog?category=${category.slug}`} className={styles.card}>
       <span className={styles.icon}>

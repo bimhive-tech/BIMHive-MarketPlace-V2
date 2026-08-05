@@ -1,38 +1,58 @@
 .hero {
   position: relative;
-  /* White blends seamlessly with the image's light left edge (no visible seam). */
   background: var(--surface-0);
   overflow: hidden;
 }
 
-/* The image fills the section height and is shown in full (contain), pinned right,
-   so the monogram + wireframe sit on the right and the headline sits on the left. */
-.bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-
-.bgImage {
-  object-fit: contain;
-  object-position: right center;
-}
-
+/* Positioned so the absolutely-stacked slides are scoped to the container's
+   own width/padding, not the full-bleed .hero behind it. */
 .inner {
   position: relative;
-  z-index: 1;
+  min-height: 520px;
+}
+
+/* Slides stack on top of each other; only the active one is interactive/
+   reachable by keyboard — `visibility` flips after the fade so a hidden slide
+   drops out of the tab order without an abrupt jump cut. */
+.slide {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  min-height: 520px;
+  gap: var(--space-7);
   padding-block: var(--space-9);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(24px);
+  transition: opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out),
+    visibility 0s linear var(--dur-slow);
+}
+
+.slideActive {
+  position: relative;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out),
+    visibility 0s linear 0s;
 }
 
 .copy {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: 46%;
-  animation: rise var(--dur-slow) var(--ease-out) both;
+  flex: 1;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--gold-700);
 }
 
 .headline {
@@ -41,6 +61,12 @@
   line-height: var(--lh-tight);
   letter-spacing: -0.02em;
   color: var(--ink-900);
+  /* Clamped so a long product name can't blow out the layout the way a fixed
+     two-line headline never had to worry about. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .accent {
@@ -51,6 +77,14 @@
   font-size: var(--fs-md);
   color: var(--ink-700);
   max-width: 42ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.priceRow {
+  display: flex;
 }
 
 .actions {
@@ -59,38 +93,90 @@
   flex-wrap: wrap;
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* ── Product visual ── */
+.mediaFrame {
+  position: relative;
+  flex-shrink: 0;
+  /* next/image `fill` needs a positioned ancestor to size against; the
+     WireframeThumb fallback fills the same box via its own 100%/100%. */
+  width: 42%;
+  max-width: 480px;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--gold-100);
+  box-shadow: var(--shadow-lg);
 }
 
-/* Tablet/phone: image becomes a top band, text sits below it (never overlapped). */
+.media {
+  object-fit: cover;
+}
+
+.badgeSlot {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+}
+
+/* ── Dots ── */
+.dots {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-5);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--line-300);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    width var(--dur-fast) var(--ease-standard);
+}
+
+.dot:hover {
+  background: var(--gold-400);
+}
+
+.dotActive {
+  width: 22px;
+  background: var(--gold-600);
+}
+
+/* Tablet/phone: stack the media above the copy instead of side by side. */
 @media (max-width: 900px) {
-  .bg {
-    height: 260px;
-    inset: 0 0 auto 0;
+  .slide {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-block: var(--space-6);
   }
-  .bgImage {
-    object-position: center;
+
+  .mediaFrame {
+    width: 100%;
+    max-width: none;
+    order: -1;
   }
+
   .inner {
     min-height: 0;
-    padding-top: calc(260px + var(--space-6));
-    align-items: flex-start;
   }
-  .copy {
-    max-width: 100%;
+
+  .headline {
+    font-size: var(--fs-2xl);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .copy {
-    animation: none;
+  .slide,
+  .slideActive,
+  .dot {
+    transition: none;
   }
 }

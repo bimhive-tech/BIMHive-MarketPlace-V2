@@ -1,0 +1,124 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  background: var(--surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--dur-base) var(--ease-standard),
+    box-shadow var(--dur-base) var(--ease-standard),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--gold-300);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+}
+
+/* The recommended tier is the one solid-gold moment on this page — everything
+   else stays outlined so there's a single obvious primary action. */
+.featured {
+  border-color: var(--gold-500);
+  box-shadow: var(--shadow-md);
+}
+
+.ribbon {
+  position: absolute;
+  top: calc(-1 * var(--space-3));
+  left: var(--space-6);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--gold-600);
+  color: var(--surface-0);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.name {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+}
+
+.tagline {
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.amount {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  color: var(--color-price);
+}
+
+.interval {
+  font-size: var(--fs-md);
+  color: var(--color-muted);
+}
+
+.unavailable {
+  font-size: var(--fs-md);
+  color: var(--color-muted);
+}
+
+.saving {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--success-fg);
+}
+
+.perks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  list-style: none;
+  flex: 1;
+}
+
+.perk {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-700);
+}
+
+.perkIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--gold-500);
+}
+
+.description {
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+  line-height: var(--lh-snug);
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--error-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}

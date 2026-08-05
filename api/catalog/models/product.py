@@ -7,14 +7,24 @@ differentiated by `type`, NOT by a separate model. Its licensing/activation reco
 back here; that keeps the shipped-plugin activation contract intact without a parallel
 "Plugin" model. See ARCHITECTURE §4–5.
 """
+from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
 
 from catalog.models.taxonomy import Category, Partner, Tag, TimeStamped
+
+
+def _within_days(moment, days):
+    """True when `moment` happened inside the last `days`. A window of 0 turns
+    the badge off entirely rather than making it permanent."""
+    if moment is None or days <= 0:
+        return False
+    return timezone.now() - moment <= timedelta(days=days)
 
 
 class ProductType(models.TextChoices):
@@ -79,6 +89,20 @@ class Product(TimeStamped):
     yearly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=8, default="USD")
 
+    # ── All-Access membership ──
+    # The LOWEST membership tier that includes this product; null means it's
+    # excluded from All-Access entirely and can only be bought outright. A
+    # membership covers this product when its own plan ranks at or above this
+    # one (see membership.MembershipPlan.covers_plan).
+    membership_plan = models.ForeignKey(
+        "membership.MembershipPlan",
+        on_delete=models.SET_NULL,
+        related_name="products",
+        null=True,
+        blank=True,
+        help_text="Lowest All-Access tier that includes this product. Blank = not in All-Access.",
+    )
+
     # ── Licensing config (activation records live in licensing.LicensedProduct) ──
     # A trial length of 0/0/0 means no trial is offered for this product at all
     # (see has_trial) — the buy box then skips the "Download Trial" option.
@@ -101,6 +125,12 @@ class Product(TimeStamped):
     cover_image_url = models.URLField(max_length=1000, blank=True)
     version = models.CharField(max_length=30, default="1.0.0")
     released_at = models.DateField(null=True, blank=True)
+    # When this product last shipped a new version — set automatically whenever
+    # `version` changes on a live product (see save()), which is what drives the
+    # temporary "Updated" badge in the storefront. Distinct from `updated_at`,
+    # which any edit touches (a typo fix in the description is not an update
+    # customers should be told about).
+    last_release_at = models.DateTimeField(null=True, blank=True)
 
     # ── Ratings (denormalised aggregate, kept fresh by the reviews app) ──
     rating_average = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.00"))
@@ -144,7 +174,43 @@ class Product(TimeStamped):
             self.product_code = self._unique_value("product_code", slugify(self.name) or self.slug)
         if self.status == ProductStatus.PUBLISHED and self.published_at is None:
             self.published_at = timezone.now()
+        if self._stamp_release_if_version_changed():
+            # An explicit update_fields list limits which columns are written,
+            # so the new timestamp would be dropped unless it's added to it.
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = {*update_fields, "last_release_at"}
         super().save(*args, **kwargs)
+
+    def _stamp_release_if_version_changed(self):
+        """Timestamps a version bump so the storefront can show an "Updated"
+        badge for a while afterwards. Only for products already published — the
+        edits leading up to a first release aren't updates to anything, and the
+        "New" badge covers that period instead. Returns whether it stamped."""
+        if not self.pk or self.published_at is None:
+            return False
+        previous_version = (
+            type(self).objects.filter(pk=self.pk).values_list("version", flat=True).first()
+        )
+        if previous_version is None or previous_version == self.version:
+            return False
+        self.last_release_at = timezone.now()
+        return True
+
+    # ── Storefront freshness badges ──
+    @property
+    def is_new(self):
+        """Published within the "New" window (settings.NEW_PRODUCT_BADGE_DAYS)."""
+        return _within_days(self.published_at, settings.NEW_PRODUCT_BADGE_DAYS)
+
+    @property
+    def is_updated(self):
+        """Shipped a new version within the "Updated" window. A product still
+        showing as new isn't also "updated" — one badge per card, and "New" is
+        the stronger claim."""
+        if self.is_new:
+            return False
+        return _within_days(self.last_release_at, settings.UPDATED_PRODUCT_BADGE_DAYS)
 
     def _unique_value(self, field, base):
         """Append -2, -3, ... until `base` doesn't collide with another row's `field`."""

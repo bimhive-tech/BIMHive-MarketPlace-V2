@@ -14,11 +14,11 @@ import styles from "./page.module.css";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const { categories, featured_products, collections } = await getHome();
+  const { categories, featured_products, collections, spotlight_products } = await getHome();
 
   return (
     <>
-      <Hero />
+      <Hero products={spotlight_products} />
       <TrustBar />
       <div className={`container ${styles.body}`}>
         <div className={styles.layout}>

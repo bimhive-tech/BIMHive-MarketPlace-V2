@@ -4,7 +4,8 @@
  * (session cookie alone scopes the query); the one write here (claimFreeProduct)
  * follows the same CSRF-token pattern as lib/auth.ts.
  */
-import type { Review } from "@/lib/types";
+import type { AccountMembership, ProductCard, Review } from "@/lib/types";
+
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: "include" });
   if (!res.ok) throw new Error(`Account API ${path} failed: ${res.status}`);
@@ -193,6 +194,28 @@ export interface CheckoutItem {
 // webhook; see getCheckoutStatus for how the confirmation page finds out.
 export const checkout = (items: CheckoutItem[]) =>
   postJSON<{ checkoutUrl: string; reference: string }>("/api/account/checkout", { items });
+
+// ── All-Access membership ──
+export interface AccountMembershipData {
+  membership: AccountMembership | null;
+  /** What the universal key opens. Empty unless the membership is usable. */
+  products: ProductCard[];
+}
+
+export const getAccountMembership = () => getJSON<AccountMembershipData>("/api/account/membership");
+
+/** Like product checkout: returns a Paymob URL, grants nothing. The membership
+ * only becomes active once the webhook confirms payment. */
+export const startMembershipCheckout = (plan: string, billingPeriod: "monthly" | "yearly") =>
+  postJSON<{ checkoutUrl: string; reference: string }>("/api/account/membership/checkout", {
+    plan,
+    billingPeriod,
+  });
+
+/** Immediate — the universal key stops working and every license it opened is
+ * revoked in the same call. */
+export const cancelMembership = () =>
+  postJSON<AccountMembership>("/api/account/membership/cancel", {});
 
 export interface CheckoutStatus {
   pending: boolean;

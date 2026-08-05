@@ -33,13 +33,20 @@ export interface User {
   } | null;
 }
 
-export interface Category {
+/** A category with no children of its own. The storefront taxonomy is two
+ * levels: one root ("Revit Plugins") and its subcategories. */
+export interface Subcategory {
   id: number;
   name: string;
   slug: string;
   icon: string;
   description: string;
+  parent_slug: string;
   product_count: number;
+}
+
+export interface Category extends Subcategory {
+  children: Subcategory[];
 }
 
 export interface Collection {
@@ -69,6 +76,74 @@ export interface Partner {
   is_verified: boolean;
 }
 
+/** A live discount on one product. The product's own price fields stay at list
+ * price so the UI can strike them through next to these. */
+export interface ProductPromotion {
+  label: string;
+  headline: string;
+  discount_percent: number;
+  ends_at: string;
+  price: string;
+  monthly_price: string | null;
+  yearly_price: string | null;
+}
+
+/** The site-wide countdown offer above the nav (`/api/promotions/banner`). */
+export interface PromotionBanner {
+  id: number;
+  badge_label: string;
+  headline: string;
+  discount_percent: number;
+  ends_at: string;
+  cta_label: string;
+  cta_url: string;
+}
+
+/** The All-Access tier a product belongs to, if any. */
+export interface ProductMembership {
+  plan_name: string;
+  plan_slug: string;
+  monthly_price: string | null;
+  /** True when the signed-in viewer's own membership already covers this. */
+  included_in_my_plan: boolean;
+}
+
+/** A purchasable All-Access tier (`/api/membership/plans`). */
+export interface MembershipPlan {
+  id: number;
+  name: string;
+  slug: string;
+  rank: number;
+  tagline: string;
+  description: string;
+  monthly_price: string | null;
+  yearly_price: string | null;
+  currency: string;
+  yearly_savings_percent: number | null;
+  seats_per_product: number;
+  is_featured: boolean;
+  /** Live products this tier unlocks, including lower tiers'. */
+  product_count: number;
+}
+
+/** The signed-in customer's own membership, universal key included. */
+export interface AccountMembership {
+  id: string;
+  plan_name: string;
+  plan_slug: string;
+  status: string;
+  display_status: string;
+  is_usable: boolean;
+  billing_period: "monthly" | "yearly";
+  license_key: string;
+  amount: string;
+  currency: string;
+  seats_per_product: number;
+  started_at: string | null;
+  expires_at: string | null;
+  cancelled_at: string | null;
+}
+
 export interface ProductCard {
   id: number;
   name: string;
@@ -88,6 +163,13 @@ export interface ProductCard {
   category: string;
   category_slug: string;
   is_featured: boolean;
+  promotion: ProductPromotion | null;
+  membership: ProductMembership | null;
+  /** Published recently — see NEW_PRODUCT_BADGE_DAYS in the Django settings. */
+  is_new: boolean;
+  /** Shipped a new version recently, and no longer new. */
+  is_updated: boolean;
+  version: string;
 }
 
 export interface KeyFeature {
@@ -180,6 +262,7 @@ export interface TrialBuild {
 export interface ProductDetail extends Omit<ProductCard, "category"> {
   description: string;
   is_free: boolean;
+  last_release_at: string | null;
   yearly_savings_percent: number | null;
   default_trial_days: number;
   default_trial_hours: number;
@@ -206,4 +289,6 @@ export interface HomeData {
   categories: Category[];
   featured_products: ProductCard[];
   collections: Collection[];
+  /** What the hero rotates through — discounted products first. */
+  spotlight_products: ProductCard[];
 }

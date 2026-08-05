@@ -66,6 +66,7 @@ const EMPTY_FORM = {
   type: "plugin",
   category: "",
   partner: "",
+  membership_plan: "",
   product_code: "",
   price: "0",
   monthly_price: "",
@@ -138,6 +139,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           type: p.type,
           category: String(p.category),
           partner: String(p.partner),
+          membership_plan: p.membership_plan != null ? String(p.membership_plan) : "",
           product_code: p.product_code,
           price: p.price,
           monthly_price: p.monthly_price ?? "",
@@ -196,6 +198,9 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       // the caller's own org and ignores anything sent here (see
       // AdminProductDetailSerializer.validate), so there's nothing to send.
       ...(mode === "admin" ? { partner: Number(form.partner) } : {}),
+      // Blank = not in All-Access, sent as null so the product is excluded
+      // rather than accidentally pointing at plan id 0.
+      membership_plan: form.membership_plan ? Number(form.membership_plan) : null,
       product_code: form.product_code.trim(),
       price: form.price || "0",
       // Blank means "not a subscription" — sent as null, not "0" (a $0/mo
@@ -383,7 +388,29 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                   Category <span className={styles.req}>*</span>
                   <select className={styles.input} value={form.category} onChange={(e) => set("category", e.target.value)}>
                     <option value="">Select a category</option>
-                    {options?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {/* Options arrive tree-ordered (root, then its children — see
+                        catalog.admin_api.AdminOptionsView), so indenting the
+                        children is enough to show the hierarchy. */}
+                    {options?.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.parent_name ? `— ${c.name}` : c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.label}>
+                  All-Access tier
+                  <select
+                    className={styles.input}
+                    value={form.membership_plan}
+                    onChange={(e) => set("membership_plan", e.target.value)}
+                  >
+                    <option value="">Not in All-Access (buy-only)</option>
+                    {options?.membership_plans.map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 {mode === "partner" ? (

@@ -16,6 +16,8 @@ from rest_framework.views import APIView
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
+from catalog.pricing import live_promotions, promotion_for, unit_price_for
+from catalog.storage import refresh_storage_url
 from licensing import paymob
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
 from licensing.services import (
@@ -25,6 +27,7 @@ from licensing.services import (
     revoke_purchase_access,
     subscription_duration,
 )
+from membership.services import active_membership_for, entitled_products, has_entitlement
 
 # Matches the "30-Day Money Back Guarantee" copy already shown on every buy
 # box (web/features/product/BuyBox/BuyBox.tsx) — self-service refund gives
@@ -247,83 +250,105 @@ class AccountDownloadFileSerializer(serializers.Serializer):
     download_url = serializers.CharField()
 
 
-class AccountDownloadSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source="product.name", read_only=True)
-    cover_image_url = serializers.SerializerMethodField()
-    files = serializers.SerializerMethodField()
+def _download_files_for(catalog_product):
+    """Every file the customer can pull for one product."""
+    entries = [
+        {
+            "id": str(f.id),
+            "revit_version": f.revit_version,
+            "version_label": f.version_label,
+            "is_current": f.is_current,
+            # Routed through our own redirect endpoint rather than a raw
+            # presigned URL: that's the only way an actual download (as
+            # opposed to just seeing the link) ever reaches Django to be
+            # logged — a link straight to R2 would never touch our backend
+            # again once the page has loaded.
+            "download_url": f"/api/account/downloads/{f.id}/get" if f.storage_key else "",
+        }
+        for f in catalog_product.files.all()
+    ]
+    # A Revit-plugin build has no static file at all — it's generated
+    # live on click (see AccountPluginBuildDownloadView) — so it's listed
+    # here as a virtual entry rather than needing a ProductFile row.
+    from installer.models import PluginBuild
 
-    class Meta:
-        model = ProductPurchase
-        fields = ["id", "product_name", "cover_image_url", "files"]
-
-    def get_cover_image_url(self, obj):
-        catalog_product = obj.product.product
-        return catalog_product.cover_image_url if catalog_product else ""
-
-    def get_files(self, obj):
-        catalog_product = obj.product.product
-        if not catalog_product:
-            return []
-        entries = [
+    for build in PluginBuild.objects.filter(product=catalog_product):
+        if not build.is_ready_for_build:
+            continue
+        entries.append(
             {
-                "id": str(f.id),
-                "revit_version": f.revit_version,
-                "version_label": f.version_label,
-                "is_current": f.is_current,
-                # Routed through our own redirect endpoint rather than a raw
-                # presigned URL: that's the only way an actual download (as
-                # opposed to just seeing the link) ever reaches Django to be
-                # logged — a link straight to R2 would never touch our backend
-                # again once the page has loaded.
-                "download_url": f"/api/account/downloads/{f.id}/get" if f.storage_key else "",
+                "id": str(build.id),
+                "revit_version": build.revit_year,
+                "version_label": build.plugin_version,
+                "is_current": True,
+                "download_url": f"/api/account/downloads/plugin-builds/{build.id}/get",
             }
-            for f in catalog_product.files.all()
-        ]
-        # A Revit-plugin build has no static file at all — it's generated
-        # live on click (see AccountPluginBuildDownloadView) — so it's listed
-        # here as a virtual entry rather than needing a ProductFile row.
-        from installer.models import PluginBuild
-
-        for build in PluginBuild.objects.filter(product=catalog_product):
-            if not build.is_ready_for_build:
-                continue
-            entries.append(
-                {
-                    "id": str(build.id),
-                    "revit_version": build.revit_year,
-                    "version_label": build.plugin_version,
-                    "is_current": True,
-                    "download_url": f"/api/account/downloads/plugin-builds/{build.id}/get",
-                }
-            )
-        return entries
+        )
+    return entries
 
 
-class AccountDownloadListView(generics.ListAPIView):
-    """Only paid purchases grant downloads — this is the entitlement gate.
+class AccountDownloadListView(APIView):
+    """The entitlement gate: what this customer may actually download.
 
-    One card per distinct product, never one per purchase: a customer
-    holding several independent keys for the same product (see
-    CheckoutView — one key per seat) still only has one set of files to
-    download, since the .exe/ProductFile itself carries no per-purchase
-    data. `distinct("product__product_id")` (Postgres DISTINCT ON) picks
-    one representative purchase per product — which purchase doesn't
-    matter, get_files() below only ever reads the shared catalog product
-    off it, never anything purchase-specific."""
+    Two routes in, one card out per product — a paid purchase of it, or an
+    active All-Access membership whose plan covers it (see
+    membership.services.entitled_products). One card per product, never one per
+    purchase: a customer holding several keys for the same product (checkout
+    issues one per seat) still has just one set of files, and nothing about
+    those files is purchase-specific.
+    """
 
     permission_classes = [IsAuthenticated]
-    serializer_class = AccountDownloadSerializer
 
-    def get_queryset(self):
-        return (
+    def get(self, request):
+        membership = active_membership_for(request.user)
+        cards = []
+        seen_product_ids = set()
+
+        for product in entitled_products(request.user).order_by("name"):
+            seen_product_ids.add(product.id)
+            cards.append(
+                {
+                    "id": product.id,
+                    "product_name": product.name,
+                    "cover_image_url": refresh_storage_url(product.cover_image_url),
+                    # Lets the account page label which cards the customer has
+                    # through their membership rather than by buying.
+                    "via_membership": bool(membership and membership.covers(product)),
+                    "files": _download_files_for(product),
+                }
+            )
+
+        cards.extend(self._orphan_sku_cards(request.user, seen_product_ids))
+        return Response(cards)
+
+    @staticmethod
+    def _orphan_sku_cards(user, seen_product_ids):
+        """Paid purchases of an activation SKU that isn't linked to a catalog
+        product — legacy rows imported from v1, which every current product save
+        would create the link for. They have no files to serve, but they're
+        still something the customer owns, so they keep their (empty) card
+        rather than vanishing from the page."""
+        purchases = (
             ProductPurchase.objects.filter(
-                user=self.request.user, payment_status=ProductPurchase.PaymentStatus.PAID
+                user=user, payment_status=ProductPurchase.PaymentStatus.PAID
             )
             .select_related("product", "product__product")
-            .prefetch_related("product__product__files")
-            .order_by("product__product_id", "-paid_at")
-            .distinct("product__product_id")
+            .order_by("product__name")
         )
+        seen_codes = set()
+        for purchase in purchases:
+            sku = purchase.product
+            if sku.product_id in seen_product_ids or sku.product_id is not None or sku.code in seen_codes:
+                continue
+            seen_codes.add(sku.code)
+            yield {
+                "id": sku.code,
+                "product_name": sku.name,
+                "cover_image_url": "",
+                "via_membership": False,
+                "files": [],
+            }
 
 
 class AccountDownloadFileView(APIView):
@@ -346,12 +371,7 @@ class AccountDownloadFileView(APIView):
         if not file or not file.storage_key:
             raise ValidationError({"detail": "File not found."})
 
-        purchase = ProductPurchase.objects.filter(
-            user=request.user,
-            product__product=file.product,
-            payment_status=ProductPurchase.PaymentStatus.PAID,
-        ).first()
-        if not purchase:
+        if not has_entitlement(request.user, file.product):
             raise ValidationError({"detail": "You don't have access to this file."})
 
         log_activity(
@@ -392,12 +412,7 @@ class AccountPluginBuildDownloadView(APIView):
         if not build:
             raise ValidationError({"detail": "File not found."})
 
-        purchase = ProductPurchase.objects.filter(
-            user=request.user,
-            product__product=build.product,
-            payment_status=ProductPurchase.PaymentStatus.PAID,
-        ).first()
-        if not purchase:
+        if not has_entitlement(request.user, build.product):
             raise ValidationError({"detail": "You don't have access to this file."})
 
         success, log, installer_bytes, installer_name = generate_installer_bytes(build)
@@ -578,6 +593,7 @@ def _resolve_checkout_items(raw_items):
         key = (slug, billing_period)
         qty_by_key[key] = qty_by_key.get(key, 0) + qty
 
+    promotions = live_promotions()
     resolved = []
     for (slug, billing_period), qty in qty_by_key.items():
         product = Product.objects.published().filter(slug=slug).first()
@@ -588,12 +604,10 @@ def _resolve_checkout_items(raw_items):
             raise ValidationError({"items": f"'{product.name}' isn't ready to purchase yet — try again shortly."})
         if billing_period and not product.is_subscription:
             raise ValidationError({"items": f"'{product.name}' isn't sold as a subscription."})
-        if billing_period == ProductPurchase.BillingPeriod.MONTHLY:
-            unit_price = product.monthly_price
-        elif billing_period == ProductPurchase.BillingPeriod.YEARLY:
-            unit_price = product.yearly_price
-        else:
-            unit_price = product.price
+        # Priced server-side, discount included — the client's cart carries a
+        # price it captured when the item was added, which is stale the moment
+        # a promotion starts or ends (and is trivially editable besides).
+        unit_price = unit_price_for(product, billing_period, promotion_for(product, promotions))
         if unit_price is None:
             raise ValidationError({"items": f"'{product.name}' doesn't have a price for that billing option."})
         resolved.append((product, sku, billing_period, unit_price, qty))
@@ -767,16 +781,22 @@ class PaymobWebhookView(APIView):
             logger.warning("Paymob webhook: no order reference found in payload: %s", body)
             return Response({"ok": True})
 
-        purchases = list(ProductPurchase.objects.filter(payment_reference=reference))
-        if not purchases:
-            logger.warning("Paymob webhook: no PENDING purchases found for reference %s", reference)
-            return Response({"ok": True})
-
         # Paymob only ever sends the masked last 4 digits here (source_data.pan),
         # never a full card number — see the field comment on the model.
         source_data = obj.get("source_data") or {}
         card_brand = (source_data.get("sub_type") or "")[:40]
         card_last4 = (source_data.get("pan") or "")[-4:]
+
+        # An All-Access membership checkout uses the same webhook and the same
+        # reference scheme (see membership.api.MembershipCheckoutView) — this is
+        # the only place either kind of payment ever becomes real.
+        if self._activate_membership(reference, card_brand, card_last4):
+            return Response({"ok": True})
+
+        purchases = list(ProductPurchase.objects.filter(payment_reference=reference))
+        if not purchases:
+            logger.warning("Paymob webhook: no PENDING purchases found for reference %s", reference)
+            return Response({"ok": True})
 
         now = timezone.now()
         for purchase in purchases:
@@ -796,6 +816,31 @@ class PaymobWebhookView(APIView):
             metadata={"item_count": len(purchases), "processor": "paymob", "reference": reference},
         )
         return Response({"ok": True})
+
+    @staticmethod
+    def _activate_membership(reference, card_brand, card_last4):
+        """Confirms an All-Access payment. Returns whether this reference was a
+        membership at all, so the product path is skipped when it was.
+
+        Re-delivery safe: activate_membership extends from the current expiry,
+        so a duplicate webhook for an already-active membership would add
+        another period — hence the early return on an already-ACTIVE row.
+        """
+        from membership.models import Membership
+        from membership.services import activate_membership
+
+        membership = Membership.objects.select_related("plan").filter(payment_reference=reference).first()
+        if membership is None:
+            return False
+        if membership.status != Membership.Status.ACTIVE:
+            activate_membership(membership, card_brand=card_brand, card_last4=card_last4)
+            log_activity(
+                membership.user,
+                ActivityVerb.ORDER_PLACED,
+                target_label=f"{membership.plan.name} membership",
+                metadata={"processor": "paymob", "reference": reference, "membership": True},
+            )
+        return True
 
 
 _expires_at_for = expires_at_for

@@ -1,0 +1,137 @@
+/* Deliberately the one saturated, full-bleed band on the site — it has to
+   out-shout the nav below it without borrowing the brand gold, which means
+   "selected / you are here" everywhere else. */
+.bar {
+  background: var(--error-fg);
+  color: var(--surface-0);
+  animation: slide-down var(--dur-slow) var(--ease-out) both;
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 56px;
+  padding-block: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--error-fg);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.headline {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+/* ── Clock ── */
+.clock {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 34px;
+}
+
+.value {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  /* Tabular figures stop the whole strip shifting as each digit changes. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.unitLabel {
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+}
+
+.cta {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  color: var(--error-fg);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  transition: transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.cta:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  opacity: 0.8;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+.close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* On a phone the headline takes its own line so the clock and badge stay
+   readable side by side rather than each wrapping alone. */
+@media (max-width: 640px) {
+  .inner {
+    gap: var(--space-3);
+    row-gap: var(--space-2);
+  }
+
+  .headline {
+    order: 3;
+    flex-basis: 100%;
+    font-size: var(--fs-xs);
+  }
+
+  .cta {
+    order: 4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .cta {
+    animation: none;
+    transition: none;
+  }
+}

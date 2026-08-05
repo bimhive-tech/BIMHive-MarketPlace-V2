@@ -8,6 +8,7 @@ from catalog.models.product import (
     ProductFile,
     ProductMedia,
 )
+from catalog.models.promotion import Promotion
 from catalog.models.taxonomy import Category, Collection, Partner, Tag
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "Collection",
     "Tag",
     "Partner",
+    "Promotion",
     "Product",
     "ProductMedia",
     "KeyFeature",

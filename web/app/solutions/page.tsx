@@ -4,6 +4,7 @@ import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
 import { CategoryCard } from "@/components/CategoryCard/CategoryCard";
 import { CollectionCard } from "@/components/CollectionCard/CollectionCard";
 import { getCategories, getCollections } from "@/lib/api";
+import { browsableCategories } from "@/lib/categories";
 
 import styles from "./page.module.css";
 
@@ -19,7 +20,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SolutionsPage() {
-  const [categories, collections] = await Promise.all([getCategories(), getCollections()]);
+  const [categoryTree, collections] = await Promise.all([getCategories(), getCollections()]);
+  const categories = browsableCategories(categoryTree);
 
   return (
     <div className={`container ${styles.page}`}>

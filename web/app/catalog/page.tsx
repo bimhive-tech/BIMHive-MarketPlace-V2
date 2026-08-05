@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { CategoryTree } from "@/components/CategoryTree/CategoryTree";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
-import { Icon } from "@/components/Icon/Icon";
 import { Pagination } from "@/components/Pagination/Pagination";
 import { ProductCard } from "@/components/ProductCard/ProductCard";
-import { CATEGORY_ICON_BY_SLUG } from "@/config/site";
 import { getCategories, getProducts } from "@/lib/api";
+import { findCategory } from "@/lib/categories";
 
 import styles from "./page.module.css";
 
@@ -29,7 +29,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     getCategories(),
     getProducts({ category, q, page }),
   ]);
-  const active = categories.find((c) => c.slug === category);
+  // A `category` param may name a root or one of its subcategories.
+  const active = findCategory(categories, category);
   const totalPages = Math.ceil(count / PAGE_SIZE);
 
   function buildHref(targetPage: number): string {
@@ -62,29 +63,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       <div className={styles.layout}>
         <aside className={styles.sidebar} aria-label="Filter by category">
           <h2 className={styles.filterHeading}>Categories</h2>
-          <ul className={styles.filterList}>
-            <li>
-              <Link
-                href={q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog"}
-                className={`${styles.filter} ${!category ? styles.active : ""}`}
-              >
-                <Icon name="grid" size={18} />
-                All Products
-              </Link>
-            </li>
-            {categories.map((cat) => (
-              <li key={cat.id}>
-                <Link
-                  href={`/catalog?category=${cat.slug}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
-                  className={`${styles.filter} ${category === cat.slug ? styles.active : ""}`}
-                >
-                  <Icon name={CATEGORY_ICON_BY_SLUG[cat.slug] ?? "wrench"} size={18} />
-                  {cat.name}
-                  <span className={styles.count}>{cat.product_count}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <CategoryTree categories={categories} activeSlug={category} searchQuery={q} showCounts />
         </aside>
 
         <div className={styles.main}>

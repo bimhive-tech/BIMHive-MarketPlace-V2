@@ -26,6 +26,7 @@ urlpatterns = [
     path("api/account/", include("reviews.account_urls")),
     path("api/account/", include("activity.account_urls")),
     path("api/account/", include("support.account_urls")),
+    path("api/account/", include("membership.account_urls")),
     # ── Admin portal API (staff-only) ──
     path("api/admin/", include("catalog.admin_urls")),
     path("api/admin/", include("licensing.admin_urls")),
@@ -33,9 +34,12 @@ urlpatterns = [
     path("api/admin/", include("reviews.admin_urls")),
     path("api/admin/", include("activity.admin_urls")),
     path("api/admin/", include("installer.urls")),
+    path("api/admin/", include("membership.admin_urls")),
     # ── Partner self-service API (partner-linked users only; product CRUD
     # itself is shared with staff via catalog.admin_urls, see IsStaffOrPartner) ──
     path("api/partner/", include("catalog.partner_urls")),
+    # ── All-Access membership (public plans; account + admin mounted above) ──
+    path("api/membership/", include("membership.urls")),
     # ── Storefront/catalog API ──
     path("api/", include("catalog.urls")),
 ]

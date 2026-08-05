@@ -1,0 +1,185 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+}
+
+.state {
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  background: var(--surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.planName {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+}
+
+.planMeta {
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+}
+
+/* ── Universal key ── */
+.keyBlock {
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--gold-100);
+}
+
+.keyLabel {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--gold-700);
+}
+
+.keyHint {
+  margin-top: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-600);
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.key {
+  flex: 1;
+  min-width: 220px;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  border: 1px solid var(--gold-300);
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, monospace;
+  font-size: var(--fs-sm);
+  color: var(--ink-900);
+  word-break: break-all;
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--gold-500);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--gold-700);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.copyBtn:hover {
+  background: var(--gold-200);
+}
+
+/* ── Facts ── */
+.facts {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+.factLabel {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--color-muted);
+}
+
+.factValue {
+  margin-top: var(--space-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-900);
+}
+
+/* ── Actions ── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.cancel {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: var(--fs-sm);
+  color: var(--error-fg);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--error-fg);
+}
+
+.endedBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.endedText {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  line-height: var(--lh-normal);
+}
+
+/* ── Included products ── */
+.includedTitle {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+  margin-bottom: var(--space-4);
+}
+
+.grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+@media (min-width: 640px) {
+  .facts {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copyBtn {
+    transition: none;
+  }
+}

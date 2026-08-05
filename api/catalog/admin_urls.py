@@ -12,6 +12,7 @@ from catalog.admin_api import (
     AdminProductFileListCreateView,
     AdminProductListCreateView,
     AdminProductMediaUploadView,
+    AdminPromotionViewSet,
     AdminStatsView,
     AdminTagViewSet,
 )
@@ -27,6 +28,7 @@ router.register("categories", AdminCategoryViewSet, basename="admin-category")
 router.register("tags", AdminTagViewSet, basename="admin-tag")
 router.register("partners", AdminPartnerViewSet, basename="admin-partner")
 router.register("collections", AdminCollectionViewSet, basename="admin-collection")
+router.register("promotions", AdminPromotionViewSet, basename="admin-promotion")
 
 urlpatterns = [
     path("stats", AdminStatsView.as_view(), name="admin-stats"),

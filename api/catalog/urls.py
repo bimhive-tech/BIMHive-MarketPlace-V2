@@ -8,7 +8,9 @@ from catalog.views import (
     DocumentationViewSet,
     PartnerViewSet,
     ProductViewSet,
+    cart_quote_api,
     home_api,
+    promotion_banner_api,
 )
 
 # trailing_slash=False: reads (getProducts/getCategories/getProduct in lib/api.ts)
@@ -26,5 +28,7 @@ router.register("documentation", DocumentationViewSet, basename="documentation")
 
 urlpatterns = [
     path("home", home_api, name="home-api"),
+    path("promotions/banner", promotion_banner_api, name="promotion-banner-api"),
+    path("cart/quote", cart_quote_api, name="cart-quote-api"),
     path("", include(router.urls)),
 ]

@@ -55,10 +55,12 @@ The Next.js dev server proxies `/api/*` to Django on `:8000`, so the app runs on
 ## Environment variables
 
 All config comes from `.env` (see [`.env.example`](.env.example) for the full annotated list). Key
-groups: Django core, `DATABASE_URL`, Cloudflare R2, licensing (`LICENSE_PEPPER`), and payments —
+groups: Django core, `DATABASE_URL`, Cloudflare R2, licensing (`LICENSE_PEPPER`), payments —
 Stripe/PayPal are scaffolded but unused; **Paymob is the one actually wired up** (`PAYMOB_SECRET_KEY`,
 `PAYMOB_PUBLIC_KEY`, `PAYMOB_HMAC_SECRET`, `PAYMOB_INTEGRATION_ID` — the last has no working default,
-see "Checkout" below). **Never commit `.env`.**
+see "Checkout" below) — and the storefront freshness-badge windows, `NEW_PRODUCT_BADGE_DAYS` /
+`UPDATED_PRODUCT_BADGE_DAYS` (both default `7`; either can be `0` to turn that badge off site-wide,
+see "Freshness badges" below). **Never commit `.env`.**
 
 **`R2_PUBLIC_BASE_URL` is still unset**, so product gallery images/covers and partner logos serve
 over a presigned link instead of a real permanent public URL (see `STORAGES["public_media"]` in
@@ -75,14 +77,17 @@ and everything switches to permanent URLs automatically.
 
 ```
 /web      Next.js frontend (routes, components, features, styles/tokens, lib/api)
-/api      Django backend (catalog, licensing, accounts, reviews, installer)
+/api      Django backend (catalog, licensing, accounts, reviews, installer, membership)
 /infra    docker-compose (Postgres + MinIO), deploy config
 design/   brand assets + UI mockups (design source of truth)
 ```
 
 ## Routes (built so far)
 
-**Storefront**: `/` (home), `/catalog` (browse + category filter), `/products/<slug>` (detail).
+**Storefront**: `/` (home — a rotating hero of discounted/featured products, no more static
+"Browse Solutions" button), `/catalog` (browse + category filter, now a two-level tree — one root
+category with subcategories under it), `/products/<slug>` (detail), `/membership` (All-Access
+pricing page — see "All-Access membership" below).
 **Cart**: `/cart` (real, localStorage-backed), `/checkout` (real order review + "Complete Purchase" —
 see "Checkout" below for why there's no card field yet), `/checkout/confirmation` (thank-you page).
 **Auth**: `/login`, `/signup` (session cookies, CSRF-protected).
@@ -91,7 +96,9 @@ keys, bound machines, a seat-usage indicator when a purchase allows more than on
 seat activates on one machine, once, with no customer self-service way to move it; see "Licensing"
 below), `/account/orders`, `/account/downloads`, `/account/profile` (full profile editor: name/company/
 job title/bio, change email, change password, delete account, plus a "Become a Seller"/"Partner"
-tab whose label and content track the account's seller-application state).
+tab whose label and content track the account's seller-application state), `/account/membership`
+(the customer's All-Access membership, its universal license key, and what that key unlocks — see
+"All-Access membership" below).
 **Become a seller**: `/sell` (marketing landing page — its sidebar promo on the homepage hides
 itself once the visitor already has a seller application), `/sell/apply` (auth-gated application
 form — company name + logo upload). Submitting creates a `Partner` in "pending" status linked to
@@ -111,9 +118,13 @@ files/**Installer Build** — upload a compiled `.dll` + `.addin` manifest per R
 resource/dependency files, and BIMHive packages them into a real `.exe` installer automatically; see
 "Auto-generated installers" below), `/admin-portal/{orders,customers,reviews,licenses}`,
 `/admin-portal/{categories,tags,partners,collections}` (taxonomy CRUD — Partners includes a
-Pending/Approved/Rejected review queue for seller applications), `/admin-portal/settings` (live
-system status), `/admin-portal/settings/{users,roles}` (role-based staff access). The same
-Installer Build tab is available to partners on their own products in `/partner-portal/products`.
+Pending/Approved/Rejected review queue for seller applications; Categories manages the
+root/subcategory tree — see "Categories" below), `/admin-portal/promotions` (time-boxed discount
+campaigns — see "Promotions" below), `/admin-portal/{membership-plans,memberships}` (All-Access
+tiers and individual customer memberships — see "All-Access membership" below),
+`/admin-portal/settings` (live system status), `/admin-portal/settings/{users,roles}` (role-based
+staff access). The same Installer Build tab is available to partners on their own products in
+`/partner-portal/products`.
 
 ## Auto-generated installers (built on demand, never cached)
 
@@ -451,18 +462,90 @@ now real, working pages — each backed by data that already existed, not a new 
   reply form that auto-tags `is_staff_reply`/`author`) — no dedicated Admin Portal page built yet,
   since that wasn't part of what was actually broken (the customer-facing "soon" tabs).
 
+## Categories: one root, subcategories underneath
+
+The storefront only sells one kind of thing — Revit plugins — so the taxonomy is exactly two
+levels deep: a single top-level category (**Revit Plugins**) with staff-defined subcategories
+under it (`Category.parent`, `catalog/migrations/0014_collapse_categories_to_revit_plugins.py`
+collapsed the old flat sibling-category list into this shape). `/api/categories` returns each root
+with its `children` nested and counted in one query; `?category=` on `/api/products` matches either
+a subcategory or its root (a root's count includes everything filed under its children). The admin
+Categories page (`/admin-portal/categories`) lets staff assign a `parent` — capped at one level:
+the API rejects nesting a subcategory under another subcategory, or turning a category that already
+has children into someone else's child.
+
+## Promotions: time-boxed discounts + the countdown bar
+
+`catalog.Promotion` is a percentage discount with a `[starts_at, ends_at)` window, a scope (every
+product / one category+its subcategories / a hand-picked list), and its own banner copy. Nothing
+about it is a cron job — a promotion is "live" purely by being inside its own window at request
+time (`Promotion.is_live`, `catalog/pricing.py`), so a discount turns on and off on its own with no
+scheduled task to run. Every storefront surface that shows or charges a price reads through
+`catalog/pricing.py` (`ProductCardSerializer`/`ProductDetailSerializer`'s `promotion` field, the
+cart's `POST /api/cart/quote` re-pricing, and `CheckoutView`) — so the price a customer sees is
+always the price checkout actually charges, never a client-side calculation. The countdown strip
+above the nav (`PromoBar.tsx`) polls `GET /api/promotions/banner` for whichever live promotion has
+`show_countdown=True` and the highest priority, and is dismissible for the session
+(`sessionStorage`, not permanent) via `X`. Manage campaigns at `/admin-portal/promotions`.
+
+## Freshness badges: New / Updated, self-expiring
+
+Two more server-decided, self-expiring badges, independent of promotions: `Product.is_new` (true
+for `NEW_PRODUCT_BADGE_DAYS` — default 7 — after `published_at`) and `Product.is_updated` (true for
+`UPDATED_PRODUCT_BADGE_DAYS` after `last_release_at`, which is stamped automatically whenever a
+published product's `version` field changes on save — see `Product._stamp_release_if_version_changed`).
+A product showing "New" never also shows "Updated" — one badge per card. Both windows are env-backed
+(`NEW_PRODUCT_BADGE_DAYS`/`UPDATED_PRODUCT_BADGE_DAYS`, either can be set to `0` to turn a badge off
+site-wide) and rendered by the shared `ProductBadges`/`ProductBadgesInline` components with a
+`prefers-reduced-motion`-gated drop-in + pulse animation.
+
+## All-Access membership: one subscription, one universal key
+
+Alongside buying products one at a time, a customer can subscribe to an **All-Access** plan and get
+every product that plan covers — the new `membership` app.
+
+- **Tiers, not a bundle list.** `MembershipPlan.rank` decides coverage: each `Product` optionally
+  points at the *lowest* plan tier that includes it (`Product.membership_plan`); a membership on a
+  given plan covers every product ranked at or below its own (`MembershipPlan.covers_plan`). A
+  product with no plan is excluded from All-Access entirely and stays buy-only. `/membership` is the
+  public pricing page; `/admin-portal/membership-plans` manages the tiers.
+- **One universal key, not one per product.** A `Membership` carries a single license key
+  (`BHX-….` — visibly distinct from a per-product `BH-…` key). The desktop plugins need **zero**
+  changes: `POST /api/license/activate` first tries the presented key as a normal per-product
+  purchase key exactly as before; only if that fails does it check whether the key belongs to a
+  membership, and if the membership's plan covers the requested product it mints (or refreshes) an
+  ordinary `ProductPurchase` owned by that membership on the spot (`membership/services.py::
+  resolve_membership_purchase`). Everything downstream — seats, machine binding, blocking,
+  downloads, `/account/downloads` — runs through the exact same code a bought license does, because
+  it *is* one.
+- **One switch to kill it.** Cancelling, refunding, or a staff revoke
+  (`/admin-portal/memberships` → Revoke) walks every purchase the membership ever minted and revokes
+  each one through the same `licensing.services.revoke_purchase_access` staff already use for a
+  normal order — the universal key stops opening anything immediately, with no per-product cleanup
+  step. Reinstating (staff, or a real Paymob payment via the same webhook `CheckoutView` uses) does
+  the reverse and re-opens everything the plan currently covers.
+- Buy-box cross-sell (`MembershipCallout.tsx`) shows "Or get it with {plan} from $X/mo" on any
+  covered product's page, or "Included in your plan — activate with your universal key" if the
+  viewer's own membership already covers it.
+
 ## API endpoints
 
-- Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`, `/api/collections/`
+- Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`,
+  `/api/categories/<slug>/` (root or subcategory), `/api/collections/`, `/api/promotions/banner`
+  (the live countdown-bar promotion, or `{"promotion": null}`), `POST /api/cart/quote` (re-prices a
+  localStorage cart's items against today's promotions — no auth needed, nothing it returns isn't
+  already public), `GET /api/membership/plans` (the `/membership` pricing page)
 - Auth: `GET /api/auth/csrf`, `GET|PATCH|DELETE /api/auth/me`, `POST /api/auth/{register,login,logout,change-password}`,
   `GET /api/auth/sessions` (the caller's own active sessions), `POST /api/auth/sessions/<key>/revoke`
   (sign out a different device — see "Account dashboard" above)
 - Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
   `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
-  CRUD at `/api/admin/{categories,tags,partners,collections,roles}`; `GET /api/admin/{licenses,orders,
-  users,customers,reviews}` plus their action routes (revoke/restore/extend/release a license, set an
-  order's status, update a user's role, `POST /api/admin/orders/<id>/seats` to set how many machines a
-  purchase may bind at once — see "Licensing" above). A product's `product_code` auto-syncs to its
+  CRUD at `/api/admin/{categories,tags,partners,collections,promotions,membership-plans,roles}`;
+  `GET /api/admin/{licenses,orders,users,customers,reviews}` plus their action routes
+  (revoke/restore/extend/release a license, set an order's status, update a user's role,
+  `POST /api/admin/orders/<id>/seats` to set how many machines a purchase may bind at once — see
+  "Licensing" above); `GET /api/admin/memberships`, `POST /api/admin/memberships/<id>/{revoke,
+  reinstate}` (see "All-Access membership" above). A product's `product_code` auto-syncs to its
   licensing SKU on save (see `catalog/signals.py`) — creating/editing/publishing a product is
   immediately reflected in what the activation API will authorize.
 - Partner self-service (auth-gated): `POST /api/partner/apply` (become a seller — company name +
@@ -497,7 +580,9 @@ now real, working pages — each backed by data that already existed, not a new 
   see "Free trials" above), `GET /api/account/subscriptions`, `GET /api/account/payment-methods`,
   `GET /api/account/activity`, `GET|POST /api/account/support/tickets`,
   `GET /api/account/support/tickets/<id>`, `POST /api/account/support/tickets/<id>/reply` (see
-  "Account dashboard" above).
+  "Account dashboard" above), `GET /api/account/membership`, `POST /api/account/membership/checkout`
+  (starts a Paymob payment for a plan — same PENDING-until-webhook flow as product checkout),
+  `POST /api/account/membership/cancel` (see "All-Access membership" above).
 - **Payment webhook (no auth, HMAC-verified instead): `POST /api/webhooks/paymob`** — registered at
   the URL root (not under `/api/account/`), the only place a checkout purchase ever becomes `PAID`;
   see "Checkout" above.

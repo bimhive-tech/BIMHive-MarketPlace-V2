@@ -19,12 +19,15 @@ const GROUPS: SidebarNavGroup[] = [
       { label: "Customers", href: "/admin-portal/customers", icon: "users", ready: true },
       { label: "Reviews", href: "/admin-portal/reviews", icon: "star", ready: true },
       { label: "Licenses", href: "/admin-portal/licenses", icon: "lock", ready: true },
+      { label: "Memberships", href: "/admin-portal/memberships", icon: "wallet", ready: true },
     ],
   },
   {
     heading: "Products & Content",
     items: [
       { label: "Products", href: "/admin-portal/products", icon: "puzzle", ready: true },
+      { label: "Promotions", href: "/admin-portal/promotions", icon: "bolt", ready: true },
+      { label: "Membership Plans", href: "/admin-portal/membership-plans", icon: "wallet", ready: true },
       { label: "Collections", href: "/admin-portal/collections", icon: "layers", ready: true },
       { label: "Categories", href: "/admin-portal/categories", icon: "grid", ready: true },
       { label: "Tags", href: "/admin-portal/tags", icon: "hash", ready: true },

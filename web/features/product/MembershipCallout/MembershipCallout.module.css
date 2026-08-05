@@ -1,0 +1,67 @@
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--gold-100);
+  border: 1px solid transparent;
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+/* Only the cross-sell version is a link; the "you already have this" version
+   is a plain callout and shouldn't invite a click. */
+a.callout:hover {
+  border-color: var(--gold-400);
+  background: var(--gold-200);
+}
+
+.owned {
+  background: var(--success-bg);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--gold-700);
+}
+
+.owned .icon {
+  color: var(--success-fg);
+}
+
+.title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--gold-700);
+}
+
+.owned .title {
+  color: var(--success-fg);
+}
+
+.text {
+  margin-top: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-600);
+  line-height: var(--lh-snug);
+}
+
+.link {
+  color: var(--gold-700);
+  text-decoration: underline;
+}
+
+.chevron {
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+  margin-left: auto;
+  color: var(--gold-700);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .callout {
+    transition: none;
+  }
+}

@@ -28,7 +28,53 @@ export const SITE = {
 } as const;
 
 /** Plain (non-dropdown) top-nav links — Solutions/Resources are mega menus, handled directly in Header.tsx. */
-export const NAV_LINKS = [{ label: "Categories", href: "/catalog" }] as const;
+export const NAV_LINKS = [
+  { label: "Categories", href: "/catalog" },
+  { label: "All-Access", href: "/membership" },
+] as const;
+
+/** The three reasons to subscribe, on /membership. */
+export const MEMBERSHIP_HIGHLIGHTS: { icon: IconName; title: string; text: string }[] = [
+  {
+    icon: "wallet",
+    title: "One price, many tools",
+    text: "Pay once a month or once a year instead of buying each plugin separately.",
+  },
+  {
+    icon: "lock",
+    title: "One universal key",
+    text: "A single license key activates every product your plan covers — no key per plugin.",
+  },
+  {
+    icon: "refresh",
+    title: "Grows while you're subscribed",
+    text: "Products added to your tier are unlocked automatically, at no extra cost.",
+  },
+];
+
+/** Answers to what customers actually ask before subscribing. */
+export const MEMBERSHIP_FAQ: { question: string; answer: string }[] = [
+  {
+    question: "How does the universal key work?",
+    answer:
+      "Your membership comes with one key, shown on your account page. Paste it into any product your plan covers and it activates — the same key everywhere, instead of one per plugin.",
+  },
+  {
+    question: "How many machines can I use?",
+    answer:
+      "Each plan sets how many machines you can run any single product on. The number is listed on the plan card, and it applies per product, not across your whole account.",
+  },
+  {
+    question: "What happens if I cancel?",
+    answer:
+      "Access ends when you cancel and the universal key stops activating. Anything you bought outright is unaffected — those licenses are yours permanently.",
+  },
+  {
+    question: "Is every product included?",
+    answer:
+      "Most are. Some are reserved for the higher tier, and a few are sold on their own only. Each product page says which plan covers it, if any.",
+  },
+];
 
 /** Category slug → icon, shared between /catalog's filter sidebar and the header's Solutions mega menu. */
 export const CATEGORY_ICON_BY_SLUG: Record<string, IconName> = {

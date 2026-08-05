@@ -1,0 +1,23 @@
+/* Promotion-specific bits layered on the shared AdminTable styles. */
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.hint {
+  grid-column: 1 / -1;
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+}
+
+.discount {
+  font-weight: var(--fw-bold);
+  color: var(--error-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.window {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  white-space: nowrap;
+}

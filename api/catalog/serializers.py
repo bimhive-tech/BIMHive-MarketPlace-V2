@@ -16,27 +16,56 @@ from catalog.models import (
     Partner,
     Product,
     ProductMedia,
+    Promotion,
     Tag,
 )
 from catalog.models.product import ProductType
+from catalog.pricing import promotion_for, sale_prices
 from catalog.storage import refresh_storage_url
 from reviews.models import Review
 
 
-class CategorySerializer(serializers.ModelSerializer):
+def published_product_count(category):
+    """Products filed directly in `category`.
+
+    Call sites annotate `product_count` (see catalog/views.py) so a whole list
+    costs one query rather than one COUNT per category; the live count is the
+    fallback for an unannotated instance (e.g. the single nested category on a
+    product detail page).
+    """
+    count = getattr(category, "product_count", None)
+    return count if count is not None else category.products.published().count()
+
+
+class SubcategorySerializer(serializers.ModelSerializer):
+    """A child category — the same shape as its parent minus the `children` key,
+    which stops the nesting at one level. The storefront taxonomy is deliberately
+    two deep (one root, its subcategories); anything deeper wouldn't render."""
+
+    parent_slug = serializers.CharField(source="parent.slug", read_only=True, default="")
     product_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
-        fields = ["id", "name", "slug", "icon", "description", "product_count"]
+        fields = ["id", "name", "slug", "icon", "description", "parent_slug", "product_count"]
 
     def get_product_count(self, obj):
-        # Queryset call sites annotate `product_count` (see catalog/views.py) so this
-        # is a single query for the whole list rather than one COUNT per category.
-        # Fall back to a live count only when an unannotated instance slips through
-        # (e.g. the single nested category on a product detail page).
-        count = getattr(obj, "product_count", None)
-        return count if count is not None else obj.products.published().count()
+        return published_product_count(obj)
+
+
+class CategorySerializer(SubcategorySerializer):
+    children = SubcategorySerializer(many=True, read_only=True)
+
+    class Meta(SubcategorySerializer.Meta):
+        fields = SubcategorySerializer.Meta.fields + ["children"]
+
+    def get_product_count(self, obj):
+        """A root's count includes its subcategories' products — a product sits
+        in exactly one category, so a root whose products have all been filed
+        under subcategories would otherwise read as empty."""
+        return published_product_count(obj) + sum(
+            published_product_count(child) for child in obj.children.all()
+        )
 
 
 class CollectionSerializer(serializers.ModelSerializer):
@@ -162,11 +191,84 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
         return value
 
 
-class ProductCardSerializer(serializers.ModelSerializer):
+def _money(amount):
+    """A price as the same 2-decimal string DRF renders DecimalFields as."""
+    return None if amount is None else f"{amount:.2f}"
+
+
+class PromotionBannerSerializer(serializers.ModelSerializer):
+    """What the countdown bar above the nav needs — copy, the deadline it counts
+    down to, and where its button goes. Deliberately not the scope/product list:
+    the bar advertises the offer, individual cards show who's actually in it."""
+
+    class Meta:
+        model = Promotion
+        fields = [
+            "id", "badge_label", "headline", "discount_percent", "ends_at", "cta_label", "cta_url",
+        ]
+
+
+class ProductPromotionMixin(serializers.Serializer):
+    """Adds the `promotion` block — what this product costs *right now* if a
+    live promotion covers it, alongside the untouched list prices.
+
+    Every price field on the product itself stays the list price, so the
+    frontend can strike it through next to the sale price without a second
+    lookup. Views pass the already-fetched live promotions in via serializer
+    context (`promotions`) so a grid of 24 cards doesn't re-query per row.
+    """
+
+    promotion = serializers.SerializerMethodField()
+
+    def get_promotion(self, obj):
+        promo = promotion_for(obj, self.context.get("promotions"))
+        if promo is None:
+            return None
+        prices = sale_prices(obj, promo)
+        return {
+            "label": promo.badge_label,
+            "headline": promo.headline,
+            "discount_percent": promo.discount_percent,
+            "ends_at": promo.ends_at,
+            # Strings, matching how DRF renders the product's own price fields —
+            # money as a JSON float invites rounding drift on the client.
+            "price": _money(prices["price"]),
+            "monthly_price": _money(prices["monthly_price"]),
+            "yearly_price": _money(prices["yearly_price"]),
+        }
+
+
+class ProductMembershipMixin(serializers.Serializer):
+    """Adds `membership` — the All-Access tier that includes this product, and
+    whether the person looking at it already holds a membership that covers it.
+
+    Null when the product is excluded from All-Access. Views pass the viewer's
+    membership in via serializer context (`viewer_membership`) so a grid doesn't
+    re-look-it-up per card.
+    """
+
+    membership = serializers.SerializerMethodField()
+
+    def get_membership(self, obj):
+        plan = obj.membership_plan
+        if plan is None:
+            return None
+        viewer_membership = self.context.get("viewer_membership")
+        return {
+            "plan_name": plan.name,
+            "plan_slug": plan.slug,
+            "monthly_price": _money(plan.monthly_price),
+            "included_in_my_plan": bool(viewer_membership and viewer_membership.covers(obj)),
+        }
+
+
+class ProductCardSerializer(ProductPromotionMixin, ProductMembershipMixin, serializers.ModelSerializer):
     category = serializers.CharField(source="category.name", read_only=True)
     category_slug = serializers.CharField(source="category.slug", read_only=True)
     price_label = serializers.CharField(read_only=True)
     is_subscription = serializers.BooleanField(read_only=True)
+    is_new = serializers.BooleanField(read_only=True)
+    is_updated = serializers.BooleanField(read_only=True)
     cover_image_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -175,13 +277,14 @@ class ProductCardSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "type", "short_description", "cover_image_url",
             "price", "price_label", "monthly_price", "yearly_price", "is_subscription", "currency",
             "rating_average", "rating_count", "download_count", "category", "category_slug", "is_featured",
+            "promotion", "is_new", "is_updated", "version", "membership",
         ]
 
     def get_cover_image_url(self, obj):
         return refresh_storage_url(obj.cover_image_url)
 
 
-class ProductDetailSerializer(serializers.ModelSerializer):
+class ProductDetailSerializer(ProductPromotionMixin, ProductMembershipMixin, serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     partner = PartnerSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
@@ -195,6 +298,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     is_free = serializers.BooleanField(read_only=True)
     has_trial = serializers.BooleanField(read_only=True)
     is_subscription = serializers.BooleanField(read_only=True)
+    is_new = serializers.BooleanField(read_only=True)
+    is_updated = serializers.BooleanField(read_only=True)
     yearly_savings_percent = serializers.IntegerField(read_only=True)
     rating_breakdown = serializers.SerializerMethodField()
     trial_builds = serializers.SerializerMethodField()
@@ -209,7 +314,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "default_trial_days", "default_trial_hours", "default_trial_minutes", "has_trial",
             "trial_builds", "cover_image_url", "version", "released_at",
             "rating_average", "rating_count", "download_count", "rating_breakdown",
-            "seo_title", "seo_description",
+            "seo_title", "seo_description", "promotion", "membership",
+            "is_new", "is_updated", "last_release_at",
             "category", "partner", "tags", "media", "features", "changelog",
             "compatibility", "documentation", "reviews",
         ]

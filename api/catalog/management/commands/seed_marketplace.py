@@ -27,8 +27,11 @@ from catalog.models import (
 from catalog.models.product import ProductStatus, ProductType
 from reviews.models import Review, refresh_product_rating
 
-CATEGORIES = [
-    ("Revit Plugins", "puzzle"),
+# The storefront has exactly ONE top-level category; everything else is a
+# subcategory of it (see migration 0014). Products below are filed against
+# these names directly, root or child.
+ROOT_CATEGORY = ("Revit Plugins", "puzzle")
+SUBCATEGORIES = [
     ("Automation Tools", "bolt"),
     ("Dynamo Scripts", "workflow"),
     ("BIM Libraries", "library"),
@@ -256,10 +259,15 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        categories = {
-            name: Category.objects.get_or_create(name=name, defaults={"icon": icon, "sort_order": i})[0]
-            for i, (name, icon) in enumerate(CATEGORIES)
-        }
+        root_name, root_icon = ROOT_CATEGORY
+        root = Category.objects.get_or_create(
+            name=root_name, defaults={"icon": root_icon, "sort_order": 0}
+        )[0]
+        categories = {root_name: root}
+        for i, (name, icon) in enumerate(SUBCATEGORIES, start=1):
+            categories[name] = Category.objects.get_or_create(
+                name=name, defaults={"icon": icon, "sort_order": i, "parent": root}
+            )[0]
         partners = {
             name: Partner.objects.get_or_create(
                 name=name, defaults={"tagline": tagline, "is_verified": verified}
@@ -277,7 +285,7 @@ class Command(BaseCommand):
             self._seed_product(spec, categories, partners, collections)
 
         self.stdout.write(self.style.SUCCESS(
-            f"Seeded {len(CATEGORIES)} categories, {len(PARTNERS)} partners, "
+            f"Seeded 1 category + {len(SUBCATEGORIES)} subcategories, {len(PARTNERS)} partners, "
             f"{len(COLLECTIONS)} collections, {len(PRODUCTS)} products."
         ))
 

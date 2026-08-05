@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumb } from "@/components/Breadcrumb/Breadcrumb";
 import { Icon, type IconName } from "@/components/Icon/Icon";
+import { ProductBadgesInline } from "@/components/ProductBadges/ProductBadges";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { SITE } from "@/config/site";
 import { BuyBox } from "@/features/product/BuyBox/BuyBox";
@@ -100,6 +101,7 @@ export default async function ProductPage({ params }: PageProps) {
 
             <div className={styles.infoCol}>
               <p className={styles.eyebrow}>{product.partner?.name ?? SITE.name}</p>
+              <ProductBadgesInline product={product} />
               <h1 className={styles.title}>{product.name}</h1>
               <p className={styles.tagline}>{product.short_description}</p>
 

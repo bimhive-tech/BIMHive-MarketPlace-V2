@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
 import { CATEGORY_ICON_BY_SLUG, COLLECTION_ICON_BY_SLUG } from "@/config/site";
+import { browsableCategories } from "@/lib/categories";
 import type { Category, Collection } from "@/lib/types";
 
 import styles from "./HeaderPanels.module.css";
@@ -22,20 +23,23 @@ function byProductCount<T extends { product_count: number }>(items: T[]): T[] {
  * runs during `next build`'s static prerendering — Header renders on every
  * page, and the API isn't reachable yet at that point in the Docker build. */
 export function SolutionsPanel() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryTree, setCategoryTree] = useState<Category[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
     fetch("/api/categories")
       .then((res) => res.json())
-      .then(setCategories)
-      .catch(() => setCategories([]));
+      .then(setCategoryTree)
+      .catch(() => setCategoryTree([]));
     fetch("/api/collections")
       .then((res) => res.json())
       .then(setCollections)
       .catch(() => setCollections([]));
   }, []);
 
+  // Subcategories, not the single root they all hang off — a one-item
+  // "Revit Plugins" column tells a browsing customer nothing.
+  const categories = browsableCategories(categoryTree);
   const topCollections = byProductCount(collections).slice(0, MAX_PER_COLUMN);
   const topCategories = byProductCount(categories).slice(0, MAX_PER_COLUMN);
 

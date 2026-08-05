@@ -5,16 +5,23 @@ authenticated admin API endpoints).
 """
 from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from catalog.models import Category, Collection, Documentation, Partner, Product
 from catalog.models.product import ProductStatus, ProductVisibility
+from catalog.pricing import (
+    banner_promotion,
+    live_promotions,
+    promotion_for,
+    sale_prices,
+    unit_price_for,
+)
 from catalog.serializers import (
     CategorySerializer,
     CollectionSerializer,
@@ -23,14 +30,16 @@ from catalog.serializers import (
     PartnerSerializer,
     ProductCardSerializer,
     ProductDetailSerializer,
+    PromotionBannerSerializer,
     ReviewCreateSerializer,
     ReviewSerializer,
 )
+from membership.services import active_membership_for
 from reviews.models import Review
 
 
 def _published_products():
-    return Product.objects.published().select_related("category", "partner")
+    return Product.objects.published().select_related("category", "partner", "membership_plan")
 
 
 def _categories_with_counts(qs=None):
@@ -42,6 +51,14 @@ def _categories_with_counts(qs=None):
             filter=Q(products__status=ProductStatus.PUBLISHED, products__visibility=ProductVisibility.PUBLIC),
             distinct=True,
         )
+    )
+
+
+def _root_categories():
+    """The storefront sidebar's tree: top-level categories with their
+    subcategories nested and counted in the same pair of queries."""
+    return _categories_with_counts(Category.objects.filter(parent__isnull=True)).prefetch_related(
+        Prefetch("children", queryset=_categories_with_counts())
     )
 
 
@@ -85,7 +102,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         partner = self.request.query_params.get("partner")
         search = self.request.query_params.get("q")
         if category:
-            qs = qs.filter(category__slug=category)
+            # Matches the category itself OR anything filed under one of its
+            # subcategories, so the root ("Revit Plugins") shows the whole
+            # catalog while a subcategory narrows to just its own products.
+            qs = qs.filter(Q(category__slug=category) | Q(category__parent__slug=category))
         if product_type:
             qs = qs.filter(type=product_type)
         if collection:
@@ -105,6 +125,15 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == "reviews":
             return ReviewCreateSerializer
         return ProductDetailSerializer if self.action == "retrieve" else ProductCardSerializer
+
+    def get_serializer_context(self):
+        # Both fetched once per request, not once per product — see
+        # catalog.pricing.live_promotions and the serializer mixins.
+        return {
+            **super().get_serializer_context(),
+            "promotions": live_promotions(),
+            "viewer_membership": active_membership_for(self.request.user),
+        }
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def reviews(self, request, slug=None):
@@ -140,9 +169,17 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = _categories_with_counts(Category.objects.filter(parent__isnull=True))
     serializer_class = CategorySerializer
     lookup_field = "slug"
+
+    def get_queryset(self):
+        # Detail is looked up across every category, not just roots — a
+        # subcategory URL has to resolve too.
+        if self.action == "retrieve":
+            return _categories_with_counts().prefetch_related(
+                Prefetch("children", queryset=_categories_with_counts())
+            )
+        return _root_categories()
 
 
 class CollectionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -183,18 +220,102 @@ class DocumentationViewSet(viewsets.ReadOnlyModelViewSet):
 
 @api_view(["GET"])
 def home_api(request):
-    """Everything the homepage needs in one call: categories, featured products, collections."""
-    featured = _published_products().filter(is_featured=True)[:8]
+    """Everything the homepage needs in one call: categories, featured products,
+    collections, and the products the hero rotates through."""
+    promotions = live_promotions()
+    context = {"promotions": promotions, "viewer_membership": active_membership_for(request.user)}
+    featured = list(_published_products().filter(is_featured=True)[:8])
     if not featured:
-        featured = _published_products()[:8]
+        featured = list(_published_products()[:8])
     return Response(
         {
-            "categories": CategorySerializer(
-                _categories_with_counts(Category.objects.filter(parent__isnull=True)), many=True
-            ).data,
-            "featured_products": ProductCardSerializer(featured, many=True).data,
+            "categories": CategorySerializer(_root_categories(), many=True).data,
+            "featured_products": ProductCardSerializer(featured, many=True, context=context).data,
             "collections": CollectionSerializer(
                 _collections_with_counts(Collection.objects.filter(is_featured=True))[:8], many=True
             ).data,
+            "spotlight_products": ProductCardSerializer(
+                _spotlight_products(promotions), many=True, context=context
+            ).data,
         }
     )
+
+
+def _spotlight_products(promotions, limit=6):
+    """What the hero carousel rotates through: discounted products first (a live
+    price is the most compelling thing to lead with), topped up with featured
+    ones so the hero never runs short on a day with no promotion."""
+    products = list(_published_products())
+    discounted = [p for p in products if promotion_for(p, promotions)]
+    rest = [p for p in products if p not in discounted and p.is_featured]
+    return (discounted + rest)[:limit]
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def cart_quote_api(request):
+    """Re-prices a cart against today's promotions.
+
+    The cart is localStorage-only and stores the price captured when each item
+    was added, which goes stale the moment a promotion starts or ends. The cart
+    page calls this on load so what the customer sees matches what CheckoutView
+    will actually charge (which recomputes the same way — see
+    catalog.pricing.unit_price_for).
+
+    POST because the cart goes in the body rather than the URL, but it is a pure
+    read of public catalog data — hence no authentication (which also keeps
+    SessionAuthentication's CSRF check off a request that changes nothing, so an
+    anonymous visitor's cart doesn't need a token round-trip just to see a price).
+    """
+    from licensing.models import ProductPurchase
+
+    items = request.data.get("items")
+    if not isinstance(items, list):
+        raise ValidationError({"items": "Expected a list of cart items."})
+
+    valid_periods = {choice for choice, _ in ProductPurchase.BillingPeriod.choices}
+    promotions = live_promotions()
+    slugs = {(item or {}).get("slug") for item in items}
+    products = {p.slug: p for p in _published_products().filter(slug__in=filter(None, slugs))}
+
+    quotes = []
+    for item in items:
+        product = products.get((item or {}).get("slug"))
+        billing_period = ((item or {}).get("billingPeriod") or "").strip()
+        if not product or billing_period not in valid_periods:
+            # Unknown slug, unpublished product, or a nonsense interval: no
+            # quote. The cart drops the line rather than guessing a price.
+            continue
+        promo = promotion_for(product, promotions)
+        unit_price = unit_price_for(product, billing_period, promo)
+        if unit_price is None:
+            continue
+        quotes.append(
+            {
+                "slug": product.slug,
+                "billing_period": billing_period,
+                "unit_price": f"{unit_price:.2f}",
+                "discount_percent": promo.discount_percent if promo else 0,
+                "monthly_price": _quoted(product, promo, "monthly_price"),
+                "yearly_price": _quoted(product, promo, "yearly_price"),
+            }
+        )
+    return Response({"items": quotes})
+
+
+def _quoted(product, promotion, field):
+    """One of a subscription's interval prices, discount applied, as a string —
+    None when the product isn't sold on that interval."""
+    price = sale_prices(product, promotion).get(field) if promotion else getattr(product, field)
+    return None if price is None else f"{price:.2f}"
+
+
+@api_view(["GET"])
+def promotion_banner_api(request):
+    """The countdown bar above the nav. `promotion` is null when nothing is
+    running — the bar renders nothing rather than a stale or empty offer.
+    Enveloped rather than returning a bare null, which DRF renders as an empty
+    body with no content type."""
+    promo = banner_promotion()
+    return Response({"promotion": PromotionBannerSerializer(promo).data if promo else None})

@@ -1,0 +1,76 @@
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+  /* Each badge drops in on mount so a card that just gained one reads as a
+     change, not as something that was always there. */
+  animation: badge-drop var(--dur-base) var(--ease-out) both;
+}
+
+.discount {
+  background: var(--error-fg);
+  color: var(--surface-0);
+}
+
+/* "New" is the loudest signal on the card, so it gets the brand gold plus a
+   slow breathing glow — the one deliberately animated element here. */
+.new {
+  background: var(--gold-600);
+  color: var(--surface-0);
+  animation: badge-drop var(--dur-base) var(--ease-out) both,
+    badge-pulse 2.4s var(--ease-standard) 0.4s infinite;
+}
+
+.updated {
+  background: var(--gold-100);
+  color: var(--gold-700);
+  border: 1px solid var(--gold-300);
+}
+
+/* Detail-page placement: sits in the flow next to the title rather than
+   floating over an image. */
+.inline .badges {
+  position: static;
+}
+
+@keyframes badge-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes badge-pulse {
+  0%,
+  100% {
+    box-shadow: var(--shadow-sm);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(192, 160, 101, 0.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge,
+  .new {
+    animation: none;
+  }
+}

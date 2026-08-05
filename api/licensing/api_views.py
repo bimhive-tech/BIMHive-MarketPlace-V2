@@ -146,6 +146,26 @@ def _no_seats_denied_response(machine_license):
     )
 
 
+def _membership_purchase(license_key, product):
+    """Resolve an All-Access universal key into a purchase for `product`.
+
+    Three outcomes, each deliberate:
+      - not a membership key at all       → None, and the caller denies as usual
+      - a membership that doesn't cover   → None; the plugin's own tier gate is
+        the plan assignment, and a wrong-tier key is no more valid than a
+        stranger's
+      - a membership in any other state   → the (possibly revoked) purchase, so
+        an expired or cancelled membership reports "expired"/"cancelled" through
+        the normal denial path instead of a generic "unknown key"
+    """
+    from membership.services import membership_for_key, resolve_membership_purchase
+
+    membership = membership_for_key(license_key)
+    if membership is None:
+        return None
+    return resolve_membership_purchase(membership, product)
+
+
 def _trial_already_used_response(machine_license):
     return _signed_response(
         {
@@ -257,6 +277,13 @@ def license_activate_api(request):
             .select_related("user")
             .first()
         )
+        if matched_purchase is None:
+            # Not a per-product key — it may be an All-Access membership's
+            # universal one, which activates any product its plan covers. This
+            # resolves to an ordinary ProductPurchase (minted on first use), so
+            # everything below — seats, binding, blocking, expiry — runs exactly
+            # as it does for a bought license. See membership/services.py.
+            matched_purchase = _membership_purchase(license_key, product)
         if matched_purchase and matched_purchase.payment_status == ProductPurchase.PaymentStatus.PAID:
             paid_purchase = matched_purchase
     elif machine_license and machine_license.purchase_id:

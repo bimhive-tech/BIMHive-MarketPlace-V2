@@ -8,6 +8,7 @@ import type {
   DocumentationDetail,
   DocumentationListItem,
   HomeData,
+  MembershipPlan,
   Paginated,
   Partner,
   ProductCard,
@@ -29,6 +30,11 @@ async function getJSON<T>(path: string, revalidate = 60): Promise<T> {
 
 export function getHome() {
   return getJSON<HomeData>("/api/home");
+}
+
+export async function getMembershipPlans(): Promise<MembershipPlan[]> {
+  const { plans } = await getJSON<{ plans: MembershipPlan[] }>("/api/membership/plans");
+  return plans;
 }
 
 interface GetProductsParams {

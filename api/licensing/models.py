@@ -114,6 +114,18 @@ class ProductPurchase(models.Model):
     # flagged so the account UI can label it "Trial" and so
     # /api/license/activate can report status "trial" instead of "paid".
     is_trial = models.BooleanField(default=False)
+    # Set when this purchase exists only because an All-Access membership covers
+    # the product — minted on first activation with the membership's universal
+    # key, never bought directly (see membership/services.py). Its expiry and
+    # status track the membership's, and ending the membership revokes every
+    # purchase pointing at it. Null for anything a customer actually paid for.
+    source_membership = models.ForeignKey(
+        "membership.Membership",
+        on_delete=models.CASCADE,
+        related_name="granted_purchases",
+        null=True,
+        blank=True,
+    )
     # "" = one-time/perpetual (the default, and every purchase before this
     # field existed) — set by CheckoutView when the buyer picks a recurring
     # interval; PaymobWebhookView reads it to compute `expires_at` once
@@ -160,7 +172,17 @@ class ProductPurchase(models.Model):
                 fields=["user", "product"],
                 condition=models.Q(is_trial=True),
                 name="one_trial_purchase_per_user_product",
-            )
+            ),
+            # A membership grants at most ONE purchase per product. Without this
+            # at the DB level, two activations arriving together for the same
+            # product could each pass membership.services' get_or_create check
+            # before either committed and mint two membership-backed keys for
+            # the same entitlement.
+            models.UniqueConstraint(
+                fields=["user", "product", "source_membership"],
+                condition=models.Q(source_membership__isnull=False),
+                name="one_membership_purchase_per_user_product",
+            ),
         ]
 
     def __str__(self):

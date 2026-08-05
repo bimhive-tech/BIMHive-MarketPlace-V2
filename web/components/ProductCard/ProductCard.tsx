@@ -1,9 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { Icon } from "@/components/Icon/Icon";
+import { PriceTag } from "@/components/PriceTag/PriceTag";
+import { ProductBadges } from "@/components/ProductBadges/ProductBadges";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { WireframeThumb } from "@/components/WireframeThumb/WireframeThumb";
 import { QuickAddButton } from "@/features/cart/QuickAddButton/QuickAddButton";
+import { unitPrice } from "@/lib/pricing";
 import type { ProductCard as ProductCardType } from "@/lib/types";
 
 import styles from "./ProductCard.module.css";
@@ -23,6 +27,9 @@ export function ProductCard({ product }: { product: ProductCardType }) {
         ) : (
           <WireframeThumb seed={product.slug} label={product.name} />
         )}
+        <span className={styles.badgeSlot}>
+          <ProductBadges product={product} />
+        </span>
       </Link>
 
       <div className={styles.body}>
@@ -31,9 +38,25 @@ export function ProductCard({ product }: { product: ProductCardType }) {
         </Link>
         <p className={styles.desc}>{product.short_description}</p>
 
+        {product.membership && (
+          <p className={styles.membership}>
+            {product.membership.included_in_my_plan ? (
+              <>
+                <Icon name="check-circle" size={14} />
+                In your All-Access plan
+              </>
+            ) : (
+              <>
+                <Icon name="wallet" size={14} />
+                Free with {product.membership.plan_name}
+              </>
+            )}
+          </p>
+        )}
+
         <div className={styles.footer}>
           <div>
-            <span className={styles.price}>{product.price_label}</span>
+            <PriceTag product={product} size="lg" />
             <div className={styles.rating}>
               <StarRating value={Number(product.rating_average)} count={product.rating_count} />
             </div>
@@ -43,7 +66,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
             slug={product.slug}
             name={product.name}
             coverImageUrl={product.cover_image_url}
-            price={Number(product.price)}
+            price={unitPrice(product)}
             currency={product.currency}
           />
         </div>

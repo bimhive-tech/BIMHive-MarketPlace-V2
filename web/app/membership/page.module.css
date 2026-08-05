@@ -1,0 +1,129 @@
+.page {
+  padding-block: var(--space-6) var(--space-10);
+}
+
+/* ── Hero ── */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: center;
+  text-align: center;
+  padding-block: var(--space-7) var(--space-8);
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--gold-700);
+}
+
+.title {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--color-heading);
+}
+
+.accent {
+  color: var(--gold-700);
+}
+
+.sub {
+  font-size: var(--fs-md);
+  color: var(--ink-600);
+  line-height: var(--lh-normal);
+}
+
+.highlights {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  text-align: left;
+  list-style: none;
+  width: 100%;
+}
+
+.highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.highlightIcon {
+  flex-shrink: 0;
+  color: var(--gold-500);
+}
+
+.highlightTitle {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-heading);
+}
+
+.highlightText {
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+  line-height: var(--lh-snug);
+}
+
+/* ── Sections ── */
+.section {
+  padding-block: var(--space-7);
+}
+
+.sectionTitle {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+  margin-bottom: var(--space-5);
+  text-align: center;
+}
+
+.productGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* ── FAQ ── */
+.faq {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.faqItem {
+  padding: var(--space-5);
+  background: var(--surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.faqQuestion {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--color-heading);
+  margin-bottom: var(--space-2);
+}
+
+.faqAnswer {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  line-height: var(--lh-normal);
+}
+
+@media (min-width: 768px) {
+  .title {
+    font-size: var(--fs-3xl);
+  }
+
+  .highlights {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

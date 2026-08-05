@@ -11,6 +11,8 @@ import { AccountApiError, claimFreeProduct } from "@/lib/accountApi";
 import { me } from "@/lib/auth";
 import { formatPrice } from "@/config/site";
 import { type BillingPeriod, useCart } from "@/lib/cart";
+import { listPrice, unitPrice as priceForPeriod } from "@/lib/pricing";
+import { MembershipCallout } from "@/features/product/MembershipCallout/MembershipCallout";
 import { TrialDownloadCard } from "@/features/product/TrialDownloadCard/TrialDownloadCard";
 import type { ProductDetail, User } from "@/lib/types";
 
@@ -94,6 +96,14 @@ function FreeBuyBox({ product }: { product: ProductDetail }) {
   );
 }
 
+/** A subscription interval's price for the cart, discount included — undefined
+ * when this product isn't sold on that interval at all. */
+function subscriptionPrice(product: ProductDetail, interval: "monthly" | "yearly"): number | undefined {
+  const listed = interval === "monthly" ? product.monthly_price : product.yearly_price;
+  if (!product.is_subscription || listed == null) return undefined;
+  return priceForPeriod(product, interval);
+}
+
 function PaidBuyBox({ product }: { product: ProductDetail }) {
   const router = useRouter();
   const { items, addItem, setQty } = useCart();
@@ -103,9 +113,10 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("yearly");
 
   const billingPeriod: BillingPeriod = product.is_subscription ? billingInterval : "";
-  const unitPrice = !product.is_subscription
-    ? Number(product.price)
-    : Number((billingInterval === "yearly" ? product.yearly_price : product.monthly_price) ?? 0);
+  // Discount included when a promotion is live — the same figure checkout
+  // recomputes server-side (see lib/pricing.ts).
+  const unitPrice = priceForPeriod(product, billingPeriod);
+  const wasPrice = listPrice(product, billingPeriod);
   const cartItem = items.find((i) => i.productId === product.id && (i.billingPeriod ?? "") === billingPeriod);
 
   function handleAddToCart() {
@@ -120,9 +131,10 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
       // Only set for a subscription — and only when that interval actually
       // has a price (a monthly-only or yearly-only subscription leaves the
       // other one null) — lets the cart/checkout switch monthly<->yearly
-      // later without a fresh API call (see lib/cart.tsx).
-      monthlyPrice: product.is_subscription && product.monthly_price != null ? Number(product.monthly_price) : undefined,
-      yearlyPrice: product.is_subscription && product.yearly_price != null ? Number(product.yearly_price) : undefined,
+      // later without a fresh API call (see lib/cart.tsx). Discounted, so
+      // switching interval in the cart doesn't jump back to list price.
+      monthlyPrice: subscriptionPrice(product, "monthly"),
+      yearlyPrice: subscriptionPrice(product, "yearly"),
     });
   }
 
@@ -142,14 +154,24 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
       )}
 
       <div className={styles.price}>
-        {formatPrice(unitPrice, product.currency)}
+        <span className={product.promotion ? styles.priceSale : undefined}>
+          {formatPrice(unitPrice, product.currency)}
+        </span>
         {product.is_subscription && (
           <span className={styles.priceInterval}>/{billingInterval === "yearly" ? "yr" : "mo"}</span>
         )}
+        {wasPrice !== null && (
+          <s className={styles.priceWas}>{formatPrice(wasPrice, product.currency)}</s>
+        )}
       </div>
-      {product.is_subscription && billingInterval === "yearly" && Number(product.yearly_price) > 0 && (
+      {product.promotion && (
+        <p className={styles.promoNote}>
+          {product.promotion.discount_percent}% off — {product.promotion.headline}
+        </p>
+      )}
+      {product.is_subscription && billingInterval === "yearly" && unitPrice > 0 && (
         <p className={styles.priceEquivalent}>
-          {formatPrice(Number(product.yearly_price) / 12, product.currency)}/mo billed annually
+          {formatPrice(unitPrice / 12, product.currency)}/mo billed annually
         </p>
       )}
 
@@ -172,6 +194,8 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
           Buy Now
         </Button>
       </div>
+
+      <MembershipCallout product={product} />
 
       {product.has_trial && <TrialDownloadCard product={product} />}
 

@@ -9,35 +9,6 @@
   font-weight: var(--fw-bold);
 }
 
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-sm);
-  color: var(--ink-700);
-  transition: background-color var(--dur-fast) var(--ease-standard),
-    color var(--dur-fast) var(--ease-standard);
-}
-
-.item:hover {
-  background: var(--surface-50);
-  color: var(--gold-700);
-}
-
-.active {
-  background: var(--gold-100);
-  color: var(--gold-700);
-  font-weight: var(--fw-semibold);
-}
-
 .sellCard {
   display: flex;
   flex-direction: column;

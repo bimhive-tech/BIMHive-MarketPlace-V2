@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     "activity",
     "installer",
     "support",
+    "membership",
 ]
 
 MIDDLEWARE = [
@@ -177,6 +178,14 @@ CORS_ALLOWED_ORIGINS = _clean_origins(
     )
 )
 CORS_ALLOW_CREDENTIALS = True
+
+# ─────────────────────────────────────────────────────────────
+# Storefront freshness badges (see catalog.models.Product.is_new/is_updated)
+# ─────────────────────────────────────────────────────────────
+# How long a product wears its "New" / "Updated" badge after being published or
+# shipping a new version. Set either to 0 to turn that badge off site-wide.
+NEW_PRODUCT_BADGE_DAYS = env.int("NEW_PRODUCT_BADGE_DAYS", default=7)
+UPDATED_PRODUCT_BADGE_DAYS = env.int("UPDATED_PRODUCT_BADGE_DAYS", default=7)
 
 # ─────────────────────────────────────────────────────────────
 # Licensing (see licensing/ and ARCHITECTURE §5)

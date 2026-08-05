@@ -3,7 +3,8 @@ Staff-only admin API powering the Next.js admin portal (/admin-portal).
 Separate from Django's built-in /admin. All endpoints require is_staff.
 """
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, F
+from django.db.models.functions import Coalesce
 from rest_framework import generics, serializers, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -25,11 +26,13 @@ from catalog.models import (
     Product,
     ProductFile,
     ProductMedia,
+    Promotion,
     Tag,
 )
 from catalog.models.product import ProductStatus
 from catalog.permissions import IsStaffOrPartner
 from catalog.storage import refresh_storage_url
+from membership.models import MembershipPlan
 
 
 def _effective_partner_id(request):
@@ -159,7 +162,7 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "product_code", "short_description", "description", "type",
             "category", "partner", "tags", "price", "monthly_price", "yearly_price", "download_count",
             "default_trial_days", "default_trial_hours", "default_trial_minutes",
-            "status", "rejection_note", "visibility", "is_featured",
+            "status", "rejection_note", "visibility", "is_featured", "membership_plan",
             "cover_image_url", "version", "released_at", "seo_title", "seo_description",
             "features", "media", "changelog", "compatibility", "documentation", "files",
             "created_at", "updated_at",
@@ -520,10 +523,21 @@ class AdminOptionsView(APIView):
     def get(self, request):
         return Response(
             {
-                "categories": list(Category.objects.values("id", "name")),
+                # `parent_name` lets the picker group subcategories under their
+                # root instead of showing one flat, ambiguous list.
+                "categories": list(
+                    Category.objects.select_related("parent")
+                    .order_by(Coalesce("parent__name", "name"), F("parent_id").asc(nulls_first=True), "name")
+                    .values("id", "name", parent_name=F("parent__name"))
+                ),
                 "partners": list(Partner.objects.values("id", "name")) if request.user.is_staff else [],
                 "tags": list(Tag.objects.values("id", "name")),
                 "types": [{"value": v, "label": l} for v, l in Product._meta.get_field("type").choices],
+                # The All-Access tiers a product can be assigned to — see
+                # Product.membership_plan. Empty until staff create a plan.
+                "membership_plans": list(
+                    MembershipPlan.objects.filter(is_active=True).values("id", "name", "rank")
+                ),
             }
         )
 
@@ -545,11 +559,33 @@ class ProductCountMixin:
 
 class CategorySerializer(ProductCountMixin, serializers.ModelSerializer):
     product_count = serializers.SerializerMethodField()
+    parent_name = serializers.CharField(source="parent.name", read_only=True, default="")
 
     class Meta:
         model = Category
-        fields = ["id", "name", "slug", "description", "icon", "parent", "sort_order", "product_count"]
+        fields = [
+            "id", "name", "slug", "description", "icon", "parent", "parent_name",
+            "sort_order", "product_count",
+        ]
         read_only_fields = ["slug"]
+
+    def validate_parent(self, value):
+        """The storefront renders exactly two levels (root + subcategories), so
+        a subcategory can't itself become a parent — and a category can never be
+        its own parent."""
+        if value is None:
+            return value
+        if self.instance and value.pk == self.instance.pk:
+            raise serializers.ValidationError("A category can't be its own parent.")
+        if value.parent_id:
+            raise serializers.ValidationError(
+                f"'{value.name}' is already a subcategory — subcategories can't be nested further."
+            )
+        if self.instance and self.instance.children.exists():
+            raise serializers.ValidationError(
+                f"'{self.instance.name}' has subcategories of its own, so it can't become one."
+            )
+        return value
 
 
 class AdminCategoryViewSet(viewsets.ModelViewSet):
@@ -557,7 +593,19 @@ class AdminCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
 
     def get_queryset(self):
-        return Category.objects.annotate(product_count=Count("products", distinct=True))
+        # Ordered so children follow their own parent (roots sort by their own
+        # name, children by their parent's) — the admin list renders the tree
+        # by indenting rows in the order it receives them.
+        return (
+            Category.objects.annotate(product_count=Count("products", distinct=True))
+            .select_related("parent")
+            .order_by(
+                Coalesce("parent__name", "name"),
+                F("parent_id").asc(nulls_first=True),
+                "sort_order",
+                "name",
+            )
+        )
 
 
 class TagSerializer(ProductCountMixin, serializers.ModelSerializer):
@@ -633,3 +681,45 @@ class AdminCollectionViewSet(viewsets.ModelViewSet):
         return Collection.objects.annotate(product_count=Count("products", distinct=True)).prefetch_related(
             "products"
         )
+
+
+class PromotionSerializer(serializers.ModelSerializer):
+    products = serializers.PrimaryKeyRelatedField(many=True, queryset=Product.objects.all(), required=False)
+    is_live = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Promotion
+        fields = [
+            "id", "name", "badge_label", "headline", "cta_label", "cta_url",
+            "discount_percent", "scope", "category", "products",
+            "starts_at", "ends_at", "is_active", "show_countdown", "priority", "is_live",
+        ]
+
+    def validate(self, attrs):
+        """A promotion that can't say what it discounts, or that ends before it
+        starts, would silently never apply — reject it at the door instead."""
+        merged = {**(self.instance.__dict__ if self.instance else {}), **attrs}
+        starts_at, ends_at = merged.get("starts_at"), merged.get("ends_at")
+        if starts_at and ends_at and ends_at <= starts_at:
+            raise serializers.ValidationError({"ends_at": "The end must come after the start."})
+
+        scope = merged.get("scope") or Promotion.Scope.ALL
+        if scope == Promotion.Scope.CATEGORY and not merged.get("category"):
+            raise serializers.ValidationError({"category": "Pick a category for a category-scoped promotion."})
+        if scope == Promotion.Scope.PRODUCTS:
+            # `products` is m2m, so it's only ever in attrs — on a PATCH that
+            # doesn't touch it, fall back to what's already saved.
+            products = attrs.get("products", list(self.instance.products.all()) if self.instance else [])
+            if not products:
+                raise serializers.ValidationError(
+                    {"products": "Pick at least one product for a product-scoped promotion."}
+                )
+        return attrs
+
+
+class AdminPromotionViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAdminUser]
+    serializer_class = PromotionSerializer
+
+    def get_queryset(self):
+        return Promotion.objects.select_related("category").prefetch_related("products")
