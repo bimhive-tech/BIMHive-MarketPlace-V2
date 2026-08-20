@@ -236,7 +236,21 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
             # on create() there's never anything attached yet, which is intentional:
             # a brand-new product can't be published in the very same request that
             # creates it, only after at least one file has actually been uploaded.
-            has_files = self.instance.files.exists() if self.instance else False
+            # A Plugin product's real download is a PluginBuild (dll+addin uploaded
+            # through the installer pipeline), not a catalog.ProductFile — those are
+            # two different mechanisms (see installer-generator-reference), and this
+            # gate used to only recognize the legacy one, wrongly blocking publish
+            # for every plugin that only ever used the installer pipeline.
+            has_files = False
+            if self.instance:
+                has_files = self.instance.files.exists()
+                if not has_files:
+                    from installer.models import PluginBuild
+
+                    has_files = any(
+                        build.is_ready_for_build
+                        for build in PluginBuild.objects.filter(product=self.instance)
+                    )
             if not has_files:
                 raise ValidationError(
                     {"status": "Upload at least one product file before publishing. Save as a draft first."}

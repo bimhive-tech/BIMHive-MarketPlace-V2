@@ -9,6 +9,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from catalog.models import Category, Partner, Product, ProductFile
+from catalog.models.product import ProductType
 
 pytestmark = pytest.mark.django_db
 User = get_user_model()
@@ -214,6 +215,61 @@ def test_staff_can_approve_a_partner_product(staff_client, partner_a, category):
     assert resp.status_code == 200, resp.json()
     product.refresh_from_db()
     assert product.status == "published"
+
+
+def test_staff_cannot_publish_a_product_with_no_files(staff_client, partner_a, category):
+    product = Product.objects.create(
+        name="Mine", short_description="s", description="d", category=category, partner=partner_a,
+        status="pending",
+    )
+    resp = staff_client.patch(
+        f"/api/admin/products/{product.id}", {"status": "published"}, content_type="application/json"
+    )
+    assert resp.status_code == 400, resp.json()
+    product.refresh_from_db()
+    assert product.status == "pending"
+
+
+def test_staff_can_publish_a_plugin_with_a_ready_installer_build(staff_client, partner_a, category):
+    """A Plugin product's real download is a PluginBuild (dll+addin uploaded
+    through the installer pipeline, see installer/api.py), not a legacy
+    catalog.ProductFile — the publish gate must recognize either."""
+    from installer.models import PluginBuild
+
+    product = Product.objects.create(
+        name="Mine", short_description="s", description="d", category=category, partner=partner_a,
+        type=ProductType.PLUGIN, status="pending",
+    )
+    PluginBuild.objects.create(
+        product=product, revit_year="2025",
+        dll_storage_key="plugin_builds/1/2025/dll/x.dll", dll_filename="x.dll",
+        addin_storage_key="plugin_builds/1/2025/addin/x.addin", addin_filename="x.addin",
+    )
+    resp = staff_client.patch(
+        f"/api/admin/products/{product.id}", {"status": "published"}, content_type="application/json"
+    )
+    assert resp.status_code == 200, resp.json()
+    product.refresh_from_db()
+    assert product.status == "published"
+
+
+def test_staff_cannot_publish_a_plugin_with_an_incomplete_build(staff_client, partner_a, category):
+    """A build with only a dll (no addin yet) isn't downloadable — is_ready_for_build
+    is False — so it must not satisfy the publish gate either."""
+    from installer.models import PluginBuild
+
+    product = Product.objects.create(
+        name="Mine", short_description="s", description="d", category=category, partner=partner_a,
+        type=ProductType.PLUGIN, status="pending",
+    )
+    PluginBuild.objects.create(
+        product=product, revit_year="2025",
+        dll_storage_key="plugin_builds/1/2025/dll/x.dll", dll_filename="x.dll",
+    )
+    resp = staff_client.patch(
+        f"/api/admin/products/{product.id}", {"status": "published"}, content_type="application/json"
+    )
+    assert resp.status_code == 400, resp.json()
 
 
 # ── Cross-partner isolation: list, detail, files, media ──

@@ -264,8 +264,14 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
         router.refresh();
         return;
       }
-      router.push(`${basePath}/products`);
-      router.refresh();
+      // A hard navigation, not router.push — the products list
+      // (app/admin-portal/products/page.tsx) is a "use client" page that fetches
+      // its own rows in a useEffect; router.refresh() only invalidates Server
+      // Component data, so it's a no-op here and a soft push can land back on a
+      // cached instance of that page with its stale pre-update `rows` state
+      // still showing. A full navigation guarantees a fresh mount and fetch.
+      window.location.href = `${basePath}/products`;
+      return;
     } catch (err) {
       setError(err instanceof AdminApiError ? err.detail : "Could not save the product.");
       if (err instanceof AdminApiError && err.fields.product_code) setTab("pricing");
@@ -312,8 +318,11 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
     setDeleting(true);
     try {
       await deleteProduct(savedId, asPartner);
-      router.push(`${basePath}/products`);
-      router.refresh();
+      // Hard navigation, not router.push — see the comment on the same pattern
+      // in submit() above. Without it, the deleted product can keep showing in
+      // the list until a manual browser refresh.
+      window.location.href = `${basePath}/products`;
+      return;
     } catch {
       setError("Could not delete this product.");
       setDeleting(false);
