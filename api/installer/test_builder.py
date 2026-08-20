@@ -68,23 +68,24 @@ def test_staging_wraps_the_addin_with_the_license_shim(product, tmp_path):
     right files in the right place, which is the part that actually
     matters for licensing to work (see installer/license_shim.py)."""
     from installer.builder import _stage_payload
-    from installer.license_shim import SHIM_DLL_NAME
+    from installer.license_shim import license_config_filename, real_plugin_hint_filename, shim_dll_name
 
     build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
     _stage_dll_and_addin(build)
 
     _stage_payload(build, tmp_path)
     payload_dir = tmp_path / "payload"
+    shim_name = shim_dll_name(product.slug)
 
     assert (payload_dir / build.dll_filename).read_bytes() == b"fake dll bytes"
-    assert (payload_dir / SHIM_DLL_NAME).exists()
-    assert (payload_dir / "_real_plugin.txt").read_text() == build.dll_filename
-    license_config = (payload_dir / "_license.bin").read_text()
+    assert (payload_dir / shim_name).exists()
+    assert (payload_dir / real_plugin_hint_filename(product.slug)).read_text() == build.dll_filename
+    license_config = (payload_dir / license_config_filename(product.slug)).read_text()
     assert product.product_code in license_config
     assert "onlineLicense" in license_config
 
     rewritten_addin = (payload_dir / build.addin_filename).read_text()
-    assert "LicLoader.dll" in rewritten_addin
+    assert shim_name in rewritten_addin  # per-product shim filename, not a shared "LicLoader.dll"
     assert "LicLoader.ExternalApp" in rewritten_addin
     assert "Plugin.dll" not in rewritten_addin  # the real assembly reference is gone, not just supplemented
 
@@ -95,7 +96,7 @@ def test_staging_without_license_protection_leaves_the_real_addin_untouched(prod
     still works — the online license check requires the product to be
     published, which would otherwise block every pre-publish test build."""
     from installer.builder import _stage_payload
-    from installer.license_shim import SHIM_DLL_NAME
+    from installer.license_shim import license_config_filename, real_plugin_hint_filename, shim_dll_name
 
     build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
     _stage_dll_and_addin(build)
@@ -103,9 +104,9 @@ def test_staging_without_license_protection_leaves_the_real_addin_untouched(prod
     _stage_payload(build, tmp_path, protect_with_license=False)
     payload_dir = tmp_path / "payload"
 
-    assert not (payload_dir / SHIM_DLL_NAME).exists()
-    assert not (payload_dir / "_real_plugin.txt").exists()
-    assert not (payload_dir / "_license.bin").exists()
+    assert not (payload_dir / shim_dll_name(product.slug)).exists()
+    assert not (payload_dir / real_plugin_hint_filename(product.slug)).exists()
+    assert not (payload_dir / license_config_filename(product.slug)).exists()
     assert (payload_dir / build.addin_filename).read_bytes() == SAMPLE_ADDIN_XML
 
 

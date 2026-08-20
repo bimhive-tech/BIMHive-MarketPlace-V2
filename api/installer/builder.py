@@ -17,12 +17,14 @@ from django.conf import settings
 
 from installer.branding import write_branding_assets
 from installer.license_shim import (
-    SHIM_DLL_NAME,
     SHIM_DLL_PATH,
     AddinRewriteError,
     build_license_config,
     build_real_plugin_hint,
+    license_config_filename,
+    real_plugin_hint_filename,
     rewrite_addin_for_shim,
+    shim_dll_name,
 )
 from installer.models import PluginBuild
 from installer.nsis_generator import OUTPUT_FILENAME, generate_nsis_script, resolve_scope
@@ -61,11 +63,12 @@ def _stage_payload(build: PluginBuild, staging_dir: Path, protect_with_license: 
         raw_addin = source.read()
 
     if protect_with_license:
-        shutil.copyfile(SHIM_DLL_PATH, payload_dir / SHIM_DLL_NAME)
-        (payload_dir / "_real_plugin.txt").write_bytes(build_real_plugin_hint(build.dll_filename))
-        (payload_dir / "_license.bin").write_bytes(build_license_config(build))
+        slug = build.product.slug or "plugin"
+        shutil.copyfile(SHIM_DLL_PATH, payload_dir / shim_dll_name(slug))
+        (payload_dir / real_plugin_hint_filename(slug)).write_bytes(build_real_plugin_hint(build.dll_filename))
+        (payload_dir / license_config_filename(slug)).write_bytes(build_license_config(build))
         try:
-            raw_addin = rewrite_addin_for_shim(raw_addin)
+            raw_addin = rewrite_addin_for_shim(raw_addin, shim_dll_name(slug))
         except AddinRewriteError as exc:
             raise BuildError(f"Could not license-protect this build: {exc}") from exc
     (payload_dir / build.addin_filename).write_bytes(raw_addin)

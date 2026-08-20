@@ -9,14 +9,26 @@ needed, and only then loads the real plugin via reflection.
 
 Two things make that work, both handled here:
 1. The uploaded .addin manifest's <Assembly>/<FullClassName> get redirected
-   to point at LicLoader instead of the real plugin — see
+   to point at the shim instead of the real plugin — see
    rewrite_addin_for_shim().
 2. LicLoader needs to find the real plugin file and know what product/API
    it's checking against — it reads two small files it expects sitting
-   next to it: _real_plugin.txt (the real plugin's filename) and
-   _license.bin (a plain JSON config, despite the name — see
-   ExternalApp.cs::ParseOnlineLicenseSettings) — see build_real_plugin_hint()
-   and build_license_config().
+   next to it (see ExternalApp.cs::ParseOnlineLicenseSettings /
+   TryLoadRealPlugin) — see build_real_plugin_hint() and
+   build_license_config().
+
+Every one of these three files is named per-product (shim_dll_name(),
+license_config_filename(), real_plugin_hint_filename() — all take the
+product's slug), not a fixed literal like "LicLoader.dll"/"_license.bin".
+All BIM Hive plugins for the same Revit year install into the SAME
+%APPDATA%\\Autodesk\\Revit\\Addins\\<year>\\ folder — a fixed filename would
+mean installing a second plugin overwrites the first one's config (wrong
+product license checked, wrong real .dll loaded via reflection) and
+uninstalling either one deletes files the other still needs. LicLoader.dll
+itself (2026-08-20, see ExternalApp.cs::GetSiblingConfigPath) derives which
+config filenames to read from its OWN on-disk filename, so a plain
+"LicLoader.dll" (no suffix) still falls back to the original unsuffixed
+names for backward compatibility with copies installed before this fix.
 """
 import json
 import xml.etree.ElementTree as ET
@@ -26,9 +38,19 @@ from django.conf import settings
 
 VENDOR_DIR = Path(__file__).resolve().parent / "vendor"
 SHIM_DLL_PATH = VENDOR_DIR / "LicLoader.dll"
-SHIM_DLL_NAME = "LicLoader.dll"
-SHIM_ASSEMBLY_NAME = "LicLoader.dll"
 SHIM_FULL_CLASS_NAME = "LicLoader.ExternalApp"
+
+
+def shim_dll_name(slug: str) -> str:
+    return f"LicLoader.{slug}.dll"
+
+
+def license_config_filename(slug: str) -> str:
+    return f"_license.{slug}.bin"
+
+
+def real_plugin_hint_filename(slug: str) -> str:
+    return f"_real_plugin.{slug}.txt"
 
 
 class AddinRewriteError(Exception):
@@ -37,9 +59,10 @@ class AddinRewriteError(Exception):
     to shipping the real plugin unwrapped."""
 
 
-def rewrite_addin_for_shim(addin_xml_bytes: bytes) -> bytes:
+def rewrite_addin_for_shim(addin_xml_bytes: bytes, assembly_name: str) -> bytes:
     """Redirects every <AddIn> entry in a Revit .addin manifest to load
-    LicLoader instead of the real plugin. Deliberately fails loudly
+    the shim (under its per-product filename, see module docstring)
+    instead of the real plugin. Deliberately fails loudly
     (AddinRewriteError) on anything that doesn't parse as a normal Revit
     add-in manifest, rather than silently shipping an unwrapped installer —
     that failure mode is exactly the bug this module exists to prevent."""
@@ -56,7 +79,7 @@ def rewrite_addin_for_shim(addin_xml_bytes: bytes) -> bytes:
         assembly = addin.find("Assembly")
         if assembly is None:
             assembly = ET.SubElement(addin, "Assembly")
-        assembly.text = SHIM_ASSEMBLY_NAME
+        assembly.text = assembly_name
 
         full_class_name = addin.find("FullClassName")
         if full_class_name is None:
