@@ -388,6 +388,16 @@ looks for an existing one first and reuses it, never resets `expires_at`, and re
 one be created. Redownloading the trial installer, or the plugin re-activating after a refund, both
 land on that same purchase — now denied, never a fresh one.
 
+**Re-claiming a free ($0) product after a refund does restore access, unlike a paid refund.**
+`POST /api/account/claim-free` (`ClaimFreeProductView`) reuses the customer's existing
+`ProductPurchase` row for that product instead of creating a new one (see the `MultipleObjectsReturned`
+fix above). If that existing row is currently inactive — refunded, cancelled, or otherwise revoked —
+claiming again now calls `restore_purchase_access` on it (flips `payment_status` back to `PAID` and
+restores any bound `MachineLicense`s), the same helper staff use to mark a paid order Paid. Before
+this fix, re-claiming handed back the still-inactive row with an HTTP 200 that looked like success but
+granted no real access — there's no money involved in a $0 claim, so unlike a real paid refund,
+"claim it again" should just work.
+
 **Why a second *account* on the same machine can't get a second trial either:**
 `MachineLicense.used_trial` is a permanent, one-way flag — set the first time a trial purchase ever
 binds a given `(product, machine)`, never cleared. `license_activate_api` denies (`status:

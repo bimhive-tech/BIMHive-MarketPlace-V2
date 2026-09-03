@@ -24,6 +24,7 @@ from licensing.services import (
     LicenseCodeError,
     expires_at_for,
     redeem_license_code,
+    restore_purchase_access,
     revoke_purchase_access,
     subscription_duration,
 )
@@ -559,6 +560,18 @@ class ClaimFreeProductView(APIView):
                 amount=product.price,
                 currency=product.currency,
             )
+        elif not purchase.is_license_active:
+            # The one existing row is refunded/cancelled/revoked — a
+            # self-service refund on a free ($0) claim shouldn't be a
+            # permanent dead end the way a real paid refund reasonably is,
+            # there's no money changing hands to reason about. Reactivate it
+            # (also un-blocks any machine binding it still has) rather than
+            # silently handing back an inactive purchase with a 200 that
+            # looks like success but never shows up on Downloads/Licenses —
+            # confirmed as a real report: refund a free product, "claim" it
+            # again, it looks like it worked but access never comes back.
+            restore_purchase_access(purchase)
+            purchase.refresh_from_db()
         if created:
             log_activity(request.user, ActivityVerb.CLAIMED_FREE_PRODUCT, target_label=product.name)
         status_code = 201 if created else 200

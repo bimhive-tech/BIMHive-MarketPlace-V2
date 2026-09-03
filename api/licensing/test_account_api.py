@@ -283,6 +283,40 @@ def test_claim_free_does_not_crash_when_the_user_already_holds_several_purchases
     assert ProductPurchase.objects.filter(user=user).count() == 3  # reused an existing row, didn't add a 4th
 
 
+def test_claim_free_reactivates_a_refunded_purchase(django_user_model, free_product):
+    # Real production report: a customer refunds a free ($0) claim, then
+    # tries to claim it again — the pre-existing row (now refunded) was
+    # being handed back unchanged with a 200, which looks like success but
+    # leaves the customer with no working license. Re-claiming should
+    # actually restore access, same as staff "Mark Paid" does for a paid
+    # order.
+    user, client = _login(django_user_model)
+    sku = LicensedProduct.objects.filter(product=free_product).first()
+    purchase = ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.REFUNDED, amount=0,
+    )
+    machine = MachineLicense.objects.create(
+        product=sku, user=user, purchase=purchase,
+        machine_fingerprint_hash="ABCDEF0123456789", status="cancelled",
+        started_at="2026-01-01T00:00:00Z", expires_at="2026-01-02T00:00:00Z",
+    )
+
+    resp = _claim(client, free_product.slug)
+    assert resp.status_code == 200, resp.json()
+    assert ProductPurchase.objects.filter(user=user).count() == 1  # reused the row, no duplicate
+
+    purchase.refresh_from_db()
+    assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
+    assert purchase.is_license_active
+
+    machine.refresh_from_db()
+    assert machine.status == "paid"
+
+    # And it's really usable again, not just a green status field.
+    downloads = client.get("/api/account/downloads").json()
+    assert len(downloads) == 1
+
+
 def test_claim_free_rejects_a_paid_product(django_user_model, paid_product):
     _, client = _login(django_user_model)
     resp = _claim(client, paid_product.slug)
