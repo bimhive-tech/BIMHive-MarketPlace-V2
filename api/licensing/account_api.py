@@ -538,15 +538,27 @@ class ClaimFreeProductView(APIView):
         if not sku:
             raise ValidationError({"slug": "This product isn't ready to claim yet — try again shortly."})
 
-        purchase, created = ProductPurchase.objects.get_or_create(
-            user=request.user,
-            product=sku,
-            defaults={
-                "payment_status": ProductPurchase.PaymentStatus.PAID,
-                "amount": product.price,
-                "currency": product.currency,
-            },
-        )
+        # Not get_or_create(): ProductPurchase is deliberately NOT unique per
+        # (user, product) — a customer can hold more than one independent
+        # purchase of the same product (see the model's own Meta comment;
+        # buying twice, or a checkout retry, both add rows). get_or_create's
+        # internal get() blows up with MultipleObjectsReturned (an unhandled
+        # 500) the moment a second row for this user+product exists from any
+        # other path — confirmed as the exact cause of a real "claim free"
+        # crash on a product that had accumulated several ProductPurchase
+        # rows for the same user from repeated test checkouts. Idempotency
+        # here just means "reuse whatever's already there," same contract
+        # get_or_create had for the one-row case.
+        purchase = ProductPurchase.objects.filter(user=request.user, product=sku).order_by("-requested_at").first()
+        created = purchase is None
+        if created:
+            purchase = ProductPurchase.objects.create(
+                user=request.user,
+                product=sku,
+                payment_status=ProductPurchase.PaymentStatus.PAID,
+                amount=product.price,
+                currency=product.currency,
+            )
         if created:
             log_activity(request.user, ActivityVerb.CLAIMED_FREE_PRODUCT, target_label=product.name)
         status_code = 201 if created else 200

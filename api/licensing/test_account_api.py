@@ -265,6 +265,24 @@ def test_claim_free_is_idempotent(django_user_model, free_product):
     assert ProductPurchase.objects.filter(user=user).count() == 1
 
 
+def test_claim_free_does_not_crash_when_the_user_already_holds_several_purchases(django_user_model, free_product):
+    # Real production bug: get_or_create()'s internal get() raises
+    # MultipleObjectsReturned (an unhandled 500) once more than one
+    # ProductPurchase already exists for this (user, product) — which
+    # legitimately happens, since ProductPurchase is deliberately not
+    # unique per (user, product) (repeat purchases, checkout retries, etc.).
+    user, client = _login(django_user_model)
+    sku = LicensedProduct.objects.filter(product=free_product).first()
+    for _ in range(3):
+        ProductPurchase.objects.create(
+            user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID, amount=0,
+        )
+
+    resp = _claim(client, free_product.slug)
+    assert resp.status_code == 200, resp.json()
+    assert ProductPurchase.objects.filter(user=user).count() == 3  # reused an existing row, didn't add a 4th
+
+
 def test_claim_free_rejects_a_paid_product(django_user_model, paid_product):
     _, client = _login(django_user_model)
     resp = _claim(client, paid_product.slug)
