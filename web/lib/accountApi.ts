@@ -70,6 +70,7 @@ export interface AccountLicense {
   id: string;
   product_name: string;
   product_code: string;
+  product_slug: string | null;
   payment_status: string;
   license_status: "active" | "inactive" | "expired";
   license_key: string;

@@ -194,14 +194,23 @@ class AccountMachineSerializer(serializers.ModelSerializer):
 class AccountLicenseSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
     product_code = serializers.CharField(source="product.code", read_only=True)
+    # Lets the storefront's buy box (BuyBox.tsx) match a license back to the
+    # catalog product it's viewing and swap to an Owned / Current Plan state
+    # — see get_product_slug on AccountSubscriptionSerializer above, same idea.
+    product_slug = serializers.SerializerMethodField()
     machines = AccountMachineSerializer(source="machine_licenses", many=True, read_only=True)
 
     class Meta:
         model = ProductPurchase
         fields = [
-            "id", "product_name", "product_code", "payment_status", "license_status", "license_key",
-            "seats", "is_trial", "billing_period", "expires_at", "requested_at", "paid_at", "machines",
+            "id", "product_name", "product_code", "product_slug", "payment_status", "license_status",
+            "license_key", "seats", "is_trial", "billing_period", "expires_at", "requested_at", "paid_at",
+            "machines",
         ]
+
+    def get_product_slug(self, obj):
+        catalog_product = obj.product.product
+        return catalog_product.slug if catalog_product else None
 
 
 class AccountLicenseListView(generics.ListAPIView):

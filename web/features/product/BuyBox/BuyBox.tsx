@@ -7,7 +7,7 @@ import { BillingToggle } from "@/components/BillingToggle/BillingToggle";
 import { Button } from "@/components/Button/Button";
 import { Icon, type IconName } from "@/components/Icon/Icon";
 import { QtyStepper } from "@/components/QtyStepper/QtyStepper";
-import { AccountApiError, claimFreeProduct } from "@/lib/accountApi";
+import { AccountApiError, claimFreeProduct, getAccountLicenses } from "@/lib/accountApi";
 import { me } from "@/lib/auth";
 import { formatPrice } from "@/config/site";
 import { type BillingPeriod, useCart } from "@/lib/cart";
@@ -24,16 +24,86 @@ const ASSURANCES: { icon: IconName; title: string; sub: string }[] = [
   { icon: "lock", title: "Secure Checkout", sub: "Your data is protected" },
 ];
 
+function Assurances({ items }: { items: typeof ASSURANCES }) {
+  return (
+    <ul className={styles.assurances}>
+      {items.map((a) => (
+        <li key={a.title} className={styles.assurance}>
+          <Icon name={a.icon} size={20} className={styles.assuranceIcon} />
+          <div>
+            <p className={styles.assuranceTitle}>{a.title}</p>
+            <p className={styles.assuranceSub}>{a.sub}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Whether the viewer already holds a real, active, non-trial license for a
+ * product — a claimed free product or a real purchase, never a lapsed trial
+ * (see fetchOwnership). Null while loading or when there's no active one. */
+type Ownership = { billingPeriod: "" | "monthly" | "yearly" } | null;
+
+/** Client-side only, on purpose: the product detail page itself is fetched
+ * server-side with no session cookie and is cached for a minute (see
+ * lib/api.ts), so it can never know who's viewing — the same reason
+ * FreeBuyBox already checks auth state (`me()`) this way instead of via the
+ * product prop. Reuses the account's own licenses list rather than a new
+ * endpoint; a 401 (logged out) just resolves to "not owned". */
+async function fetchOwnership(productSlug: string): Promise<Ownership> {
+  try {
+    const licenses = await getAccountLicenses();
+    const active = licenses.find(
+      (l) => l.product_slug === productSlug && !l.is_trial && l.license_status === "active",
+    );
+    return active ? { billingPeriod: active.billing_period } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Swaps in for the buy actions once the viewer already holds this product —
+ * there's nothing to add to cart, so don't offer to sell it to them again. */
+function OwnedNotice({ billingPeriod }: { billingPeriod: "" | "monthly" | "yearly" }) {
+  const label = billingPeriod ? `Current Plan — ${billingPeriod === "yearly" ? "Yearly" : "Monthly"}` : "Owned";
+  return (
+    <div className={styles.actions}>
+      <p className={styles.ownedNote}>
+        <Icon name="check-circle" size={18} className={styles.ownedIcon} />
+        {label}
+      </p>
+      <Button size="lg" fullWidth href="/account/downloads">
+        <Icon name="download" size={18} />
+        Go to Downloads
+      </Button>
+    </div>
+  );
+}
+
 export function BuyBox({ product }: { product: ProductDetail }) {
-  if (product.is_free) return <FreeBuyBox product={product} />;
-  return <PaidBuyBox product={product} />;
+  const [ownership, setOwnership] = useState<Ownership>(null);
+
+  useEffect(() => {
+    fetchOwnership(product.slug).then(setOwnership);
+  }, [product.slug]);
+
+  if (product.is_free) return <FreeBuyBox product={product} ownership={ownership} setOwnership={setOwnership} />;
+  return <PaidBuyBox product={product} ownership={ownership} />;
 }
 
 /** Checkout isn't built yet — free products skip it entirely via a direct claim. */
-function FreeBuyBox({ product }: { product: ProductDetail }) {
+function FreeBuyBox({
+  product,
+  ownership,
+  setOwnership,
+}: {
+  product: ProductDetail;
+  ownership: Ownership;
+  setOwnership: (o: Ownership) => void;
+}) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [claiming, setClaiming] = useState(false);
-  const [claimed, setClaimed] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -45,7 +115,7 @@ function FreeBuyBox({ product }: { product: ProductDetail }) {
     setClaiming(true);
     try {
       await claimFreeProduct(product.slug);
-      setClaimed(true);
+      setOwnership({ billingPeriod: "" });
     } catch (err) {
       setError(err instanceof AccountApiError ? err.detail : "Couldn't add this to your account.");
     } finally {
@@ -57,14 +127,8 @@ function FreeBuyBox({ product }: { product: ProductDetail }) {
     <aside className={styles.box}>
       <div className={styles.price}>Free</div>
 
-      {claimed ? (
-        <div className={styles.actions}>
-          <p className={styles.claimedNote}>It&apos;s in your account.</p>
-          <Button size="lg" fullWidth href="/account/downloads">
-            <Icon name="download" size={18} />
-            Go to Downloads
-          </Button>
-        </div>
+      {ownership ? (
+        <OwnedNotice billingPeriod={ownership.billingPeriod} />
       ) : user === null ? (
         <div className={styles.actions}>
           <Button size="lg" fullWidth href={`/login?next=/products/${product.slug}`}>
@@ -81,17 +145,7 @@ function FreeBuyBox({ product }: { product: ProductDetail }) {
         </div>
       )}
 
-      <ul className={styles.assurances}>
-        {ASSURANCES.filter((a) => a.title !== "Secure Checkout").map((a) => (
-          <li key={a.title} className={styles.assurance}>
-            <Icon name={a.icon} size={20} className={styles.assuranceIcon} />
-            <div>
-              <p className={styles.assuranceTitle}>{a.title}</p>
-              <p className={styles.assuranceSub}>{a.sub}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <Assurances items={ASSURANCES.filter((a) => a.title !== "Secure Checkout")} />
     </aside>
   );
 }
@@ -104,13 +158,23 @@ function subscriptionPrice(product: ProductDetail, interval: "monthly" | "yearly
   return priceForPeriod(product, interval);
 }
 
-function PaidBuyBox({ product }: { product: ProductDetail }) {
+function PaidBuyBox({ product, ownership }: { product: ProductDetail; ownership: Ownership }) {
   const router = useRouter();
   const { items, addItem, setQty } = useCart();
   // Defaults to yearly — the better-value plan is what gets led with, same
   // as most subscription pricing pages. Named billingInterval, not
-  // "interval", so it doesn't shadow window.setInterval.
-  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("yearly");
+  // "interval", so it doesn't shadow window.setInterval. Already-owned:
+  // shows the interval actually on the account, not the upsell default.
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">(
+    ownership?.billingPeriod === "monthly" ? "monthly" : "yearly",
+  );
+  // Ownership resolves after mount (see fetchOwnership) — sync once it does,
+  // so the price display never disagrees with the "Current Plan" label.
+  useEffect(() => {
+    if (ownership?.billingPeriod === "monthly" || ownership?.billingPeriod === "yearly") {
+      setBillingInterval(ownership.billingPeriod);
+    }
+  }, [ownership]);
 
   const billingPeriod: BillingPeriod = product.is_subscription ? billingInterval : "";
   // Discount included when a promotion is live — the same figure checkout
@@ -145,7 +209,7 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
 
   return (
     <aside className={styles.box}>
-      {product.is_subscription && (
+      {!ownership && product.is_subscription && (
         <BillingToggle
           value={billingInterval}
           onChange={setBillingInterval}
@@ -164,52 +228,46 @@ function PaidBuyBox({ product }: { product: ProductDetail }) {
           <s className={styles.priceWas}>{formatPrice(wasPrice, product.currency)}</s>
         )}
       </div>
-      {product.promotion && (
+      {!ownership && product.promotion && (
         <p className={styles.promoNote}>
           {product.promotion.discount_percent}% off — {product.promotion.headline}
         </p>
       )}
-      {product.is_subscription && billingInterval === "yearly" && unitPrice > 0 && (
+      {!ownership && product.is_subscription && billingInterval === "yearly" && unitPrice > 0 && (
         <p className={styles.priceEquivalent}>
           {formatPrice(unitPrice / 12, product.currency)}/mo billed annually
         </p>
       )}
 
-      <div className={styles.actions}>
-        {cartItem ? (
-          <QtyStepper
-            qty={cartItem.qty}
-            onDecrease={() => setQty(cartItem.key, cartItem.qty - 1)}
-            onIncrease={() => setQty(cartItem.key, cartItem.qty + 1)}
-            ariaLabel={`${product.name} quantity in cart`}
-            variant="full"
-          />
-        ) : (
-          <Button size="lg" fullWidth onClick={handleAddToCart}>
-            <Icon name="cart" size={18} />
-            Add to Cart
+      {ownership ? (
+        <OwnedNotice billingPeriod={ownership.billingPeriod} />
+      ) : (
+        <div className={styles.actions}>
+          {cartItem ? (
+            <QtyStepper
+              qty={cartItem.qty}
+              onDecrease={() => setQty(cartItem.key, cartItem.qty - 1)}
+              onIncrease={() => setQty(cartItem.key, cartItem.qty + 1)}
+              ariaLabel={`${product.name} quantity in cart`}
+              variant="full"
+            />
+          ) : (
+            <Button size="lg" fullWidth onClick={handleAddToCart}>
+              <Icon name="cart" size={18} />
+              Add to Cart
+            </Button>
+          )}
+          <Button size="lg" variant="secondary" fullWidth onClick={handleBuyNow}>
+            Buy Now
           </Button>
-        )}
-        <Button size="lg" variant="secondary" fullWidth onClick={handleBuyNow}>
-          Buy Now
-        </Button>
-      </div>
+        </div>
+      )}
 
       <MembershipCallout product={product} />
 
       {product.has_trial && <TrialDownloadCard product={product} />}
 
-      <ul className={styles.assurances}>
-        {ASSURANCES.map((a) => (
-          <li key={a.title} className={styles.assurance}>
-            <Icon name={a.icon} size={20} className={styles.assuranceIcon} />
-            <div>
-              <p className={styles.assuranceTitle}>{a.title}</p>
-              <p className={styles.assuranceSub}>{a.sub}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <Assurances items={ASSURANCES} />
     </aside>
   );
 }

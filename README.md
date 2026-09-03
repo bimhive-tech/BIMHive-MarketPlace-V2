@@ -368,6 +368,25 @@ the checkout copy should never imply one. A gold "Monthly/Yearly subscription" p
 name and an order-summary line ("Includes N monthly subscription items…") make the recurring pricing
 model unmistakable at a glance, without ever claiming the payment itself recurs automatically.
 
+## The buy box won't sell you something you already own
+
+`BuyBox.tsx` fetches the viewer's own licenses (`GET /api/account/licenses`, with the browser's
+session cookie) client-side on mount and checks whether any of them match the product being viewed,
+are `payment_status: "paid"` and active, and aren't a trial. When one does, the Add to Cart / Buy Now
+(or Get for Free) actions are swapped for a green "Owned" (one-time/free) or "Current Plan — Monthly/
+Yearly" (subscription) badge and a "Go to Downloads" button — there's nothing left to sell them.
+
+This has to happen client-side, not by adding a field to `ProductDetailSerializer`: the product detail
+page (`getProduct` in `lib/api.ts`) is fetched **server-side with no session cookie at all** and its
+response is cached for 60 seconds (`next: { revalidate: 60 }`) — baking per-viewer ownership into that
+response would either always read anonymous, or (if cookie-forwarding were added without also
+disabling the cache) leak one visitor's ownership status to the next person who loads the same cached
+product page. `MembershipCallout`'s "Included in your plan" has this same latent gap today for the
+same reason — worth the identical client-side fix if it turns out not to be working either.
+
+A lapsed trial never counts as "owned" (it's excluded explicitly), so trialing a paid product first
+never blocks buying the real thing afterward.
+
 ## Cancel / refund: self-service, 30-day window, abuse-proof by construction
 
 `POST /api/account/orders/<id>/refund` (`AccountOrderRefundView`) is the self-service side of the
