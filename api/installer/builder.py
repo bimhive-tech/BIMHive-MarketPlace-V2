@@ -17,14 +17,15 @@ from django.conf import settings
 
 from installer.branding import write_branding_assets
 from installer.license_shim import (
-    SHIM_DLL_PATH,
     AddinRewriteError,
+    ShimRenameError,
     build_license_config,
     build_real_plugin_hint,
     license_config_filename,
     real_plugin_hint_filename,
     rewrite_addin_for_shim,
     shim_dll_name,
+    stage_renamed_shim,
 )
 from installer.models import PluginBuild
 from installer.nsis_generator import OUTPUT_FILENAME, generate_nsis_script, resolve_scope
@@ -64,7 +65,10 @@ def _stage_payload(build: PluginBuild, staging_dir: Path, protect_with_license: 
 
     if protect_with_license:
         slug = build.product.slug or "plugin"
-        shutil.copyfile(SHIM_DLL_PATH, payload_dir / shim_dll_name(slug))
+        try:
+            stage_renamed_shim(payload_dir / shim_dll_name(slug), slug)
+        except ShimRenameError as exc:
+            raise BuildError(f"Could not license-protect this build: {exc}") from exc
         (payload_dir / real_plugin_hint_filename(slug)).write_bytes(build_real_plugin_hint(build.dll_filename))
         (payload_dir / license_config_filename(slug)).write_bytes(build_license_config(build))
         try:

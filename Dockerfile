@@ -44,6 +44,17 @@ RUN apt-get update \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+# .NET 8 *runtime only* (not the SDK — nothing here compiles .NET code) for
+# api/installer/vendor/assembly_renamer, invoked once per staged plugin build
+# to give each copy of LicLoader.dll a genuinely distinct assembly identity —
+# see api/installer/vendor/README.md for why that's necessary. Installed via
+# Microsoft's own script rather than an apt package: this base image's Debian
+# release is a moving target (see the NSIS/ICU notes in that same README),
+# and the install script isn't tied to whatever's in that release's repos.
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- \
+    --channel 8.0 --runtime dotnet --install-dir /opt/dotnet --no-path
+ENV DOTNET_ROOT=/opt/dotnet \
+    PATH="/opt/dotnet:${PATH}"
 
 WORKDIR /app
 COPY --from=api-build /install /usr/local

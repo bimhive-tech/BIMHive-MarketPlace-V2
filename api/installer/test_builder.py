@@ -90,6 +90,57 @@ def test_staging_wraps_the_addin_with_the_license_shim(product, tmp_path):
     assert "Plugin.dll" not in rewritten_addin  # the real assembly reference is gone, not just supplemented
 
 
+def _assembly_name_of(dll_path):
+    """Reads a .NET assembly's own internal identity (not just its filename)
+    via the vendored AssemblyRenamer tool's --name-of mode — real dotnet
+    subprocess, not mocked, same philosophy as the rest of this file."""
+    import subprocess
+
+    from django.conf import settings
+
+    result = subprocess.run(
+        [settings.DOTNET_EXECUTABLE, settings.ASSEMBLY_RENAMER_DLL, "--name-of", str(dll_path)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def test_two_products_shims_get_genuinely_distinct_assembly_identities(category, tmp_path):
+    """The actual bug this staging step exists to fix: a distinct filename
+    alone isn't enough to stop two installed BIM Hive plugins' LicLoader
+    copies colliding at runtime (see license_shim.py's module docstring) —
+    only two staged copies is 'a distinct .NET assembly Name for each' any
+    kind of real fix, so assert that directly rather than just checking the
+    filenames differ (which was already true before this fix, and wasn't
+    sufficient)."""
+    from installer.builder import _stage_payload
+    from installer.license_shim import shim_dll_name
+
+    products = [
+        Product.objects.create(
+            name=f"Multi Test {i}", product_code=f"multi-test-{i}", category=category,
+            short_description="s", description="d",
+        )
+        for i in (1, 2)
+    ]
+    identities = []
+    for product in products:
+        build = PluginBuild.objects.create(product=product, revit_year="2025", plugin_version="1.0.0")
+        _stage_dll_and_addin(build)
+        staging_dir = tmp_path / product.slug
+        _stage_payload(build, staging_dir)
+        shim_path = staging_dir / "payload" / shim_dll_name(product.slug)
+        identities.append(_assembly_name_of(shim_path))
+
+    assert identities[0] != identities[1]
+    # And each is still distinguishable from the vendored original — proves
+    # the rewrite actually happened, not a no-op copy.
+    from installer.license_shim import SHIM_DLL_PATH
+
+    assert identities[0] != _assembly_name_of(SHIM_DLL_PATH)
+
+
 def test_staging_without_license_protection_leaves_the_real_addin_untouched(product, tmp_path):
     """Staff/partner test-downloads (installer/api.py::PluginBuildDownloadView)
     pass protect_with_license=False so testing an unpublished draft product

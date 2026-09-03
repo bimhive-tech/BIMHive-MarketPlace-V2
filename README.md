@@ -20,6 +20,11 @@ rules, and [`style.md`](style.md) + [`design/`](design/) for the design system.
 - Docker (for local Postgres + MinIO)
 - NSIS (`makensis`), only if you're building/testing the auto-generated installer pipeline
   (`installer/`) — Windows: `winget install NSIS.NSIS`; Debian/Ubuntu/Docker: `apt-get install nsis`.
+- .NET 8 runtime (not the SDK — nothing here compiles .NET code), only for the same installer
+  pipeline: runs `api/installer/vendor/assembly_renamer/`, which gives each staged plugin's license
+  shim its own assembly identity — see "Client-side license enforcement" below. Windows: usually
+  already present; otherwise `winget install Microsoft.DotNet.Runtime.8`. Docker/Railway: installed
+  in the `Dockerfile` via Microsoft's own install script.
 
 ---
 
@@ -190,7 +195,16 @@ Every installer build wraps the real plugin with it, transparently, at packaging
    not the plugin directly. `<AddInId>` and everything else is left untouched.
 2. `LicLoader.dll` itself, a `_real_plugin.txt` hint (the real plugin's filename) and a `_license.bin`
    config (JSON despite the name — the product code + trial length LicLoader should request) all get
-   staged as siblings of the rewritten `.addin` in the same Revit Addins folder.
+   staged as siblings of the rewritten `.addin` in the same Revit Addins folder. **Every one of these
+   is named per-product** (`LicLoader.<slug>.dll`, `_license.<slug>.bin`, ...) since multiple BIM Hive
+   plugins share that one folder — and critically, the staged `LicLoader.<slug>.dll` copy also gets
+   its **internal .NET assembly identity** rewritten to match (`installer/license_shim.py::
+   stage_renamed_shim`, via the vendored `assembly_renamer/` tool — see `api/installer/vendor/
+   README.md`). A distinct filename alone isn't enough: an assembly's identity is embedded in its own
+   metadata, so two byte-identical copies of the same compiled DLL are, to .NET, *the same assembly*
+   no matter what they're named on disk — with 2+ plugins installed, Revit would silently reuse
+   whichever one loaded first for every plugin's shim, which is exactly why only one plugin ever
+   showed up in the ribbon before this was fixed (2026-09-03).
 3. On Revit startup, LicLoader computes a hardware fingerprint, calls this same server's
    `/api/license/activate` (same byte-compatible contract described below), and only if that
    succeeds does it load the real plugin via reflection and forward Revit's `OnStartup`/`OnShutdown`
@@ -650,7 +664,9 @@ cd api && pytest          # includes golden-master tests for the license API con
 ```
 
 `installer/test_builder.py` runs real NSIS builds (no mocking) end to end — needs `makensis` on
-PATH (see Prerequisites). The rest of the suite doesn't touch NSIS and runs anywhere.
+PATH (see Prerequisites). A few of that file's other tests (staging, not full builds) shell out to
+the real `dotnet`/`assembly_renamer` tool instead and need the .NET 8 runtime on PATH, same
+Prerequisites entry. The rest of the suite doesn't touch either and runs anywhere.
 
 No local Postgres? Point `DATABASE_URL` at a throwaway SQLite file (or `:memory:` for a one-off run)
 instead of editing `.env` — `dj_database_url` (used by `config/settings.py`) understands the

@@ -29,8 +29,26 @@ itself (2026-08-20, see ExternalApp.cs::GetSiblingConfigPath) derives which
 config filenames to read from its OWN on-disk filename, so a plain
 "LicLoader.dll" (no suffix) still falls back to the original unsuffixed
 names for backward compatibility with copies installed before this fix.
+
+**2026-09-03: a distinct filename alone turned out not to be enough.** A
+.NET assembly's identity (Name/Version/Culture/PublicKeyToken) is embedded
+in its own compiled metadata, completely independent of what the file on
+disk is named — and every per-product copy of LicLoader.dll is a byte-for-
+byte copy of the exact same compiled build, so they all share the identity
+"LicLoader, Version=1.0.0.0". With two or more BIM Hive plugins installed
+at once, .NET's assembly loader treats every one of those copies as the
+SAME assembly the moment Revit loads the second one — reusing the first
+one's already-loaded copy instead of loading the new file — which makes
+GetSiblingConfigPath's filename-sniffing (and every static field in
+ExternalApp.cs) resolve to whichever plugin loaded *first*, for every
+plugin. Confirmed as the actual cause of "only one plugin ever shows up in
+the ribbon" when 2+ are installed. Fixed by giving each staged copy a
+genuinely distinct assembly identity, not just a distinct filename — see
+stage_renamed_shim() below and installer/vendor/README.md.
 """
 import json
+import re
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -43,6 +61,49 @@ SHIM_FULL_CLASS_NAME = "LicLoader.ExternalApp"
 
 def shim_dll_name(slug: str) -> str:
     return f"LicLoader.{slug}.dll"
+
+
+def shim_assembly_name(slug: str) -> str:
+    """The per-product .NET assembly identity a staged shim copy gets
+    rewritten to (see stage_renamed_shim) — deliberately not just
+    shim_dll_name()'s filename, which AssemblyRenamer's own validation (and
+    .NET assembly-name rules generally) wouldn't accept as-is: a slug can
+    contain hyphens, this can't."""
+    return "LicLoader_" + re.sub(r"[^A-Za-z0-9_]", "_", slug or "plugin")
+
+
+class ShimRenameError(Exception):
+    """Raised when giving a staged shim copy its own assembly identity
+    fails — the caller must treat this as a build failure exactly like
+    AddinRewriteError, never fall back to shipping a copy that still shares
+    its identity with every other installed BIM Hive plugin."""
+
+
+def stage_renamed_shim(dest_path: Path, slug: str) -> None:
+    """Copies SHIM_DLL_PATH to dest_path, then rewrites *that copy's* own
+    .NET assembly identity to shim_assembly_name(slug) via the vendored
+    AssemblyRenamer tool (installer/vendor/assembly_renamer/) — see this
+    module's docstring for why a merely-renamed file isn't enough on its
+    own to stop multiple installed plugins' shims colliding at runtime."""
+    args = [
+        settings.DOTNET_EXECUTABLE,
+        settings.ASSEMBLY_RENAMER_DLL,
+        str(SHIM_DLL_PATH),
+        shim_assembly_name(slug),
+        str(dest_path),
+    ]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+    except FileNotFoundError as exc:
+        raise ShimRenameError(
+            f"dotnet runtime not found ({settings.DOTNET_EXECUTABLE!r}) — needed to give this "
+            f"product's license shim its own identity. ({exc})"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ShimRenameError("Rewriting the license shim's identity took too long and was aborted.") from exc
+
+    if result.returncode != 0 or not dest_path.exists():
+        raise ShimRenameError(f"Could not give the license shim its own identity: {result.stderr.strip()}")
 
 
 def license_config_filename(slug: str) -> str:

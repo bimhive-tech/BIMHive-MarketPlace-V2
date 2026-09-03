@@ -210,6 +210,16 @@ LICENSE_SIGNING_KEY = env("LICENSE_SIGNING_KEY", default="")
 # platform compiler for Windows installers.
 NSIS_EXECUTABLE = env("NSIS_EXECUTABLE", default="makensis")
 INSTALLER_BUILD_TIMEOUT_SECONDS = env.int("INSTALLER_BUILD_TIMEOUT_SECONDS", default=180)
+# `dotnet` (runtime only, not the SDK — see Dockerfile) runs
+# installer/vendor/assembly_renamer, a small framework-dependent tool that
+# gives each product's copy of LicLoader.dll a distinct .NET assembly
+# identity — see installer/license_shim.py's module docstring for why a
+# renamed-but-otherwise-identical copy isn't enough on its own.
+DOTNET_EXECUTABLE = env("DOTNET_EXECUTABLE", default="dotnet")
+ASSEMBLY_RENAMER_DLL = env(
+    "ASSEMBLY_RENAMER_DLL",
+    default=str(BASE_DIR / "installer" / "vendor" / "assembly_renamer" / "AssemblyRenamer.dll"),
+)
 INSTALLER_MANUFACTURER = env("INSTALLER_MANUFACTURER", default="BIMHive")
 # The public domain LicLoader.dll (see installer/license_shim.py) is told to
 # call for /api/license/activate — reuses the same env var Next.js already
