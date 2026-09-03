@@ -74,6 +74,7 @@ const EMPTY_FORM = {
   default_trial_days: "7",
   default_trial_hours: "0",
   default_trial_minutes: "0",
+  version: "1.0.0",
   status: "published",
   rejection_note: "",
   visibility: "public",
@@ -149,6 +150,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           default_trial_days: String(p.default_trial_days),
           default_trial_hours: String(p.default_trial_hours),
           default_trial_minutes: String(p.default_trial_minutes),
+          version: p.version,
           status: p.status,
           rejection_note: p.rejection_note,
           visibility: p.visibility,
@@ -214,6 +216,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       default_trial_days: Number(form.default_trial_days) || 0,
       default_trial_hours: Number(form.default_trial_hours) || 0,
       default_trial_minutes: Number(form.default_trial_minutes) || 0,
+      version: form.version.trim() || "1.0.0",
       status,
       // Only staff can write this (see validate()); a partner's edits to it
       // are silently ignored server-side, so there's no point sending it.
@@ -460,6 +463,22 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                   <Icon name="plus" size={14} /> Add Feature
                 </button>
               </div>
+
+              <label className={styles.label}>
+                Product Version
+                <input
+                  className={styles.input}
+                  value={form.version}
+                  onChange={(e) => set("version", e.target.value)}
+                  placeholder="1.0.0"
+                />
+                <span className={styles.hint}>
+                  Changing this from what&apos;s currently saved shows an &quot;Updated&quot; badge
+                  on the product for {options?.updated_badge_days ?? 7} days after you save (skipped
+                  while the product is still showing as &quot;New&quot;). Bump this whenever you ship
+                  a real update — e.g. after uploading a new build below — not on every minor edit.
+                </span>
+              </label>
 
               <div className={styles.features}>
                 <p className={styles.label}>What&apos;s New (Changelog)</p>

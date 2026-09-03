@@ -203,6 +203,8 @@ export interface AdminOptions {
   tags: { id: number; name: string }[];
   types: { value: string; label: string }[];
   membership_plans: { id: number; name: string; rank: number }[];
+  updated_badge_days: number;
+  new_badge_days: number;
 }
 
 export const getAdminOptions = () => getJSON<AdminOptions>("/api/admin/options");

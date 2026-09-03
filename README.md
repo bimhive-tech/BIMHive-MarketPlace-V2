@@ -535,6 +535,14 @@ A product showing "New" never also shows "Updated" — one badge per card. Both 
 site-wide) and rendered by the shared `ProductBadges`/`ProductBadgesInline` components with a
 `prefers-reduced-motion`-gated drop-in + pulse animation.
 
+**To show "Updated" on a product:** open it in the admin/partner product form's **Product
+Information** tab and change the **Product Version** field (just above "What's New") to a new value,
+then save — that's the only trigger, and it was a real gap until now: the model/serializer/badge
+logic all existed, but no form input for `Product.version` was ever wired up, so there was previously
+no way to change it from the UI at all. The field's hint text reads the live
+`UPDATED_PRODUCT_BADGE_DAYS`/`NEW_PRODUCT_BADGE_DAYS` values from `GET /api/admin/options` rather than
+stating a guessed number.
+
 ## All-Access membership: one subscription, one universal key
 
 Alongside buying products one at a time, a customer can subscribe to an **All-Access** plan and get

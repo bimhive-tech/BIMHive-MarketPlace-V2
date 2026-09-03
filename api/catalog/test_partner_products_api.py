@@ -341,6 +341,17 @@ def test_options_shows_partner_list_to_staff(staff_client, partner_a, partner_b)
     assert {"Partner A", "Partner B"} <= names
 
 
+def test_options_exposes_the_real_configured_badge_windows(staff_client, settings):
+    # The Product Version field's hint text (ProductForm.tsx) reads these so
+    # it never states a guessed/hardcoded day count that could drift from
+    # what's actually configured — see Product.is_new/is_updated.
+    settings.NEW_PRODUCT_BADGE_DAYS = 5
+    settings.UPDATED_PRODUCT_BADGE_DAYS = 9
+    resp = staff_client.get("/api/admin/options")
+    assert resp.json()["new_badge_days"] == 5
+    assert resp.json()["updated_badge_days"] == 9
+
+
 # ── Staff behavior stays fully unchanged ──
 def test_staff_still_sees_all_partners_products(staff_client, partner_a, partner_b, category):
     Product.objects.create(name="A's", short_description="s", description="d", category=category, partner=partner_a)

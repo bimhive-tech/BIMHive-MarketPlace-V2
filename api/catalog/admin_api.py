@@ -2,6 +2,7 @@
 Staff-only admin API powering the Next.js admin portal (/admin-portal).
 Separate from Django's built-in /admin. All endpoints require is_staff.
 """
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, F
 from django.db.models.functions import Coalesce
@@ -553,6 +554,11 @@ class AdminOptionsView(APIView):
                 "membership_plans": list(
                     MembershipPlan.objects.filter(is_active=True).values("id", "name", "rank")
                 ),
+                # Surfaced so the Product Version field's hint text can say the
+                # real configured window instead of a guessed/hardcoded number
+                # that could drift from settings.py — see Product.is_updated.
+                "updated_badge_days": settings.UPDATED_PRODUCT_BADGE_DAYS,
+                "new_badge_days": settings.NEW_PRODUCT_BADGE_DAYS,
             }
         )
 
