@@ -550,7 +550,22 @@ class ClaimFreeProductView(APIView):
         # rows for the same user from repeated test checkouts. Idempotency
         # here just means "reuse whatever's already there," same contract
         # get_or_create had for the one-row case.
-        purchase = ProductPurchase.objects.filter(user=request.user, product=sku).order_by("-requested_at").first()
+        #
+        # is_trial=False: a trial (AccountPluginBuildTrialDownloadView) is a
+        # separate, deliberately time-limited acquisition — claiming the free
+        # version must never pick up an expired trial row and hand it back
+        # as if reactivating it (restore_purchase_access can't actually
+        # revive it either: it only resets expires_at while flipping a
+        # *non*-PAID row to PAID, and a lapsed trial is already PAID, so that
+        # reset is skipped and it would come back 200 while still expired).
+        # Excluding trials means a customer who burned an expired trial
+        # simply gets a fresh, real, perpetual free-claim row instead — the
+        # trial row is left untouched as history.
+        purchase = (
+            ProductPurchase.objects.filter(user=request.user, product=sku, is_trial=False)
+            .order_by("-requested_at")
+            .first()
+        )
         created = purchase is None
         if created:
             purchase = ProductPurchase.objects.create(
@@ -561,15 +576,20 @@ class ClaimFreeProductView(APIView):
                 currency=product.currency,
             )
         elif not purchase.is_license_active:
-            # The one existing row is refunded/cancelled/revoked — a
-            # self-service refund on a free ($0) claim shouldn't be a
-            # permanent dead end the way a real paid refund reasonably is,
-            # there's no money changing hands to reason about. Reactivate it
-            # (also un-blocks any machine binding it still has) rather than
-            # silently handing back an inactive purchase with a 200 that
-            # looks like success but never shows up on Downloads/Licenses —
-            # confirmed as a real report: refund a free product, "claim" it
-            # again, it looks like it worked but access never comes back.
+            # The one existing (non-trial) row is refunded/cancelled/revoked,
+            # or — narrower edge case — carries a stale expires_at from some
+            # other path (e.g. a staff-issued time-limited LicenseCode
+            # redemption) that lapsed. A self-service refund on a free ($0)
+            # claim shouldn't be a permanent dead end the way a real paid
+            # refund reasonably is, there's no money changing hands to
+            # reason about. A free claim is meant to be perpetual, so clear
+            # any leftover expiry before restoring — restore_purchase_access
+            # itself only touches expires_at when flipping a *non*-PAID row
+            # to PAID, so an already-PAID-but-expired row would otherwise
+            # come back unchanged, still expired, with a misleading 200.
+            if not purchase.billing_period:
+                purchase.expires_at = None
+                purchase.save(update_fields=["expires_at"])
             restore_purchase_access(purchase)
             purchase.refresh_from_db()
         if created:

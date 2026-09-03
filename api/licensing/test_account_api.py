@@ -283,6 +283,66 @@ def test_claim_free_does_not_crash_when_the_user_already_holds_several_purchases
     assert ProductPurchase.objects.filter(user=user).count() == 3  # reused an existing row, didn't add a 4th
 
 
+def test_claim_free_ignores_an_expired_trial_and_grants_a_fresh_perpetual_claim(django_user_model, free_product):
+    # Real production question: a customer's trial of a free product expired
+    # — what happens if they claim the free version afterward? A trial row
+    # is already payment_status=PAID (just time-expired), so a naive
+    # "reactivate whatever's there" would call restore_purchase_access on
+    # it, which only resets expires_at while flipping a *non*-PAID row to
+    # PAID — a lapsed trial skips that and would come back 200 while still
+    # expired. Claiming free must ignore the trial row entirely and grant a
+    # brand new, real, perpetual (no expires_at) row instead.
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    user, client = _login(django_user_model)
+    sku = LicensedProduct.objects.filter(product=free_product).first()
+    trial = ProductPurchase.objects.create(
+        user=user, product=sku, is_trial=True, payment_status=ProductPurchase.PaymentStatus.PAID,
+        amount=0, expires_at=timezone.now() - timedelta(days=1),
+    )
+    assert not trial.is_license_active
+
+    resp = _claim(client, free_product.slug)
+    assert resp.status_code == 201, resp.json()
+
+    assert ProductPurchase.objects.filter(user=user).count() == 2  # trial left untouched, new row added
+    new_purchase = ProductPurchase.objects.get(user=user, is_trial=False)
+    assert new_purchase.is_license_active
+    assert new_purchase.expires_at is None
+
+    trial.refresh_from_db()
+    assert not trial.is_license_active  # unchanged — still a lapsed trial, not silently revived
+
+
+def test_claim_free_reactivates_a_non_trial_purchase_with_a_stale_expiry(django_user_model, free_product):
+    # Narrower edge case: a non-trial row (e.g. from a time-limited
+    # LicenseCode redemption) that's already PAID but lapsed. restore_purchase_access
+    # alone wouldn't touch its expires_at (it only resets expiry when
+    # flipping a *non*-PAID row to PAID) — claiming free must explicitly
+    # clear it since a free claim is meant to be perpetual.
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    user, client = _login(django_user_model)
+    sku = LicensedProduct.objects.filter(product=free_product).first()
+    purchase = ProductPurchase.objects.create(
+        user=user, product=sku, payment_status=ProductPurchase.PaymentStatus.PAID,
+        amount=0, expires_at=timezone.now() - timedelta(days=1),
+    )
+    assert not purchase.is_license_active
+
+    resp = _claim(client, free_product.slug)
+    assert resp.status_code == 200, resp.json()
+    assert ProductPurchase.objects.filter(user=user).count() == 1  # reused the row
+
+    purchase.refresh_from_db()
+    assert purchase.is_license_active
+    assert purchase.expires_at is None
+
+
 def test_claim_free_reactivates_a_refunded_purchase(django_user_model, free_product):
     # Real production report: a customer refunds a free ($0) claim, then
     # tries to claim it again — the pre-existing row (now refunded) was
