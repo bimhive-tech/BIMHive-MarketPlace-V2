@@ -1,7 +1,7 @@
 """
 /api/auth/me's partner payload — the frontend's only signal for whether a
 logged-in user has a seller application and what state it's in (see
-catalog.permissions.IsPartnerUser/IsStaffOrPartner for how access is actually
+catalog.permissions.IsPartnerUser/IsApprovedPartner for how access is actually
 enforced server-side).
 """
 import pytest

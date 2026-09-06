@@ -5,13 +5,16 @@ secret values themselves — this is real, live status, not an editable form
 backed by nothing (see CLAUDE.md: no placeholders).
 """
 from django.conf import settings
-from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import IsSuperAdmin
+
 
 class AdminSystemStatusView(APIView):
-    permission_classes = [IsAdminUser]
+    # Settings (General/Payments) is hard Admin-only, like Users/Roles — never
+    # a grantable Staff permission (see accounts.permissions).
+    permission_classes = [IsSuperAdmin]
 
     def get(self, request):
         return Response(

@@ -16,6 +16,10 @@ export interface User {
   last_name: string;
   full_name: string;
   is_staff: boolean;
+  is_superuser: boolean;
+  /** Resolved admin-portal capability keys — full set when is_superuser, else
+   * whatever the assigned Role grants (see api/accounts/permissions.py). */
+  permissions: string[];
   date_joined: string;
   profile: {
     company: string;

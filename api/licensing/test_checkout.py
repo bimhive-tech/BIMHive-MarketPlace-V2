@@ -425,7 +425,9 @@ def test_staff_marking_a_pending_subscription_order_paid_starts_its_billing_peri
     purchase = ProductPurchase.objects.get(user=user, product__product=subscription_product)
     assert purchase.expires_at is None  # unset until confirmed, same as always
 
-    staff = django_user_model.objects.create_user(username="staff", email="staff@x.com", password="x", is_staff=True)
+    staff = django_user_model.objects.create_user(
+        username="staff", email="staff@x.com", password="x", is_staff=True, is_superuser=True,
+    )
     staff_client = Client()
     staff_client.force_login(staff)
     resp = staff_client.post(f"/api/admin/orders/{purchase.pk}/status", {"action": "restore"})

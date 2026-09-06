@@ -3,8 +3,8 @@ The self-service "Become a Seller" application flow: apply -> pending Partner
 linked to the applicant's User -> staff approve/reject via the existing
 AdminPartnerViewSet PATCH -> approval unlocks product management + the sales
 view. See catalog/partner_api.py (BecomeSellerView, PartnerSalesView) and
-catalog/permissions.py (IsStaffOrPartner/IsApprovedPartner now gate on
-Partner.status, not just User.partner_id).
+catalog/permissions.py (IsApprovedPartner now gates on Partner.status, not
+just User.partner_id).
 """
 import pytest
 from django.contrib.auth import get_user_model
@@ -37,7 +37,9 @@ def customer_client():
 
 @pytest.fixture
 def staff_client():
-    user = User.objects.create_user(username="admin@x.com", email="admin@x.com", password="x", is_staff=True)
+    user = User.objects.create_user(
+        username="admin@x.com", email="admin@x.com", password="x", is_staff=True, is_superuser=True,
+    )
     client = Client()
     client.force_login(user)
     return client

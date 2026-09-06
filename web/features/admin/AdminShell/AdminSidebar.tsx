@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon/Icon";
 import { Logo } from "@/components/Logo/Logo";
 import { SidebarNav, type SidebarNavGroup } from "@/components/SidebarNav/SidebarNav";
+import type { User } from "@/lib/types";
 
 import styles from "./AdminShell.module.css";
 
@@ -52,13 +53,50 @@ const GROUPS: SidebarNavGroup[] = [
   },
 ];
 
-export function AdminSidebar() {
+// Maps a real, backed sidebar item to the granular permission that gates it
+// (see api/accounts/permissions.py::ADMIN_PERMISSIONS) — kept in sync by
+// convention, same as ADMIN_PERMISSIONS itself mirrors the backend catalog.
+// An item with no entry here (Analytics, Support Tickets, Knowledge Base —
+// none has a backing admin API yet) is always shown; real enforcement is
+// server-side regardless, this only avoids linking to a section the API
+// would reject.
+const ITEM_PERMISSION: Record<string, string> = {
+  "/admin-portal": "dashboard.view",
+  "/admin-portal/activity": "activity.view",
+  "/admin-portal/orders": "orders.manage",
+  "/admin-portal/customers": "customers.view",
+  "/admin-portal/reviews": "reviews.moderate",
+  "/admin-portal/licenses": "licenses.manage",
+  "/admin-portal/memberships": "memberships.manage",
+  "/admin-portal/products": "products.manage",
+  "/admin-portal/promotions": "promotions.manage",
+  "/admin-portal/membership-plans": "membership_plans.manage",
+  "/admin-portal/collections": "collections.manage",
+  "/admin-portal/categories": "categories.manage",
+  "/admin-portal/tags": "tags.manage",
+  "/admin-portal/partners": "partners.manage",
+};
+
+export function AdminSidebar({ user }: { user: User }) {
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    items:
+      group.heading === "Settings"
+        ? user.is_superuser
+          ? group.items
+          : []
+        : group.items.filter((item) => {
+            const required = ITEM_PERMISSION[item.href];
+            return !required || user.is_superuser || user.permissions.includes(required);
+          }),
+  })).filter((group) => group.items.length > 0);
+
   return (
     <aside className={styles.sidebar}>
       <div className={styles.sidebarBrand}>
         <Logo />
       </div>
-      <SidebarNav groups={GROUPS} rootPath="/admin-portal" className={styles.navFlex} />
+      <SidebarNav groups={groups} rootPath="/admin-portal" className={styles.navFlex} />
       <Link href="/" className={styles.viewSite}>
         <Icon name="arrow-right" size={16} />
         View Marketplace

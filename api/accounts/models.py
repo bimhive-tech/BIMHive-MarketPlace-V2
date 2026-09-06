@@ -8,13 +8,24 @@ from django_countries.fields import CountryField
 
 
 class Role(models.Model):
-    """A named permission grant (Admin settings > Roles & Permissions)."""
+    """A named permission grant (Admin settings > Roles & Permissions).
+
+    `permissions` holds a list of granular admin-portal capability keys (see
+    accounts.permissions.ADMIN_PERMISSION_KEYS) — what a Staff member with this
+    role can actually do once inside the admin portal, e.g. ["products.manage"].
+    Only meaningful for a role that also has grants_staff_access=True. Deliberately
+    can never include Users/Roles/Settings — those stay hard is_superuser-only,
+    never assignable through a Role, which is what keeps Staff from ever affecting
+    Admin or other staff accounts. An Admin (is_superuser=True) always has full
+    access regardless of role/permissions — see accounts.permissions.
+    """
 
     name = models.CharField(max_length=60, unique=True)
     description = models.CharField(max_length=200, blank=True)
     grants_staff_access = models.BooleanField(
         default=False, help_text="Users with this role can sign in to the admin portal."
     )
+    permissions = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

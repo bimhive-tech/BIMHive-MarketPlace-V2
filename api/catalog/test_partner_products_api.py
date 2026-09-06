@@ -2,7 +2,7 @@
 Partner self-service product management: a partner-linked (non-staff) user can
 create/edit/upload files on their OWN products only, can never self-publish or
 self-reject (only BIMHive staff can), and can never see or touch another
-partner's products, files, or media. See catalog/permissions.py (IsStaffOrPartner)
+partner's products, files, or media. See catalog/permissions.py (IsApprovedPartner)
 and the partner-branching logic in AdminProductDetailSerializer (admin_api.py).
 """
 import pytest
@@ -50,7 +50,12 @@ def partner_b_client(client, partner_b):
 
 @pytest.fixture
 def staff_client(client):
-    user = User.objects.create_user(username="admin@x.com", email="admin@x.com", password="x", is_staff=True)
+    # Admin tier (is_superuser), not just is_staff — these tests exercise full,
+    # unrestricted product access; a plain Staff account needs products.manage
+    # explicitly (see accounts/test_permissions.py for that granular logic).
+    user = User.objects.create_user(
+        username="admin@x.com", email="admin@x.com", password="x", is_staff=True, is_superuser=True,
+    )
     client.force_login(user)
     return client
 

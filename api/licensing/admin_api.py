@@ -10,10 +10,10 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, serializers
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import HasAdminPermission
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from licensing.models import LicenseCode, LicensedProduct, MachineLicense, ProductPurchase
@@ -45,7 +45,8 @@ class AdminMachineLicenseSerializer(serializers.ModelSerializer):
 
 
 class AdminLicenseListView(generics.ListAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
     serializer_class = AdminMachineLicenseSerializer
 
     def get_queryset(self):
@@ -65,7 +66,8 @@ class AdminLicenseListView(generics.ListAPIView):
 
 
 class AdminLicenseRevokeView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
 
     def post(self, request, pk):
         license_obj = MachineLicense.objects.select_related("purchase").get(pk=pk)
@@ -82,7 +84,8 @@ class AdminLicenseRevokeView(APIView):
 
 
 class AdminLicenseRestoreView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
 
     def post(self, request, pk):
         license_obj = MachineLicense.objects.select_related("purchase").get(pk=pk)
@@ -105,7 +108,8 @@ class AdminLicenseReleaseView(APIView):
     — this is the deliberate manual override for "customer's PC died,"
     an alternative to issuing them a brand-new license code from scratch."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
 
     def post(self, request, pk):
         license_obj = MachineLicense.objects.select_related("purchase", "product").get(pk=pk)
@@ -118,7 +122,8 @@ class AdminLicenseReleaseView(APIView):
 
 
 class AdminLicenseExtendView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
 
     def post(self, request, pk):
         days = request.data.get("days")
@@ -172,7 +177,8 @@ class AdminOrderSerializer(serializers.ModelSerializer):
 
 
 class AdminOrderListView(generics.ListAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "orders.manage"
     serializer_class = AdminOrderSerializer
 
     def get_queryset(self):
@@ -186,7 +192,8 @@ class AdminOrderListView(generics.ListAPIView):
 class AdminOrderStatusView(APIView):
     """Move a purchase between payment states, granting/revoking activation as needed."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "orders.manage"
 
     def post(self, request, pk):
         purchase = ProductPurchase.objects.select_related("product", "user").get(pk=pk)
@@ -214,7 +221,8 @@ class AdminOrderSeatsView(APIView):
     checkout flow yet (see AdminOrdersPage's empty-state copy), so this is
     currently the only way a "buy N licenses" purchase gets more than 1 seat."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "orders.manage"
 
     def post(self, request, pk):
         seats = request.data.get("seats")
@@ -237,7 +245,8 @@ class AdminOrderSeatsView(APIView):
 
 
 class AdminLicenseOptionsView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
 
     def get(self, request):
         return Response(
@@ -267,7 +276,8 @@ class AdminLicenseCodeSerializer(serializers.ModelSerializer):
 
 
 class AdminLicenseCodeListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
     serializer_class = AdminLicenseCodeSerializer
 
     def get_queryset(self):
@@ -293,7 +303,8 @@ class AdminLicenseCodeRevokeView(APIView):
     """Invalidate an unredeemed code so it can no longer be used — does not
     touch anything already redeemed (revoke the resulting order instead)."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "licenses.manage"
 
     def post(self, request, pk):
         code = LicenseCode.objects.select_related("product").get(pk=pk)

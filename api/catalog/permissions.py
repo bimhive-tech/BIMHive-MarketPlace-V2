@@ -1,11 +1,15 @@
-"""Permission classes for the shared staff+partner product management API.
+"""Permission classes for the partner (external seller) side of the shared
+product-management API.
 
-`IsStaffOrPartner`/`IsApprovedPartner` are deliberately narrow — used only on
-the product/file/media/sales endpoints in admin_api.py and partner_api.py.
-Every other admin endpoint (Orders, Customers, Licenses, Users, Roles,
-Categories, Tags, Collections, Reviews, Activity, System Status) keeps the
-plain `IsAdminUser` it already had; partner-linked users must never reach
-those.
+`IsApprovedPartner` gates entry for a partner's own product/build/sales
+endpoints (partner_api.py) — no staff branch, since staff have their own
+granular check. The staff side of that same shared surface (product/file/
+media/plugin-build endpoints in catalog/admin_api.py and installer/api.py)
+composes accounts.permissions.HasAdminPermission with IsApprovedPartner
+(`IsApprovedPartner | (IsAuthenticated & HasAdminPermission)`) — replacing the
+old blanket "any is_staff" grant with a specific granular permission. Users,
+Roles & Permissions, and Settings use accounts.permissions.IsSuperAdmin;
+partner-linked users must never reach those either way.
 """
 from rest_framework.permissions import BasePermission
 
@@ -15,17 +19,6 @@ def _is_approved_partner(user) -> bool:
         user.partner_id is not None
         and getattr(user.partner, "status", None) == user.partner.ApplicationStatus.APPROVED
     )
-
-
-class IsStaffOrPartner(BasePermission):
-    """Staff (BIMHive admins) or an APPROVED partner (self-service product
-    management) — a pending or rejected seller application has no product
-    access yet. Views using this must scope their queryset to the caller's
-    own partner when the caller isn't staff — this class only gates entry."""
-
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(user and user.is_authenticated and (user.is_staff or _is_approved_partner(user)))
 
 
 class IsPartnerUser(BasePermission):

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Pill } from "@/components/Pill/Pill";
-import { getAdminCustomers, type AdminUser } from "@/lib/adminApi";
+import { type AdminCustomer, getAdminCustomers } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
 
@@ -12,7 +12,7 @@ function formatDate(value: string): string {
 }
 
 export default function AdminCustomersPage() {
-  const [rows, setRows] = useState<AdminUser[] | null>(null);
+  const [rows, setRows] = useState<AdminCustomer[] | null>(null);
 
   useEffect(() => {
     getAdminCustomers().then(setRows).catch(() => setRows([]));

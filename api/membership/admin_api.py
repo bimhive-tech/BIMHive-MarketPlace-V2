@@ -7,10 +7,10 @@ universal key — one switch and every product it opened closes with it.
 """
 from rest_framework import serializers, viewsets
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import HasAdminPermission
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from membership.models import Membership, MembershipPlan
@@ -48,7 +48,8 @@ class AdminMembershipPlanSerializer(serializers.ModelSerializer):
 
 
 class AdminMembershipPlanViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "membership_plans.manage"
     serializer_class = AdminMembershipPlanSerializer
     queryset = MembershipPlan.objects.all()
 
@@ -78,7 +79,8 @@ class AdminMembershipViewSet(viewsets.ReadOnlyModelViewSet):
     revoke/reinstate actions below so the covered purchases are always brought
     along, which a bare PATCH on `status` would skip."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "memberships.manage"
     serializer_class = AdminMembershipSerializer
 
     def get_queryset(self):
@@ -88,7 +90,8 @@ class AdminMembershipViewSet(viewsets.ReadOnlyModelViewSet):
 class AdminMembershipRevokeView(APIView):
     """Kills a membership and every license its universal key had opened."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "memberships.manage"
 
     def post(self, request, pk):
         membership = Membership.objects.select_related("plan", "user").filter(pk=pk).first()
@@ -115,7 +118,8 @@ class AdminMembershipReinstateView(APIView):
     webhook, and the way to test the whole flow without a live payment (same
     role "Mark Paid" plays for product orders)."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "memberships.manage"
 
     def post(self, request, pk):
         membership = Membership.objects.select_related("plan", "user").filter(pk=pk).first()

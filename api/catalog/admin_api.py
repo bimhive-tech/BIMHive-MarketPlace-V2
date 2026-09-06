@@ -1,6 +1,8 @@
 """
 Staff-only admin API powering the Next.js admin portal (/admin-portal).
-Separate from Django's built-in /admin. All endpoints require is_staff.
+Separate from Django's built-in /admin. Every endpoint requires is_staff plus
+a specific granular permission (see accounts.permissions) — Admin
+(is_superuser) always has full access regardless.
 """
 from django.conf import settings
 from django.db import transaction
@@ -9,10 +11,11 @@ from django.db.models.functions import Coalesce
 from rest_framework import generics, serializers, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import HasAdminPermission
 from activity.models import ActivityVerb
 from activity.services import log_activity
 from catalog.models import (
@@ -31,9 +34,15 @@ from catalog.models import (
     Tag,
 )
 from catalog.models.product import ProductStatus
-from catalog.permissions import IsStaffOrPartner
+from catalog.permissions import IsApprovedPartner
 from catalog.storage import refresh_storage_url
 from membership.models import MembershipPlan
+
+# Products (and their files/media) are shared between staff-with-permission
+# and approved partners managing their own catalog — composed once and reused
+# on every product-family view below, mirroring installer.api's identical
+# _CAN_MANAGE_PLUGIN_BUILDS for plugin builds.
+_CAN_MANAGE_PRODUCTS = IsApprovedPartner | (IsAuthenticated & HasAdminPermission)
 
 
 def _effective_partner_id(request):
@@ -363,7 +372,8 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
 # Views
 # ─────────────────────────────────────────────────────────────
 class AdminStatsView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "dashboard.view"
 
     def get(self, request):
         by_status = dict(Product.objects.values_list("status").annotate(n=Count("id")))
@@ -381,7 +391,8 @@ class AdminStatsView(APIView):
 
 
 class AdminProductListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
     serializer_class = AdminProductDetailSerializer
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
         "tags", "features", "media", "changelog", "compatibility", "files", "documentation__sections"
@@ -407,7 +418,8 @@ class AdminProductListCreateView(generics.ListCreateAPIView):
 
 
 class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
     serializer_class = AdminProductDetailSerializer
     queryset = Product.objects.select_related("category", "partner").prefetch_related(
         "tags", "features", "media", "changelog", "compatibility", "files", "documentation__sections"
@@ -430,7 +442,8 @@ class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
 class AdminProductFileListCreateView(generics.ListCreateAPIView):
     """Multi-variant file upload (Files & Downloads tab) — one row per Revit version."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
     serializer_class = ProductFileSerializer
     parser_classes = [MultiPartParser, FormParser]
 
@@ -463,7 +476,8 @@ class AdminProductFileListCreateView(generics.ListCreateAPIView):
 
 
 class AdminProductFileDetailView(generics.DestroyAPIView):
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
     serializer_class = ProductFileSerializer
     queryset = ProductFile.objects.all()
 
@@ -487,7 +501,8 @@ class AdminProductMediaUploadView(APIView):
     this stores it in R2's public-media bucket and hands back a permanent URL
     plus the auto-detected media type, so nothing about it needs to be typed."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, product_id):
@@ -534,7 +549,8 @@ class AdminOptionsView(APIView):
     hides the partner picker entirely and auto-scopes to their own org, so
     handing them every other partner's name here would be a pure data leak."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
 
     def get(self, request):
         return Response(
@@ -610,7 +626,8 @@ class CategorySerializer(ProductCountMixin, serializers.ModelSerializer):
 
 
 class AdminCategoryViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "categories.manage"
     serializer_class = CategorySerializer
 
     def get_queryset(self):
@@ -639,7 +656,8 @@ class TagSerializer(ProductCountMixin, serializers.ModelSerializer):
 
 
 class AdminTagViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "tags.manage"
     serializer_class = TagSerializer
 
     def get_queryset(self):
@@ -672,7 +690,8 @@ class PartnerSerializer(ProductCountMixin, serializers.ModelSerializer):
 
 
 class AdminPartnerViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "partners.manage"
     serializer_class = PartnerSerializer
 
     def get_queryset(self):
@@ -695,7 +714,8 @@ class CollectionSerializer(ProductCountMixin, serializers.ModelSerializer):
 
 
 class AdminCollectionViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "collections.manage"
     serializer_class = CollectionSerializer
 
     def get_queryset(self):
@@ -751,7 +771,8 @@ class PromotionSerializer(serializers.ModelSerializer):
 
 
 class AdminPromotionViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "promotions.manage"
     serializer_class = PromotionSerializer
 
     def get_queryset(self):

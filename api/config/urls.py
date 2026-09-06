@@ -36,7 +36,7 @@ urlpatterns = [
     path("api/admin/", include("installer.urls")),
     path("api/admin/", include("membership.admin_urls")),
     # ── Partner self-service API (partner-linked users only; product CRUD
-    # itself is shared with staff via catalog.admin_urls, see IsStaffOrPartner) ──
+    # itself is shared with staff via catalog.admin_urls, see catalog.permissions) ──
     path("api/partner/", include("catalog.partner_urls")),
     # ── All-Access membership (public plans; account + admin mounted above) ──
     path("api/membership/", include("membership.urls")),

@@ -481,6 +481,7 @@ export interface AdminUser {
   first_name: string;
   last_name: string;
   is_staff: boolean;
+  is_superuser: boolean;
   is_active: boolean;
   date_joined: string;
   role: number | null;
@@ -489,18 +490,54 @@ export interface AdminUser {
 }
 export const getAdminUsers = (search = "") =>
   getJSON<AdminUser[]>(`/api/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`);
-export const getAdminCustomers = () => getJSON<AdminUser[]>("/api/admin/customers");
-export const updateAdminUser = (id: number, payload: { role?: number | null; is_active?: boolean; is_staff?: boolean }) =>
-  request<AdminUser>(`/api/admin/users/${id}`, "PATCH", payload);
+export const updateAdminUser = (
+  id: number,
+  payload: { role?: number | null; is_active?: boolean; is_staff?: boolean; is_superuser?: boolean },
+) => request<AdminUser>(`/api/admin/users/${id}`, "PATCH", payload);
+
+// Genuinely separate from AdminUser/getAdminUsers — Customers is a read-only,
+// permission-gated view (no is_staff/role), not the same sensitive endpoint
+// Users management uses. See api/accounts/admin_api.py::AdminCustomerListView.
+export interface AdminCustomer {
+  id: number;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  date_joined: string;
+  order_count: number;
+}
+export const getAdminCustomers = (search = "") =>
+  getJSON<AdminCustomer[]>(`/api/admin/customers${search ? `?search=${encodeURIComponent(search)}` : ""}`);
 
 export interface AdminRole {
   id: number;
   name: string;
   description: string;
   grants_staff_access: boolean;
+  permissions: string[];
   user_count: number;
 }
 export const rolesApi = crud<AdminRole>("/api/admin/roles");
+
+// Mirrors api/accounts/permissions.py::ADMIN_PERMISSIONS exactly — kept in
+// sync by convention, same as AdminSidebar's own hardcoded section list.
+// Grouped for the Roles & Permissions checklist UI.
+export const ADMIN_PERMISSIONS: { key: string; label: string; group: string }[] = [
+  { key: "dashboard.view", label: "View Dashboard", group: "Overview" },
+  { key: "activity.view", label: "View Activity", group: "Overview" },
+  { key: "orders.manage", label: "Manage Orders", group: "Overview" },
+  { key: "customers.view", label: "View Customers", group: "Overview" },
+  { key: "reviews.moderate", label: "Moderate Reviews", group: "Overview" },
+  { key: "licenses.manage", label: "Manage Licenses", group: "Overview" },
+  { key: "memberships.manage", label: "Manage Memberships", group: "Overview" },
+  { key: "products.manage", label: "Manage Products", group: "Products & Content" },
+  { key: "promotions.manage", label: "Manage Promotions", group: "Products & Content" },
+  { key: "membership_plans.manage", label: "Manage Membership Plans", group: "Products & Content" },
+  { key: "collections.manage", label: "Manage Collections", group: "Products & Content" },
+  { key: "categories.manage", label: "Manage Categories", group: "Products & Content" },
+  { key: "tags.manage", label: "Manage Tags", group: "Products & Content" },
+  { key: "partners.manage", label: "Manage Partners", group: "Products & Content" },
+];
 
 // ── Reviews ──
 export interface AdminReview {

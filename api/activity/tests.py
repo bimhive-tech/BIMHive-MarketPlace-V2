@@ -46,7 +46,9 @@ def free_product(category):
 
 @pytest.fixture
 def staff_client():
-    user = User.objects.create_user(username="admin@x.com", email="admin@x.com", password="x", is_staff=True)
+    user = User.objects.create_user(
+        username="admin@x.com", email="admin@x.com", password="x", is_staff=True, is_superuser=True,
+    )
     client = Client()
     client.force_login(user)
     return client

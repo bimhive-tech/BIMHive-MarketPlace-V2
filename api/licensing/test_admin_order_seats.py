@@ -28,7 +28,9 @@ def purchase(product):
 
 @pytest.fixture
 def staff_client():
-    staff = User.objects.create_user(username="staff@x.com", email="staff@x.com", password="x", is_staff=True)
+    staff = User.objects.create_user(
+        username="staff@x.com", email="staff@x.com", password="x", is_staff=True, is_superuser=True,
+    )
     client = Client()
     client.force_login(staff)
     return client

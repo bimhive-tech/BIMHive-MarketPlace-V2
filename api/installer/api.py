@@ -10,13 +10,21 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import HasAdminPermission
 from catalog.admin_api import _effective_partner_id
 from catalog.models import Product
 from catalog.models.product import ProductType
-from catalog.permissions import IsStaffOrPartner
+from catalog.permissions import IsApprovedPartner
+
+# Plugin builds are part of a product's own content — same products.manage
+# permission that gates the product record itself in catalog/admin_api.py,
+# composed the same way (approved partner OR staff-with-products.manage OR
+# Admin) rather than the old blanket "any staff" IsStaffOrPartner.
+_CAN_MANAGE_PLUGIN_BUILDS = IsApprovedPartner | (IsAuthenticated & HasAdminPermission)
 from installer.builder import generate_installer_bytes
 from installer.models import PluginBuild, PluginResourceFile
 from installer.paths import DESTINATION_TOKENS, InvalidDestinationPath, parse_destination_path
@@ -72,7 +80,8 @@ class PluginBuildListCreateView(generics.ListCreateAPIView):
     """GET/POST /api/admin/products/<product_id>/plugin-builds — one row per
     Revit year a partner is targeting for this product."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
     serializer_class = PluginBuildSerializer
 
     def get_queryset(self):
@@ -95,7 +104,8 @@ class PluginBuildDetailView(generics.RetrieveUpdateDestroyAPIView):
     """GET current status/log; PATCH plugin_version; DELETE removes the build
     (and any staged files it references) entirely."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
     serializer_class = PluginBuildSerializer
 
     def get_queryset(self):
@@ -103,7 +113,8 @@ class PluginBuildDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class PluginBuildDllUploadView(APIView):
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, pk):
@@ -121,7 +132,8 @@ class PluginBuildDllUploadView(APIView):
 
 
 class PluginBuildAddinUploadView(APIView):
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, pk):
@@ -146,7 +158,8 @@ class PluginResourceListCreateView(APIView):
     server-side (see installer.paths) since it's later used as a literal
     filesystem path on every customer's machine."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, pk):
@@ -179,7 +192,8 @@ class PluginResourceListCreateView(APIView):
 
 
 class PluginResourceDetailView(APIView):
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
 
     def delete(self, request, pk, resource_id):
         build = get_object_or_404(_build_queryset(request), pk=pk)
@@ -200,7 +214,8 @@ class PluginBuildDownloadView(APIView):
     online license check requires the product to be published, which would
     defeat the entire point of testing a build before it goes live."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
 
     def get(self, request, pk):
         from django.http import HttpResponse
@@ -219,7 +234,8 @@ class PluginBuildDestinationOptionsView(APIView):
     destination-path roots + their real on-disk hint text, so the frontend
     never hardcodes this copy separately from the backend that enforces it."""
 
-    permission_classes = [IsStaffOrPartner]
+    permission_classes = [_CAN_MANAGE_PLUGIN_BUILDS]
+    required_permission = "products.manage"
 
     def get(self, request):
         return Response(

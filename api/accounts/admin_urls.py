@@ -3,6 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from accounts.admin_api import (
+    AdminCustomerListView,
     AdminCustomerStatsView,
     AdminRoleViewSet,
     AdminUserListView,
@@ -15,7 +16,7 @@ router.register("roles", AdminRoleViewSet, basename="admin-role")
 urlpatterns = [
     path("users", AdminUserListView.as_view(), name="admin-users"),
     path("users/<int:pk>", AdminUserUpdateView.as_view(), name="admin-user-update"),
-    path("customers", AdminUserListView.as_view(), name="admin-customers"),
+    path("customers", AdminCustomerListView.as_view(), name="admin-customers"),
     path("customers/stats", AdminCustomerStatsView.as_view(), name="admin-customer-stats"),
     path("", include(router.urls)),
 ]

@@ -10,7 +10,7 @@ import styles from "./AdminShell.module.css";
 export function AdminShell({ user, children }: { user: User; children: ReactNode }) {
   return (
     <div className={styles.shell}>
-      <AdminSidebar />
+      <AdminSidebar user={user} />
       <div className={styles.body}>
         <header className={styles.topbar}>
           <div className={styles.search}>
@@ -24,7 +24,7 @@ export function AdminShell({ user, children }: { user: User; children: ReactNode
             <button className={styles.iconBtn} aria-label="Help">
               <Icon name="help" size={20} />
             </button>
-            <UserMenu user={user} roleLabel="Administrator" />
+            <UserMenu user={user} roleLabel={user.is_superuser ? "Administrator" : "Staff"} />
           </div>
         </header>
         <div className={styles.content}>{children}</div>

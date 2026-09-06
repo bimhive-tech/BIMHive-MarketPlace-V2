@@ -5,6 +5,7 @@ from django_countries import countries
 from rest_framework import serializers
 
 from accounts.models import Profession, Profile
+from accounts.permissions import ADMIN_PERMISSION_KEYS
 
 User = get_user_model()
 
@@ -61,16 +62,26 @@ class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
     full_name = serializers.SerializerMethodField()
     partner = UserPartnerSerializer(read_only=True)
+    # Resolved, ready-to-use admin-portal capability list — lets the frontend
+    # (sidebar, page guards) self-gate off /api/auth/me without a second
+    # round-trip. See accounts.permissions for what these keys mean and why
+    # Admin (is_superuser) always gets the full set regardless of role.
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "username", "email", "first_name", "last_name", "full_name",
-            "is_staff", "date_joined", "profile", "partner",
+            "is_staff", "is_superuser", "permissions", "date_joined", "profile", "partner",
         ]
 
     def get_full_name(self, obj):
         return obj.get_full_name() or obj.username
+
+    def get_permissions(self, obj):
+        if obj.is_superuser:
+            return sorted(ADMIN_PERMISSION_KEYS)
+        return sorted(obj.role.permissions) if obj.role_id else []
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):

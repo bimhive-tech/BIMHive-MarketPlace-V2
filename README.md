@@ -127,9 +127,41 @@ Pending/Approved/Rejected review queue for seller applications; Categories manag
 root/subcategory tree — see "Categories" below), `/admin-portal/promotions` (time-boxed discount
 campaigns — see "Promotions" below), `/admin-portal/{membership-plans,memberships}` (All-Access
 tiers and individual customer memberships — see "All-Access membership" below),
-`/admin-portal/settings` (live system status), `/admin-portal/settings/{users,roles}` (role-based
-staff access). The same Installer Build tab is available to partners on their own products in
+`/admin-portal/settings` (live system status, Admin-only), `/admin-portal/settings/{users,roles}`
+(Admin-only — granular per-Role staff permissions, see "Admin portal access" below). The same
+Installer Build tab is available to partners on their own products in
 `/partner-portal/products`.
+
+## Admin portal access: Admin vs. Staff, granular per-Role permissions
+
+Two tiers, both gated behind `is_staff` reaching `/admin-portal` at all:
+
+- **Admin** (`is_superuser=True`) — full, unrestricted access to everything, including Users, Roles &
+  Permissions, and Settings. This is the only tier that can manage other staff/admin accounts.
+- **Staff** (`is_staff=True, is_superuser=False`) — scoped to exactly the granular permissions their
+  assigned `Role` grants (`accounts.permissions.ADMIN_PERMISSION_KEYS` — Dashboard, Activity, Orders,
+  Customers, Reviews, Licenses, Memberships, Products, Promotions, Membership Plans, Collections,
+  Categories, Tags, Partners). Users, Roles & Permissions, and Settings are **never** grantable through
+  a Role — that's deliberate: it's what makes it impossible for a Staff account to affect an Admin or
+  any other staff account, no matter what a Role is configured to allow.
+
+An Admin builds Roles at `/admin-portal/settings/roles` — a name, whether it grants admin-portal
+access at all, and a checklist of exactly which of the sections above it opens up — then assigns a
+Role to a user at `/admin-portal/settings/users`. Every admin API view enforces this server-side via
+`accounts.permissions.HasAdminPermission` (checks `request.user.role.permissions`, Admin always
+bypasses) or `IsSuperAdmin` (Users/Roles/Settings only); the sidebar mirrors the same checklist
+client-side purely so a Staff account never sees a link to a section the API would 403 on anyway.
+
+Products (and their files/media/plugin builds) are shared with the partner portal — a Staff account
+needs `products.manage`, but an approved Partner reaches the same endpoints through their own
+`IsApprovedPartner` check, composed as `IsApprovedPartner | (IsAuthenticated & HasAdminPermission)`.
+
+**Deploy safety:** the migration that introduced this (`accounts/migrations/0006_role_permissions.py`)
+promotes every account that was already `is_staff=True` to `is_superuser=True` in the same step —
+before this shipped, `is_staff` alone meant full access, so nobody who already had it loses anything;
+an Admin can then deliberately demote specific accounts to Staff-with-limited-permissions afterward.
+`AdminUserUpdateSerializer` refuses to demote the last remaining Admin, so there's no way to
+accidentally lock everyone out of Users/Roles/Settings.
 
 ## Auto-generated installers (built on demand, never cached)
 

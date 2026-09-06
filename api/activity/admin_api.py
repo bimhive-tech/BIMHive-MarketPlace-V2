@@ -1,8 +1,8 @@
 """Staff-only "who did what, when" log for the admin portal (mounted under /api/admin/)."""
 from django.utils.dateparse import parse_date
 from rest_framework import generics, serializers
-from rest_framework.permissions import IsAdminUser
 
+from accounts.permissions import HasAdminPermission
 from activity.models import ActivityLog
 
 # Recent-first, capped: this table can grow fast (every sign-in, download, review,
@@ -18,7 +18,8 @@ class AdminActivityLogSerializer(serializers.ModelSerializer):
 
 
 class AdminActivityLogListView(generics.ListAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "activity.view"
     serializer_class = AdminActivityLogSerializer
 
     def get_queryset(self):

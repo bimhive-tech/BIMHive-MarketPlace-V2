@@ -1,7 +1,7 @@
 """Staff-only admin API for moderating reviews."""
 from rest_framework import generics, serializers
-from rest_framework.permissions import IsAdminUser
 
+from accounts.permissions import HasAdminPermission
 from reviews.models import Review, refresh_product_rating
 
 
@@ -18,7 +18,8 @@ class AdminReviewSerializer(serializers.ModelSerializer):
 
 
 class AdminReviewListView(generics.ListAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "reviews.moderate"
     serializer_class = AdminReviewSerializer
 
     def get_queryset(self):
@@ -30,7 +31,8 @@ class AdminReviewListView(generics.ListAPIView):
 
 
 class AdminReviewDeleteView(generics.DestroyAPIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasAdminPermission]
+    required_permission = "reviews.moderate"
     queryset = Review.objects.all()
 
     def perform_destroy(self, instance):

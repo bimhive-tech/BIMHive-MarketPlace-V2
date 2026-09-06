@@ -86,7 +86,7 @@ class Partner(TimeStamped):
     Created via the self-service "Become a Seller" application (see
     catalog.partner_api.BecomeSellerView) — `status` gates whether the
     applicant's account actually has partner-portal access yet
-    (catalog.permissions.IsStaffOrPartner/IsApprovedPartner)."""
+    (catalog.permissions.IsApprovedPartner)."""
 
     class ApplicationStatus(models.TextChoices):
         PENDING = "pending", "Pending Review"

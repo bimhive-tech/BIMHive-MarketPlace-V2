@@ -19,7 +19,9 @@ def root():
 
 @pytest.fixture
 def staff_client(client):
-    user = User.objects.create_user(username="admin@x.com", email="admin@x.com", password="x", is_staff=True)
+    user = User.objects.create_user(
+        username="admin@x.com", email="admin@x.com", password="x", is_staff=True, is_superuser=True,
+    )
     client.force_login(user)
     return client
 

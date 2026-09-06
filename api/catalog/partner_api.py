@@ -1,7 +1,8 @@
 """Self-service API for partner-linked users (the partner portal), distinct from
 the staff-only admin API in admin_api.py — product CRUD is shared with staff via
-admin_api.py's IsStaffOrPartner-gated views, but a partner's own profile/
-application/sales have no staff equivalent, so they live here instead."""
+admin_api.py's views (composed IsApprovedPartner | staff-with-products.manage,
+see catalog.permissions), but a partner's own profile/application/sales have no
+staff equivalent, so they live here instead."""
 from django.db.models import Sum
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
