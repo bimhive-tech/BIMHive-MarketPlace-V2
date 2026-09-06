@@ -232,15 +232,24 @@ export interface UploadedMedia {
   url: string;
   media_type: "image" | "video";
 }
-export const uploadProductMedia = (productId: number, file: File, asPartner = false) => {
-  const form = new FormData();
-  form.append("file", file);
-  return request<UploadedMedia>(
-    `/api/admin/products/${productId}/media-upload${asPartner ? "?mine=1" : ""}`,
+/** Uploads the file bytes straight to R2, not through this app's own server —
+ * Django only ever handles a small JSON request for a presigned URL. A large
+ * video routed through the full browser -> Railway -> Next.js -> Django ->
+ * R2 chain in one request was silently failing (Railway's edge hard-caps any
+ * single request at ~5 minutes, independent of this app's own settings); a
+ * direct PUT to R2 isn't subject to that at all. */
+export const uploadProductMedia = async (productId: number, file: File, asPartner = false): Promise<UploadedMedia> => {
+  const { upload_url, url, media_type } = await request<{ upload_url: string; url: string; media_type: "image" | "video" }>(
+    `/api/admin/products/${productId}/media-upload-url${asPartner ? "?mine=1" : ""}`,
     "POST",
-    form,
-    true,
+    { filename: file.name, content_type: file.type, size: file.size },
   );
+
+  const putRes = await fetch(upload_url, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  if (!putRes.ok) {
+    throw new AdminApiError({ detail: "The upload to storage failed. Please try again." }, putRes.status);
+  }
+  return { url, media_type };
 };
 
 // ── Taxonomy: Categories / Tags / Partners / Collections ──

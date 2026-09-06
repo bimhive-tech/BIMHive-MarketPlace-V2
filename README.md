@@ -76,6 +76,35 @@ bucket's public access (an `r2.dev` dev URL or a connected custom domain, from t
 dashboard) is turned on — no other code change needed, `refresh_storage_url` just becomes a no-op
 and everything switches to permanent URLs automatically.
 
+**Product media (Media & Previews tab) uploads go straight from the browser to R2 — never through
+this app's own server.** Django only ever issues a short-lived, presigned PUT URL
+(`AdminProductMediaUploadUrlView`, `catalog/admin_api.py`); the browser PUTs the actual file bytes
+directly to R2 from there (`uploadProductMedia` in `web/lib/adminApi.ts`). This app is one Railway
+service where Django isn't even publicly reachable — Next.js proxies `/api/*` to it internally (see
+`scripts/start.sh`) — and Railway's edge enforces a hard ~5 minute ceiling on any single request,
+independent of any app-level timeout. Routing a real video through browser → Railway edge → Next.js
+proxy → gunicorn → R2 inside one request silently failed large uploads (a dropped connection, not a
+real error) well before that ceiling on anything but a fast connection. A direct PUT to R2 has none
+of those hops in the way and isn't bound by Railway's request timeout at all.
+
+**This requires the R2 bucket's CORS policy to allow a PUT from this app's own origin(s)** — set it
+once from the bucket's Settings → CORS Policy in the Cloudflare R2 dashboard:
+```json
+[
+  {
+    "AllowedOrigins": ["https://hub.bim-hive.com"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+Add every origin the admin portal is actually reached from (any Railway-provided fallback domain,
+`http://localhost:3000` for local dev against real R2) as additional entries in `AllowedOrigins`.
+Without this, the presigned URL itself is issued fine but the browser's PUT is blocked by CORS before
+it ever reaches R2 — confirmed via the browser console: `No 'Access-Control-Allow-Origin' header is
+present on the requested resource`.
+
 ---
 
 ## Project structure

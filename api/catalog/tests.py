@@ -323,81 +323,97 @@ def test_admin_can_list_products(staff_client, category, partner):
     assert any(row["name"] == "Listed" for row in resp.json())
 
 
-# ── Media upload (auto-detects image vs video, no manual type picking) ──
-def test_media_upload_requires_staff(client, category, partner):
-    product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    from django.core.files.uploadedfile import SimpleUploadedFile
+# ── Media upload (presigned direct-to-R2 PUT; Django only issues the URL —
+# see AdminProductMediaUploadUrlView for why: a real file never has to pass
+# through this app's own request/response cycle at all) ──
+def _media_upload_url_payload(**overrides):
+    payload = {"filename": "cover.png", "content_type": "image/png", "size": 1024}
+    payload.update(overrides)
+    return payload
 
-    upload = SimpleUploadedFile("cover.png", b"fake png bytes", content_type="image/png")
-    resp = client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+
+def test_media_upload_url_requires_staff(client, category, partner):
+    product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
+    resp = client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(),
+        content_type="application/json",
+    )
     assert resp.status_code in (401, 403)
 
 
-def test_media_upload_detects_image(staff_client, category, partner):
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
+def test_media_upload_url_detects_image(staff_client, category, partner):
     product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    upload = SimpleUploadedFile("cover.png", b"fake png bytes", content_type="image/png")
-    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
-    assert resp.status_code == 201
+    resp = staff_client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(),
+        content_type="application/json",
+    )
+    assert resp.status_code == 201, resp.json()
     body = resp.json()
     assert body["media_type"] == "image"
     assert body["url"].startswith("http")
+    assert body["upload_url"].startswith("http")
 
 
-def test_media_upload_detects_video(staff_client, category, partner):
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
+def test_media_upload_url_detects_video(staff_client, category, partner):
     product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    upload = SimpleUploadedFile("teaser.mp4", b"fake mp4 bytes", content_type="video/mp4")
-    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
-    assert resp.status_code == 201
+    resp = staff_client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(filename="teaser.mp4", content_type="video/mp4"),
+        content_type="application/json",
+    )
+    assert resp.status_code == 201, resp.json()
     assert resp.json()["media_type"] == "video"
 
 
-def test_media_upload_rejects_other_file_types(staff_client, category, partner):
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
+def test_media_upload_url_rejects_other_file_types(staff_client, category, partner):
     product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    upload = SimpleUploadedFile("installer.exe", b"not media", content_type="application/octet-stream")
-    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    resp = staff_client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(filename="installer.exe", content_type="application/octet-stream"),
+        content_type="application/json",
+    )
     assert resp.status_code == 400
 
 
-def test_media_upload_rejects_an_oversized_image(staff_client, category, partner, monkeypatch):
-    from django.core.files.uploadedfile import SimpleUploadedFile
+def test_media_upload_url_rejects_an_oversized_image(staff_client, category, partner, monkeypatch):
+    from catalog.admin_api import AdminProductMediaUploadUrlView
 
-    from catalog.admin_api import AdminProductMediaUploadView
-
-    monkeypatch.setattr(AdminProductMediaUploadView, "MAX_IMAGE_BYTES", 10)
+    monkeypatch.setattr(AdminProductMediaUploadUrlView, "MAX_IMAGE_BYTES", 10)
     product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    upload = SimpleUploadedFile("huge.png", b"x" * 11, content_type="image/png")
-    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    resp = staff_client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(size=11),
+        content_type="application/json",
+    )
     assert resp.status_code == 400
     assert "MB" in resp.json()["file"]
 
 
-def test_media_upload_rejects_an_oversized_video(staff_client, category, partner, monkeypatch):
-    from django.core.files.uploadedfile import SimpleUploadedFile
+def test_media_upload_url_rejects_an_oversized_video(staff_client, category, partner, monkeypatch):
+    from catalog.admin_api import AdminProductMediaUploadUrlView
 
-    from catalog.admin_api import AdminProductMediaUploadView
-
-    monkeypatch.setattr(AdminProductMediaUploadView, "MAX_VIDEO_BYTES", 10)
+    monkeypatch.setattr(AdminProductMediaUploadUrlView, "MAX_VIDEO_BYTES", 10)
     product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    upload = SimpleUploadedFile("huge.mp4", b"x" * 11, content_type="video/mp4")
-    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    resp = staff_client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(filename="teaser.mp4", content_type="video/mp4", size=11),
+        content_type="application/json",
+    )
     assert resp.status_code == 400
     assert "MB" in resp.json()["file"]
 
 
 @pytest.mark.django_db
-def test_media_upload_fails_fast_without_r2_configured(staff_client, category, partner, settings):
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
+def test_media_upload_url_fails_fast_without_r2_configured(staff_client, category, partner, settings):
     settings.R2_ACCESS_KEY_ID = ""
     product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
-    upload = SimpleUploadedFile("cover.png", b"fake png bytes", content_type="image/png")
-    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    resp = staff_client.post(
+        f"/api/admin/products/{product.id}/media-upload-url",
+        _media_upload_url_payload(),
+        content_type="application/json",
+    )
     assert resp.status_code == 400
     assert "R2" in resp.json()["detail"]
 

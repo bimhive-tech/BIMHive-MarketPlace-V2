@@ -311,13 +311,14 @@ def test_partner_cannot_upload_file_to_another_partners_product(partner_a_client
 
 
 def test_partner_cannot_upload_media_to_another_partners_product(partner_a_client, partner_b, category):
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
     other = Product.objects.create(
         name="Not mine", short_description="s", description="d", category=category, partner=partner_b
     )
-    upload = SimpleUploadedFile("cover.png", b"fake png bytes", content_type="image/png")
-    resp = partner_a_client.post(f"/api/admin/products/{other.id}/media-upload", data={"file": upload})
+    resp = partner_a_client.post(
+        f"/api/admin/products/{other.id}/media-upload-url",
+        {"filename": "cover.png", "content_type": "image/png", "size": 1024},
+        content_type="application/json",
+    )
     assert resp.status_code == 400  # existence-style 400, matches the endpoint's own not-found style
 
 

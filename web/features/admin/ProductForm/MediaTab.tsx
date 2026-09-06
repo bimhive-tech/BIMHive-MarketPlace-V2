@@ -7,7 +7,7 @@ import { AdminApiError, uploadProductMedia, type AdminProductMedia } from "@/lib
 
 import styles from "./ProductForm.module.css";
 
-// Mirrors AdminProductMediaUploadView.MAX_VIDEO_BYTES/MAX_IMAGE_BYTES on the
+// Mirrors AdminProductMediaUploadUrlView.MAX_VIDEO_BYTES/MAX_IMAGE_BYTES on the
 // backend — checking here first means an oversized file fails instantly with
 // a clear message instead of sitting through a doomed upload.
 const MAX_VIDEO_BYTES = 300 * 1024 * 1024;

@@ -496,22 +496,33 @@ class AdminProductFileDetailView(generics.DestroyAPIView):
         instance.delete()
 
 
-class AdminProductMediaUploadView(APIView):
-    """Real file upload for the Media & Previews tab — the client picks a file,
-    this stores it in R2's public-media bucket and hands back a permanent URL
-    plus the auto-detected media type, so nothing about it needs to be typed."""
+class AdminProductMediaUploadUrlView(APIView):
+    """Media & Previews tab: hands back a short-lived, presigned R2 PUT URL
+    for the client to upload the actual file bytes to *directly* — Django
+    only ever sees a small JSON request/response here, never the file.
 
-    # Generous, but bounded — a file near either ceiling should still finish
-    # comfortably inside the 300s worker timeout (see scripts/start.sh) even
-    # on a slow connection; well past it risks the same silent, unhelpful
-    # dropped-connection failure a raw timeout produces, so reject it here
-    # first with a real, readable error instead.
+    This app is one Railway service where Django isn't even publicly
+    reachable (Next.js proxies /api/* to it internally — see scripts/
+    start.sh), and Railway's own edge enforces a hard ~5 minute ceiling on
+    any single request regardless of app-level timeouts. Routing a real
+    video through that whole path (browser -> Railway edge -> Next.js proxy
+    -> gunicorn -> R2, all inside one request) was silently failing large
+    uploads with nothing more than a dropped connection on the client side.
+    A direct-to-R2 PUT has none of those hops in the way.
+
+    Requires the R2 bucket's CORS policy to allow PUT from this app's
+    origin(s) with the Content-Type header — see README's R2 setup notes.
+    """
+
+    # Generous, but bounded — mirrors the old inline-upload limits. Purely a
+    # sanity ceiling now, not a timeout workaround: a direct-to-R2 PUT isn't
+    # bound by Railway's request timeout at all.
     MAX_VIDEO_BYTES = 300 * 1024 * 1024
     MAX_IMAGE_BYTES = 20 * 1024 * 1024
+    UPLOAD_URL_TTL = 600
 
     permission_classes = [_CAN_MANAGE_PRODUCTS]
     required_permission = "products.manage"
-    parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, product_id):
         from django.conf import settings
@@ -534,11 +545,11 @@ class AdminProductMediaUploadView(APIView):
         if not product_qs.exists():
             raise ValidationError({"detail": "Product not found."})
 
-        uploaded = request.FILES.get("file")
-        if not uploaded:
-            raise ValidationError({"file": "A file is required."})
+        filename = (request.data.get("filename") or "").strip()
+        content_type = (request.data.get("content_type") or "").strip()
+        if not filename:
+            raise ValidationError({"filename": "Required."})
 
-        content_type = uploaded.content_type or ""
         if content_type.startswith("video/"):
             media_type = "video"
             max_bytes = self.MAX_VIDEO_BYTES
@@ -546,16 +557,28 @@ class AdminProductMediaUploadView(APIView):
             media_type = "image"
             max_bytes = self.MAX_IMAGE_BYTES
         else:
-            raise ValidationError({"file": "Only image or video files are supported."})
+            raise ValidationError({"content_type": "Only image or video files are supported."})
 
-        if uploaded.size > max_bytes:
+        try:
+            size = int(request.data.get("size"))
+        except (TypeError, ValueError):
+            raise ValidationError({"size": "Required."})
+        if size > max_bytes:
             raise ValidationError(
                 {"file": f"{media_type.capitalize()} files must be under {max_bytes // (1024 * 1024)} MB."}
             )
 
         public_storage = storages["public_media"]
-        key = public_storage.save(f"product_media/{product_id}/{uploaded.name}", uploaded)
-        return Response({"url": public_storage.url(key), "media_type": media_type}, status=201)
+        key = public_storage.get_available_name(f"product_media/{product_id}/{filename}")
+        client = public_storage.connection.meta.client
+        upload_url = client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": settings.R2_BUCKET_NAME, "Key": key, "ContentType": content_type},
+            ExpiresIn=self.UPLOAD_URL_TTL,
+        )
+        return Response(
+            {"upload_url": upload_url, "url": public_storage.url(key), "media_type": media_type}, status=201
+        )
 
 
 class AdminOptionsView(APIView):
