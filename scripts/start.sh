@@ -9,10 +9,17 @@ cd /app/api
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
+# 300s (not the default 120s): a sync worker handling a product media/file
+# upload has to fully receive the body *and then* write it on to R2 in the
+# same request — on a large video plus anything but a fast connection, 120s
+# wasn't enough and gunicorn killed the worker mid-upload, which the browser
+# only ever saw as a dropped connection (a generic "please try again", no
+# real error). Doesn't affect normal fast requests at all, only gives slow
+# ones more room before being killed.
 gunicorn config.wsgi:application \
   --bind 127.0.0.1:8000 \
   --workers "${WEB_CONCURRENCY:-3}" \
-  --timeout 120 &
+  --timeout 300 &
 DJANGO_PID=$!
 
 cd /app/web

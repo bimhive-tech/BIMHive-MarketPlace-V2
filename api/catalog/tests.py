@@ -364,6 +364,32 @@ def test_media_upload_rejects_other_file_types(staff_client, category, partner):
     assert resp.status_code == 400
 
 
+def test_media_upload_rejects_an_oversized_image(staff_client, category, partner, monkeypatch):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from catalog.admin_api import AdminProductMediaUploadView
+
+    monkeypatch.setattr(AdminProductMediaUploadView, "MAX_IMAGE_BYTES", 10)
+    product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
+    upload = SimpleUploadedFile("huge.png", b"x" * 11, content_type="image/png")
+    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    assert resp.status_code == 400
+    assert "MB" in resp.json()["file"]
+
+
+def test_media_upload_rejects_an_oversized_video(staff_client, category, partner, monkeypatch):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from catalog.admin_api import AdminProductMediaUploadView
+
+    monkeypatch.setattr(AdminProductMediaUploadView, "MAX_VIDEO_BYTES", 10)
+    product = Product.objects.create(name="P", short_description="s", description="d", category=category, partner=partner)
+    upload = SimpleUploadedFile("huge.mp4", b"x" * 11, content_type="video/mp4")
+    resp = staff_client.post(f"/api/admin/products/{product.id}/media-upload", data={"file": upload})
+    assert resp.status_code == 400
+    assert "MB" in resp.json()["file"]
+
+
 @pytest.mark.django_db
 def test_media_upload_fails_fast_without_r2_configured(staff_client, category, partner, settings):
     from django.core.files.uploadedfile import SimpleUploadedFile

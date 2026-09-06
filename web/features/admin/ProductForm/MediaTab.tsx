@@ -7,6 +7,12 @@ import { AdminApiError, uploadProductMedia, type AdminProductMedia } from "@/lib
 
 import styles from "./ProductForm.module.css";
 
+// Mirrors AdminProductMediaUploadView.MAX_VIDEO_BYTES/MAX_IMAGE_BYTES on the
+// backend — checking here first means an oversized file fails instantly with
+// a clear message instead of sitting through a doomed upload.
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
 interface MediaTabProps {
   media: AdminProductMedia[];
   setMedia: (updater: (list: AdminProductMedia[]) => AdminProductMedia[]) => void;
@@ -44,6 +50,19 @@ export function MediaTab({ media, setMedia, productId, ensureSaved, asPartner = 
     e.target.value = "";
     if (!file) return;
     setError("");
+
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
+    if (!isVideo && !isImage) {
+      setError("Only image or video files are supported.");
+      return;
+    }
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > maxBytes) {
+      setError(`${isVideo ? "Video" : "Image"} files must be under ${maxBytes / (1024 * 1024)} MB.`);
+      return;
+    }
+
     setUploading(true);
     try {
       const id = productId ?? (await ensureSaved());

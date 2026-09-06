@@ -501,6 +501,14 @@ class AdminProductMediaUploadView(APIView):
     this stores it in R2's public-media bucket and hands back a permanent URL
     plus the auto-detected media type, so nothing about it needs to be typed."""
 
+    # Generous, but bounded — a file near either ceiling should still finish
+    # comfortably inside the 300s worker timeout (see scripts/start.sh) even
+    # on a slow connection; well past it risks the same silent, unhelpful
+    # dropped-connection failure a raw timeout produces, so reject it here
+    # first with a real, readable error instead.
+    MAX_VIDEO_BYTES = 300 * 1024 * 1024
+    MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
     permission_classes = [_CAN_MANAGE_PRODUCTS]
     required_permission = "products.manage"
     parser_classes = [MultiPartParser, FormParser]
@@ -533,10 +541,17 @@ class AdminProductMediaUploadView(APIView):
         content_type = uploaded.content_type or ""
         if content_type.startswith("video/"):
             media_type = "video"
+            max_bytes = self.MAX_VIDEO_BYTES
         elif content_type.startswith("image/"):
             media_type = "image"
+            max_bytes = self.MAX_IMAGE_BYTES
         else:
             raise ValidationError({"file": "Only image or video files are supported."})
+
+        if uploaded.size > max_bytes:
+            raise ValidationError(
+                {"file": f"{media_type.capitalize()} files must be under {max_bytes // (1024 * 1024)} MB."}
+            )
 
         public_storage = storages["public_media"]
         key = public_storage.save(f"product_media/{product_id}/{uploaded.name}", uploaded)
