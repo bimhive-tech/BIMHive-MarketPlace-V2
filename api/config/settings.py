@@ -44,6 +44,26 @@ def _clean_origins(raw):
     return kept
 
 
+def _merge_platform_domain(configured, platform_domain, as_origin):
+    """Fold the platform's own generated domain in with whatever the env vars
+    configure, de-duplicated and order-preserving.
+
+    Railway injects RAILWAY_PUBLIC_DOMAIN into every service that has a public
+    domain, so its generated `*.up.railway.app` host never has to be pasted into
+    DJANGO_ALLOWED_HOSTS/DJANGO_CSRF_TRUSTED_ORIGINS by hand — and, more to the
+    point, can't silently go missing from them. It going missing is exactly what
+    broke every state-changing request served from that domain with "CSRF Failed:
+    Origin checking failed", since those vars are templated from the same value
+    and a template that resolves late (or not at all) leaves nothing behind. A
+    custom domain still comes from the env vars; this only guarantees the
+    platform's own domain always works."""
+    entries = []
+    if platform_domain:
+        entries.append(f"https://{platform_domain}" if as_origin else platform_domain)
+    entries.extend(configured)
+    return list(dict.fromkeys(entries))
+
+
 # ─────────────────────────────────────────────────────────────
 # Core
 # ─────────────────────────────────────────────────────────────
@@ -54,15 +74,25 @@ DEBUG = env.bool("DJANGO_DEBUG", default=False)
 # fetches always reach Django over that loopback address, no matter what public
 # domain is (or isn't yet) configured — it's a fact of the container's internal
 # wiring, not deployment config.
-ALLOWED_HOSTS = list(
-    {"localhost", "127.0.0.1", *_clean_hosts(env.list("DJANGO_ALLOWED_HOSTS", default=[]))}
+RAILWAY_PUBLIC_DOMAIN = env("RAILWAY_PUBLIC_DOMAIN", default="").strip()
+ALLOWED_HOSTS = _merge_platform_domain(
+    ["localhost", "127.0.0.1", *_clean_hosts(env.list("DJANGO_ALLOWED_HOSTS", default=[]))],
+    RAILWAY_PUBLIC_DOMAIN,
+    as_origin=False,
 )
-CSRF_TRUSTED_ORIGINS = _clean_origins(
-    env.list(
-        "DJANGO_CSRF_TRUSTED_ORIGINS",
-        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+# Shared by CSRF and CORS below — the set of origins this app answers to. Both
+# read the same env var, so they're computed once rather than twice.
+TRUSTED_ORIGINS = _clean_origins(
+    _merge_platform_domain(
+        env.list(
+            "DJANGO_CSRF_TRUSTED_ORIGINS",
+            default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        ),
+        RAILWAY_PUBLIC_DOMAIN,
+        as_origin=True,
     )
 )
+CSRF_TRUSTED_ORIGINS = list(TRUSTED_ORIGINS)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -172,12 +202,7 @@ REST_FRAMEWORK = {
 }
 
 # CORS — only needed in dev when Next.js (:3000) calls Django (:8000) directly.
-CORS_ALLOWED_ORIGINS = _clean_origins(
-    env.list(
-        "DJANGO_CSRF_TRUSTED_ORIGINS",
-        default=["http://localhost:3000", "http://127.0.0.1:3000"],
-    )
-)
+CORS_ALLOWED_ORIGINS = list(TRUSTED_ORIGINS)
 CORS_ALLOW_CREDENTIALS = True
 
 # ─────────────────────────────────────────────────────────────

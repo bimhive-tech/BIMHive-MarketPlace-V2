@@ -67,6 +67,15 @@ see "Checkout" below) — and the storefront freshness-badge windows, `NEW_PRODU
 `UPDATED_PRODUCT_BADGE_DAYS` (both default `7`; either can be `0` to turn that badge off site-wide,
 see "Freshness badges" below). **Never commit `.env`.**
 
+**The platform's own domain is wired up automatically — don't paste it into the env vars.** Railway
+injects `RAILWAY_PUBLIC_DOMAIN` into every service with a public domain, and `config/settings.py`
+folds it into `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, and `CORS_ALLOWED_ORIGINS` on top of whatever
+`DJANGO_ALLOWED_HOSTS` / `DJANGO_CSRF_TRUSTED_ORIGINS` configure (de-duplicated, so listing it in
+both is harmless). Those env vars are only needed for a **custom** domain. This exists because those
+vars were templated from the same platform value and it went missing — which takes down every
+state-changing request from that domain with `CSRF Failed: Origin checking failed`, and nothing in
+the app explains why. See `_merge_platform_domain` and `config/test_platform_domain.py`.
+
 **`R2_PUBLIC_BASE_URL` is still unset**, so product gallery images/covers and partner logos serve
 over a presigned link instead of a real permanent public URL (see `STORAGES["public_media"]` in
 `config/settings.py`) — this is fine functionally (`catalog/storage.py::refresh_storage_url`
