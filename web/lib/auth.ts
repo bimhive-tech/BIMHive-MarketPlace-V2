@@ -130,10 +130,26 @@ export async function login(email: string, password: string) {
   return user;
 }
 
-export async function logout() {
-  const result = await request<{ detail: string }>("/api/auth/logout", "POST");
+/**
+ * Always clears the client, whatever the server says. The point of the click is
+ * to stop being signed in, and a failed POST used to throw straight out of the
+ * caller's handler — so the menu closed, the local user state was never
+ * cleared, and the header went on showing someone who was already signed out.
+ * A session that died server-side (expired, revoked from another device,
+ * cleared by a deploy) answers with a 403, which made the button permanently
+ * dead for exactly the people who most needed it.
+ *
+ * The one thing this gives up is reporting a network failure: offline, the
+ * client is cleared while the server session outlives it — the same thing that
+ * happens when a tab is closed, and far better than leaving someone stuck.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await request<{ detail: string }>("/api/auth/logout", "POST");
+  } catch {
+    // Intentionally swallowed — see above.
+  }
   notifyAuthChanged();
-  return result;
 }
 
 export async function me(): Promise<User | null> {

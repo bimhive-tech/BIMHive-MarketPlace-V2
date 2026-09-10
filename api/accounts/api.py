@@ -110,7 +110,19 @@ class LoginView(APIView):
 
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    """Deliberately AllowAny, not IsAuthenticated. "Sign me out" has to succeed
+    unconditionally: a session that has already died server-side (expired,
+    revoked from another device, or cleared by a deploy) still leaves a
+    sessionid cookie in the browser, and gating this endpoint answered that
+    click with a 403 — so the button did nothing, the cookie stayed put, and
+    the header kept showing a user who no longer had a session.
+
+    Nothing is exposed by allowing it: django.contrib.auth.logout() is a no-op
+    for an anonymous request, and a genuinely authenticated caller still goes
+    through SessionAuthentication's CSRF check.
+    """
+
+    permission_classes = [AllowAny]
 
     def post(self, request):
         logout(request)
