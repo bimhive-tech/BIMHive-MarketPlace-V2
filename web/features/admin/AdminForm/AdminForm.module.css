@@ -1,0 +1,105 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4) var(--space-4);
+  align-items: start;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Full-width rows: long text, and anything that reads badly at half width. */
+.wide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.control {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-800);
+  background: var(--surface-0);
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.control::placeholder {
+  color: var(--color-muted);
+}
+
+.control:focus {
+  outline: none;
+  border-color: var(--gold-500);
+  box-shadow: 0 0 0 3px var(--gold-100);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 84px;
+  line-height: var(--lh-normal);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: var(--fw-regular);
+}
+
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-700);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
+}
+
+.checkbox:hover {
+  border-color: var(--gold-400);
+  background: var(--surface-50);
+}
+
+.checkbox input {
+  margin-top: 2px;
+  accent-color: var(--color-primary);
+}
+
+.checkboxText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control,
+  .checkbox {
+    transition: none;
+  }
+}

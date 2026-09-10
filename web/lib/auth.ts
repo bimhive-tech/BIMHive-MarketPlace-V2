@@ -79,12 +79,19 @@ export interface CountryOption {
   name: string;
 }
 
-/** The profession/country dropdowns' contents — backend-driven so the list
- * only ever needs to change in one place (see accounts.api.SignupOptionsView). */
-export async function getSignupOptions(): Promise<{ professions: SignupOption[]; countries: CountryOption[] }> {
+/** The profession/country/university dropdowns' contents — backend-driven so
+ * the lists only ever need to change in one place (see
+ * accounts.api.SignupOptionsView). */
+export async function getSignupOptions(): Promise<{
+  professions: SignupOption[];
+  countries: CountryOption[];
+  universities: string[];
+}> {
   const res = await fetch("/api/auth/signup-options");
-  if (!res.ok) return { professions: [], countries: [] };
-  return res.json();
+  if (!res.ok) return { professions: [], countries: [], universities: [] };
+  const data = await res.json();
+  // Tolerates an older backend that predates the university list.
+  return { universities: [], ...data };
 }
 
 export interface RegisterInput {
@@ -95,6 +102,11 @@ export interface RegisterInput {
   country: string;
   /** Optional. */
   profession?: string;
+  isStudent?: boolean;
+  /** Optional, students only. Free text — the dropdown offers "Other". */
+  university?: string;
+  /** Optional, non-students only. */
+  company?: string;
 }
 
 export async function register(input: RegisterInput) {
@@ -104,6 +116,9 @@ export async function register(input: RegisterInput) {
     full_name: input.fullName,
     country: input.country,
     profession: input.profession || "",
+    is_student: input.isStudent ?? false,
+    university: input.university || "",
+    company: input.company || "",
   });
   notifyAuthChanged();
   return user;
@@ -131,7 +146,15 @@ export interface ProfileUpdate {
   first_name?: string;
   last_name?: string;
   email?: string;
-  profile?: { company?: string; job_title?: string; bio?: string; profession?: string; country?: string };
+  profile?: {
+    company?: string;
+    job_title?: string;
+    bio?: string;
+    profession?: string;
+    country?: string;
+    is_student?: boolean;
+    university?: string;
+  };
 }
 
 export function updateProfile(data: ProfileUpdate) {

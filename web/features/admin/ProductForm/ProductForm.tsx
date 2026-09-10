@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
 import { CompatibilityTab } from "@/features/admin/ProductForm/CompatibilityTab";
@@ -9,6 +9,7 @@ import { DocumentationTab } from "@/features/admin/ProductForm/DocumentationTab"
 import { FilesTab } from "@/features/admin/ProductForm/FilesTab";
 import { InstallerBuildTab } from "@/features/admin/ProductForm/InstallerBuildTab";
 import { MediaTab } from "@/features/admin/ProductForm/MediaTab";
+import { ProductPreviewModal } from "@/features/admin/ProductForm/ProductPreviewModal";
 import {
   AdminApiError,
   createProduct,
@@ -112,6 +113,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
   // unsaved "add new" form silently auto-saves as a draft on first upload —
   // see ensureSaved() below.
   const [savedId, setSavedId] = useState<number | undefined>(productId);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const [form, setForm] = useState(() => ({
     ...EMPTY_FORM,
@@ -283,22 +285,23 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
     }
   }
 
-  // Files/media uploads need a real product id to attach to. If the form
-  // hasn't been saved yet, silently create it as a draft (without navigating
-  // away, so in-progress edits and tab state survive) and reuse that id for
-  // every upload from then on.
-  async function ensureSaved(): Promise<number | null> {
+  // Uploads and the storefront preview all need a real product id. If the
+  // form hasn't been saved yet, silently create it as a draft (without
+  // navigating away, so in-progress edits and tab state survive) and reuse
+  // that id from then on. `action` only names what the caller was trying to
+  // do, so a blocked attempt says why in its own terms.
+  async function ensureSaved(action = "uploading files"): Promise<number | null> {
     if (savedId != null) return savedId;
     if (!form.name.trim() || !form.short_description.trim() || !form.description.trim()) {
-      setError("Name, short description, and full description are required before uploading files.");
+      setError(`Name, short description, and full description are required before ${action}.`);
       setTab("info");
       return null;
     }
     if (!form.category || (mode === "admin" && !form.partner)) {
       setError(
         mode === "admin"
-          ? "Please choose a category and a partner before uploading files."
-          : "Please choose a category before uploading files.",
+          ? `Please choose a category and a partner before ${action}.`
+          : `Please choose a category before ${action}.`,
       );
       setTab("info");
       return null;
@@ -312,6 +315,30 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       setError(err instanceof AdminApiError ? err.detail : "Could not save the product.");
       return null;
     }
+  }
+
+  // The preview renders what the server has, so it needs to know whether the
+  // form has drifted since the last save. Comparing the serialised payload
+  // catches edits made in any tab — including the child tabs that own their
+  // own state — without threading a "touched" flag through all of them.
+  // `status` is pinned to a constant: a form saved as a draft while the Status
+  // dropdown says "published" differs there without anything a customer would
+  // see having changed.
+  const payloadSnapshot = JSON.stringify(buildPayload(""));
+  const savedSnapshot = useRef<string | null>(null);
+  useEffect(() => {
+    if (loaded && savedSnapshot.current === null) savedSnapshot.current = payloadSnapshot;
+  }, [loaded, payloadSnapshot]);
+  const previewIsStale = savedSnapshot.current !== null && savedSnapshot.current !== payloadSnapshot;
+
+  async function openPreview() {
+    // There's nothing to preview until the product exists server-side, so a
+    // brand-new form saves itself as a draft first — the same thing an upload
+    // does via ensureSaved(), and it stays on the page either way.
+    const id = savedId ?? (await ensureSaved("previewing"));
+    if (id == null) return;
+    if (savedId == null) savedSnapshot.current = payloadSnapshot;
+    setPreviewOpen(true);
   }
 
   async function onDelete() {
@@ -351,6 +378,14 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
               {deleting ? "Deleting…" : "Delete"}
             </button>
           )}
+          <button
+            className={`${styles.secondaryBtn} ${styles.previewBtn}`}
+            disabled={saving}
+            onClick={openPreview}
+          >
+            <Icon name="eye" size={16} />
+            Preview
+          </button>
           <button className={styles.secondaryBtn} disabled={saving} onClick={() => submit("draft")}>
             Save as Draft
           </button>
@@ -783,6 +818,14 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           </div>
         </aside>
       </div>
+
+      <ProductPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        productId={savedId}
+        asPartner={asPartner}
+        dirty={previewIsStale}
+      />
     </div>
   );
 }

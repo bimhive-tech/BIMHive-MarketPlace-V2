@@ -5,6 +5,7 @@ Two things staff need: to define the tiers and their prices, and to see or kill
 an individual customer's membership. Revoking is the whole promise of the
 universal key — one switch and every product it opened closes with it.
 """
+from django.db.models import ProtectedError
 from rest_framework import serializers, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -52,6 +53,25 @@ class AdminMembershipPlanViewSet(viewsets.ModelViewSet):
     required_permission = "membership_plans.manage"
     serializer_class = AdminMembershipPlanSerializer
     queryset = MembershipPlan.objects.all()
+
+    def perform_destroy(self, instance):
+        """Membership.plan is on_delete=PROTECT, so deleting a tier anyone has
+        ever been on raises ProtectedError — which surfaced as an unhandled 500
+        and a row that just silently refused to disappear. Deactivating is what
+        staff actually want in that case (it pulls the plan from the pricing
+        page while every existing member keeps working), so say that instead of
+        failing blankly."""
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError(
+                {
+                    "detail": (
+                        f"{instance.name} can't be deleted — customers are on it, or have been. "
+                        "Uncheck Active to retire it instead; existing members keep their access."
+                    )
+                }
+            )
 
 
 class AdminMembershipSerializer(serializers.ModelSerializer):

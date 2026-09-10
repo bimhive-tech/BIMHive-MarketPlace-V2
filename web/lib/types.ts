@@ -22,6 +22,9 @@ export interface User {
   permissions: string[];
   date_joined: string;
   profile: {
+    is_student: boolean;
+    /** Free text — the signup dropdown offers "Other". Students only. */
+    university: string;
     company: string;
     job_title: string;
     bio: string;

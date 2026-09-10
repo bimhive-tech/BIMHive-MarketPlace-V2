@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from accounts.models import Profession
+from accounts.models import Profession, University
 from accounts.serializers import (
     ChangePasswordSerializer,
     MeUpdateSerializer,
@@ -54,9 +54,11 @@ class CsrfView(APIView):
 
 
 class SignupOptionsView(APIView):
-    """The profession and country dropdowns on /signup. Backend is the single
-    source of truth for both lists — the frontend never hardcodes them, so a
-    new profession or a country-list update only ever needs to change here."""
+    """The profession, country and university dropdowns on /signup. Backend is
+    the single source of truth for all three — the frontend never hardcodes
+    them, so a new profession, a country-list update, or a university nobody
+    had added yet only ever needs to change here (universities are rows, so
+    that one doesn't even need a deploy)."""
 
     permission_classes = [AllowAny]
 
@@ -65,6 +67,9 @@ class SignupOptionsView(APIView):
             {
                 "professions": [{"value": v, "label": l} for v, l in Profession.choices],
                 "countries": [{"code": code, "name": name} for code, name in countries],
+                "universities": list(
+                    University.objects.filter(is_active=True).values_list("name", flat=True)
+                ),
             }
         )
 

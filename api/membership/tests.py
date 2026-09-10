@@ -355,3 +355,43 @@ def test_non_staff_cannot_revoke_a_membership(client, plans, user):
     resp = client.post(f"/api/admin/memberships/{membership.id}/revoke", {}, content_type="application/json")
 
     assert resp.status_code in (401, 403)
+
+
+def test_deleting_a_plan_nobody_has_been_on_works(staff_client, plans):
+    _, pro = plans
+
+    resp = staff_client.delete(f"/api/admin/membership-plans/{pro.id}")
+
+    assert resp.status_code == 204
+    assert not MembershipPlan.objects.filter(id=pro.id).exists()
+
+
+def test_deleting_a_plan_someone_has_been_on_explains_itself(staff_client, plans, user):
+    """Membership.plan is PROTECT, so this used to surface as an unhandled
+    ProtectedError — a 500 the admin page swallowed, leaving the row sitting
+    there with no explanation."""
+    standard, _ = plans
+    make_membership(user, standard)
+
+    resp = staff_client.delete(f"/api/admin/membership-plans/{standard.id}")
+
+    assert resp.status_code == 400
+    assert "can't be deleted" in str(resp.json())
+    assert MembershipPlan.objects.filter(id=standard.id).exists()
+
+
+def test_a_retired_plan_keeps_its_existing_members(staff_client, plans, user):
+    """The message tells people to deactivate instead of delete, so that has to
+    actually leave the membership alone."""
+    standard, _ = plans
+    membership = make_membership(user, standard)
+
+    resp = staff_client.patch(
+        f"/api/admin/membership-plans/{standard.id}",
+        {"is_active": False},
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    membership.refresh_from_db()
+    assert membership.status == Membership.Status.ACTIVE

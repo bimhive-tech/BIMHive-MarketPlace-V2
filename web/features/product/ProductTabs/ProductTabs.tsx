@@ -16,7 +16,10 @@ import styles from "./ProductTabs.module.css";
 
 type TabId = "overview" | "features" | "reviews" | "compatibility" | "documentation" | "support";
 
-export function ProductTabs({ product }: { product: ProductDetail }) {
+/** `preview` hides the write-a-review form: in the admin's product preview the
+ * product may not even be published yet, and staff aren't reviewing it — it
+ * would also fire an account-API fetch the preview has no use for. */
+export function ProductTabs({ product, preview = false }: { product: ProductDetail; preview?: boolean }) {
   const tabs: { id: TabId; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "features", label: "Features" },
@@ -46,7 +49,7 @@ export function ProductTabs({ product }: { product: ProductDetail }) {
       <div className={styles.panel} role="tabpanel">
         {active === "overview" && <OverviewPanel product={product} />}
         {active === "features" && <KeyFeatures features={product.features} />}
-        {active === "reviews" && <ReviewsPanel product={product} />}
+        {active === "reviews" && <ReviewsPanel product={product} preview={preview} />}
         {active === "compatibility" && <CompatibilityPanel product={product} />}
         {active === "documentation" && <DocumentationPanel product={product} />}
         {active === "support" && <SupportPanel />}
@@ -77,7 +80,7 @@ function OverviewPanel({ product }: { product: ProductDetail }) {
 
 const REVIEWS_PAGE_SIZE = 5;
 
-function ReviewsPanel({ product }: { product: ProductDetail }) {
+function ReviewsPanel({ product, preview }: { product: ProductDetail; preview: boolean }) {
   // Seeded from the server-rendered product, then a just-posted review is
   // prepended locally — product.reviews comes from a 60s-cached fetch, so
   // waiting on that to catch up would leave a fresh review invisible for up
@@ -95,7 +98,9 @@ function ReviewsPanel({ product }: { product: ProductDetail }) {
         count={product.rating_count}
         breakdown={product.rating_breakdown}
       />
-      <WriteReviewForm productSlug={product.slug} onPosted={(review) => setReviews((r) => [review, ...r])} />
+      {!preview && (
+        <WriteReviewForm productSlug={product.slug} onPosted={(review) => setReviews((r) => [review, ...r])} />
+      )}
       <ul className={styles.reviewList}>
         {visibleReviews.map((review) => (
           <li key={review.id} className={styles.review}>

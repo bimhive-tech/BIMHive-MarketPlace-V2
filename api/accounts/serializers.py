@@ -40,8 +40,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = [
-            "company", "job_title", "bio", "avatar_url", "account_type",
-            "profession", "profession_label", "country", "country_name",
+            "is_student", "university", "company", "job_title", "bio", "avatar_url",
+            "account_type", "profession", "profession_label", "country", "country_name",
         ]
 
 
@@ -95,10 +95,20 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ["company", "job_title", "bio", "profession", "country"]
+        fields = ["is_student", "university", "company", "job_title", "bio", "profession", "country"]
 
     def validate_country(self, value):
         return _validate_country_code(value)
+
+    def validate(self, attrs):
+        """Answering the student question clears the branch it rules out, the
+        same rule signup applies (see RegisterSerializer.create) — otherwise
+        switching from company to university leaves the old company sitting on
+        the profile. Only fires when the answer is actually being sent, so a
+        partial update of, say, the bio doesn't wipe either field."""
+        if "is_student" in attrs:
+            attrs["company" if attrs["is_student"] else "university"] = ""
+        return attrs
 
 
 class MeUpdateSerializer(serializers.ModelSerializer):
@@ -154,10 +164,21 @@ class RegisterSerializer(serializers.ModelSerializer):
         choices=Profession.choices, write_only=True, required=False, allow_blank=True
     )
     country = serializers.CharField(write_only=True, required=True, max_length=2)
+    # Both optional, and mutually exclusive in practice — the signup form shows
+    # whichever matches the student answer. Free text either way, since both
+    # dropdowns offer "Other" (see Profile.university).
+    is_student = serializers.BooleanField(write_only=True, required=False, default=False)
+    university = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=180
+    )
+    company = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=140)
 
     class Meta:
         model = User
-        fields = ["email", "password", "full_name", "profession", "country"]
+        fields = [
+            "email", "password", "full_name", "profession", "country",
+            "is_student", "university", "company",
+        ]
 
     def validate_email(self, value):
         value = value.lower().strip()
@@ -175,6 +196,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         full_name = validated_data.pop("full_name", "").strip()
         profession = validated_data.pop("profession", "")
         country = validated_data.pop("country")
+        is_student = validated_data.pop("is_student", False)
+        university = validated_data.pop("university", "").strip()
+        company = validated_data.pop("company", "").strip()
         email = validated_data["email"]
         first, _, last = full_name.partition(" ")
         user = User.objects.create_user(
@@ -184,5 +208,17 @@ class RegisterSerializer(serializers.ModelSerializer):
             first_name=first,
             last_name=last,
         )
-        Profile.objects.get_or_create(user=user, defaults={"profession": profession, "country": country})
+        Profile.objects.get_or_create(
+            user=user,
+            defaults={
+                "profession": profession,
+                "country": country,
+                "is_student": is_student,
+                # Only keep the answer that matches — otherwise switching the
+                # student toggle mid-form leaves a stale value from the branch
+                # the user abandoned.
+                "university": university if is_student else "",
+                "company": "" if is_student else company,
+            },
+        )
         return user

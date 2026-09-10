@@ -78,6 +78,25 @@ class Profession(models.TextChoices):
     OTHER = "other", "Other"
 
 
+class University(models.Model):
+    """Backs the university dropdown a student sees at signup. A curated table
+    rather than a TextChoices list so staff can add one without a deploy —
+    same shape as catalog.Tag. It never constrains what a user can enter:
+    Profile.university is free text, and "Other" lets them type their own."""
+
+    name = models.CharField(max_length=180, unique=True)
+    country = CountryField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name_plural = "universities"
+
+    def __str__(self):
+        return self.name
+
+
 class Profile(models.Model):
     """Extra, optional details surfaced on the account Profile page (see mockups)."""
 
@@ -86,6 +105,14 @@ class Profile(models.Model):
         TEAM = "team", "Team"
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    # Students and working professionals get asked different follow-ups at
+    # signup: a student names their university, everyone else their company.
+    # Both are optional, and both accept a free-typed value when the dropdown
+    # doesn't list theirs — which is why `university` is plain text and not an
+    # FK to the University table below. That table only backs the dropdown; a
+    # typed-in name isn't rejected just because it isn't curated yet.
+    is_student = models.BooleanField(default=False)
+    university = models.CharField(max_length=180, blank=True)
     company = models.CharField(max_length=140, blank=True)
     job_title = models.CharField(max_length=140, blank=True)
     bio = models.TextField(max_length=200, blank=True)

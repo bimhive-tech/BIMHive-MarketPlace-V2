@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/Button/Button";
 import { Field } from "@/components/Field/Field";
 import { SelectField } from "@/components/Field/SelectField";
+import { SelectWithOther } from "@/components/Field/SelectWithOther";
 import {
   AuthError,
   getSignupOptions,
@@ -23,11 +24,19 @@ export function SignUpForm() {
   const [pending, setPending] = useState(false);
   const [professions, setProfessions] = useState<SignupOption[]>([]);
   const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [universities, setUniversities] = useState<string[]>([]);
+  // Controlled, unlike the rest of this form: which follow-up shows depends on
+  // the answer, and SelectWithOther needs its value back to know when to
+  // reveal the free-text input.
+  const [isStudent, setIsStudent] = useState(false);
+  const [university, setUniversity] = useState("");
+  const [company, setCompany] = useState("");
 
   useEffect(() => {
-    getSignupOptions().then(({ professions, countries }) => {
+    getSignupOptions().then(({ professions, countries, universities }) => {
       setProfessions(professions);
       setCountries(countries);
+      setUniversities(universities);
     });
   }, []);
 
@@ -44,6 +53,9 @@ export function SignUpForm() {
         fullName: String(form.get("full_name")),
         profession: String(form.get("profession") || ""),
         country: String(form.get("country") || ""),
+        isStudent,
+        university: isStudent ? university : "",
+        company: isStudent ? "" : company,
       });
       router.push("/account");
       router.refresh();
@@ -111,6 +123,35 @@ export function SignUpForm() {
           </option>
         ))}
       </SelectField>
+      <SelectField
+        label="Are you a student?"
+        name="is_student"
+        value={isStudent ? "yes" : "no"}
+        onChange={(e) => setIsStudent(e.target.value === "yes")}
+      >
+        <option value="no">No — I'm working</option>
+        <option value="yes">Yes, I'm a student</option>
+      </SelectField>
+      {isStudent ? (
+        <SelectWithOther
+          label="University or college (optional)"
+          name="university"
+          options={universities}
+          value={university}
+          onChange={setUniversity}
+          placeholder="Select your university"
+          otherPlaceholder="Your university's name"
+        />
+      ) : (
+        <Field
+          label="Company (optional)"
+          name="company"
+          placeholder="Where you work"
+          autoComplete="organization"
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+        />
+      )}
       <Button type="submit" size="lg" fullWidth>
         {pending ? "Creating account…" : "Create account"}
       </Button>

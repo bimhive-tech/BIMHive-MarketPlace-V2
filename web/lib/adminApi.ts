@@ -2,6 +2,8 @@
  * Client helpers for the staff-only admin API (/api/admin/*). Session cookie is
  * sent automatically; writes include the CSRF token (same pattern as lib/auth).
  */
+import type { ProductDetail } from "@/lib/types";
+
 function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
@@ -216,6 +218,12 @@ export const getAdminProducts = (status = "all", asPartner = false) =>
   getJSON<AdminProductRow[]>(`/api/admin/products?status=${status}${asPartner ? "&mine=1" : ""}`);
 export const getAdminProduct = (id: number, asPartner = false) =>
   getJSON<AdminProductDetail>(`/api/admin/products/${id}${asPartner ? "?mine=1" : ""}`);
+/** The product through the *storefront's* serializer, so the admin preview
+ * renders the real thing — works on drafts and hidden products, which
+ * /api/products/<slug> refuses to serve. Returns ProductDetail, not the admin
+ * write shape. */
+export const getProductPreview = (id: number, asPartner = false) =>
+  getJSON<ProductDetail>(`/api/admin/products/${id}/preview${asPartner ? "?mine=1" : ""}`);
 export const createProduct = (payload: Record<string, unknown>, asPartner = false) =>
   request<AdminProductDetail>(`/api/admin/products${asPartner ? "?mine=1" : ""}`, "POST", payload);
 export const updateProduct = (id: number, payload: Record<string, unknown>, asPartner = false) =>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
+import { SelectWithOther } from "@/components/Field/SelectWithOther";
 import { getSignupOptions, updateProfile, type CountryOption, type SignupOption } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
@@ -17,17 +18,21 @@ export function ProfileForm({ user, onSaved }: { user: User; onSaved: (user: Use
   const [bio, setBio] = useState(user.profile?.bio ?? "");
   const [profession, setProfession] = useState(user.profile?.profession ?? "");
   const [country, setCountry] = useState(user.profile?.country ?? "");
+  const [isStudent, setIsStudent] = useState(user.profile?.is_student ?? false);
+  const [university, setUniversity] = useState(user.profile?.university ?? "");
   const [professions, setProfessions] = useState<SignupOption[]>([]);
   const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [universities, setUniversities] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [avatarNote, setAvatarNote] = useState(false);
 
   useEffect(() => {
-    getSignupOptions().then(({ professions, countries }) => {
+    getSignupOptions().then(({ professions, countries, universities }) => {
       setProfessions(professions);
       setCountries(countries);
+      setUniversities(universities);
     });
   }, []);
 
@@ -40,7 +45,18 @@ export function ProfileForm({ user, onSaved }: { user: User; onSaved: (user: Use
       const updated = await updateProfile({
         first_name: first || "",
         last_name: rest.join(" "),
-        profile: { company, job_title: jobTitle, bio, profession, country },
+        profile: {
+          job_title: jobTitle,
+          bio,
+          profession,
+          country,
+          is_student: isStudent,
+          // Only the answered branch is kept, the same rule signup applies —
+          // otherwise switching the toggle leaves a stale company or
+          // university behind on the profile.
+          university: isStudent ? university : "",
+          company: isStudent ? "" : company,
+        },
       });
       onSaved(updated);
       setSaved(true);
@@ -94,16 +110,39 @@ export function ProfileForm({ user, onSaved }: { user: User; onSaved: (user: Use
 
       <div className={styles.row}>
         <label className={styles.field}>
-          Company <span className={styles.optional}>(Optional)</span>
-          <input className={styles.input} value={company} onChange={(e) => setCompany(e.target.value)} />
+          Are you a student?
+          <select
+            className={styles.input}
+            value={isStudent ? "yes" : "no"}
+            onChange={(e) => setIsStudent(e.target.value === "yes")}
+          >
+            <option value="no">No — I&apos;m working</option>
+            <option value="yes">Yes, I&apos;m a student</option>
+          </select>
         </label>
+        {isStudent ? (
+          <SelectWithOther
+            label="University or college (optional)"
+            name="university"
+            options={universities}
+            value={university}
+            onChange={setUniversity}
+            placeholder="Select your university"
+            otherPlaceholder="Your university's name"
+          />
+        ) : (
+          <label className={styles.field}>
+            Company <span className={styles.optional}>(Optional)</span>
+            <input className={styles.input} value={company} onChange={(e) => setCompany(e.target.value)} />
+          </label>
+        )}
+      </div>
+
+      <div className={styles.row}>
         <label className={styles.field}>
           Job Title <span className={styles.optional}>(Optional)</span>
           <input className={styles.input} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
         </label>
-      </div>
-
-      <div className={styles.row}>
         <label className={styles.field}>
           Profession <span className={styles.optional}>(Optional)</span>
           <select className={styles.input} value={profession} onChange={(e) => setProfession(e.target.value)}>

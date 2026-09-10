@@ -35,8 +35,11 @@ from catalog.models import (
 )
 from catalog.models.product import ProductStatus
 from catalog.permissions import IsApprovedPartner
+from catalog.pricing import live_promotions
+from catalog.serializers import ProductDetailSerializer
 from catalog.storage import refresh_storage_url
 from membership.models import MembershipPlan
+from membership.services import active_membership_for
 
 # Products (and their files/media) are shared between staff-with-permission
 # and approved partners managing their own catalog — composed once and reused
@@ -437,6 +440,47 @@ class AdminProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         log_activity(self.request.user, ActivityVerb.PRODUCT_DELETED, target_label=instance.name)
         instance.delete()
+
+
+class AdminProductPreviewView(generics.RetrieveAPIView):
+    """The product exactly as the storefront would render it, for a product
+    that isn't published (or is hidden) and so can't be fetched from
+    /api/products/<slug> — that route is published-and-public only (see
+    Product.published()).
+
+    Deliberately reuses ProductDetailSerializer rather than letting the admin
+    form rebuild a preview from its own state: every field the real page reads
+    is computed server-side (price_label, is_free, has_trial, is_new, the
+    matched live promotion, rating aggregates...), and a client-side rebuild
+    would have to reimplement all of it and then drift from the real page.
+    The cost is that unsaved edits aren't visible — save the draft first, which
+    the form already does implicitly before any upload.
+    """
+
+    permission_classes = [_CAN_MANAGE_PRODUCTS]
+    required_permission = "products.manage"
+    serializer_class = ProductDetailSerializer
+    queryset = Product.objects.select_related("category", "partner").prefetch_related(
+        "tags", "media", "features", "changelog", "compatibility", "documentation__sections", "reviews"
+    )
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Same scoping as the edit view: a partner can only preview their own.
+        partner_id = _effective_partner_id(self.request)
+        if partner_id is not None:
+            qs = qs.filter(partner_id=partner_id)
+        return qs
+
+    def get_serializer_context(self):
+        # ProductDetailSerializer's promotion/membership mixins read these out
+        # of context; without them the preview would render an un-discounted
+        # price the storefront wouldn't show.
+        return {
+            **super().get_serializer_context(),
+            "promotions": live_promotions(),
+            "viewer_membership": active_membership_for(self.request.user),
+        }
 
 
 class AdminProductFileListCreateView(generics.ListCreateAPIView):

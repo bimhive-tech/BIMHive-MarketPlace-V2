@@ -201,6 +201,34 @@ an Admin can then deliberately demote specific accounts to Staff-with-limited-pe
 `AdminUserUpdateSerializer` refuses to demote the last remaining Admin, so there's no way to
 accidentally lock everyone out of Users/Roles/Settings.
 
+## Admin editing: one modal, one field kit, and a real storefront preview
+
+Admin editors open in a shared **`Modal`** (`web/components/Modal/Modal.tsx`) rather than an inline
+panel that pushes the page around. It portals to `<body>` at `--z-modal`, traps focus, closes on
+Escape or a backdrop click, locks background scroll, restores focus to whatever opened it, and
+becomes a bottom sheet under 560px. Fields inside come from
+`web/features/admin/AdminForm/AdminForm.tsx` (`AdminFormGrid` / `AdminField` / `AdminInput` /
+`AdminTextarea` / `AdminCheckbox`) so every admin form labels and spaces its
+controls the same way. Membership Plans uses both today; the other admin editors follow the same
+shape and can move over one at a time.
+
+**Deleting a membership plan** now fails honestly instead of 500ing. `Membership.plan` is
+`on_delete=PROTECT`, so a tier anyone has ever been on cannot be deleted at all — the API returns a
+400 explaining that and suggesting the actual fix (uncheck **Active** to retire it; existing members
+keep their access).
+
+**Preview** on the product form (`ProductForm` header) shows the product exactly as the storefront
+would render it, via `GET /api/admin/products/<id>/preview` — a staff-only route that returns the
+same `ProductDetailSerializer` payload as the public product page but ignores `status`/`visibility`,
+because `/api/products/<slug>` is published-and-public only. Reusing the real serializer means the
+preview can't drift from the real page: every derived field (`price_label`, `is_free`, `has_trial`,
+`is_new`, the matched live promotion, rating aggregates) is computed server-side, and the matched
+promotion can't be computed client-side at all. The trade-off is that it shows the **last saved**
+version — the modal says so when the form has unsaved edits, and an unsaved new product is saved as
+a draft first (the same `ensureSaved()` step uploads already use). The live buy box and the
+write-a-review form are deliberately left out: both read the signed-in user's own licences, which
+means nothing in a preview. Partners get the same button, scoped to their own products.
+
 ## Auto-generated installers (built on demand, never cached)
 
 Only relevant to **Revit Plugin** products (`Product.type == "plugin"`) — for any other product
@@ -579,7 +607,7 @@ now real, working pages — each backed by data that already existed, not a new 
   reply form that auto-tags `is_staff_reply`/`author`) — no dedicated Admin Portal page built yet,
   since that wasn't part of what was actually broken (the customer-facing "soon" tabs).
 
-## Signup: profession + country (groundwork for regional pricing)
+## Signup: profession, country, and student / university / company
 
 `/signup` collects a profession (optional — `accounts.Profession`, a fixed AEC-role choices list,
 not free text, the same reason `catalog.ProductType` is a choices field) and a country (**required**
@@ -590,6 +618,21 @@ because it's what regional pricing (not yet built) will key off; profession is o
 segmentation only. Both are editable afterward on `/account/profile`. Country codes are validated
 server-side against the real `django_countries` list (case-normalized), not just trusted from the
 `<select>`.
+
+It also asks **"Are you a student?"**, then one optional follow-up: a university/college dropdown
+for students (`accounts.Profile.university`) or a company field for everyone else
+(`accounts.Profile.company`). Both are optional and only the answered branch is stored — switching
+the toggle discards the other one rather than saving both.
+
+The university list is a curated table (`accounts.University`), not a choices list, so it grows
+without a deploy: **Django admin → Universities** (`/admin/accounts/university/`) adds, renames or
+deactivates entries, and `GET /api/auth/signup-options` serves only the active ones. It ships
+pre-seeded with the Egyptian universities that run architecture/engineering programmes (migration
+`accounts.0008_seed_universities`). The list never constrains the answer: the dropdown's **Other**
+option reveals a free-text box (`web/components/Field/SelectWithOther.tsx`) and whatever is typed is
+stored in the same plain field, so there's no separate "other" column to reconcile. With no
+universities curated at all, the control skips the pointless one-entry dropdown and just asks for
+the name.
 
 ## Homepage hero: staff-curated, with an automatic fallback
 
@@ -701,7 +744,8 @@ every product that plan covers — the new `membership` app.
   change-password}`, `GET /api/auth/sessions` (the caller's own active sessions),
   `POST /api/auth/sessions/<key>/revoke` (sign out a different device — see "Account dashboard" above)
 - Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
-  `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`;
+  `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`,
+  `GET /api/admin/products/<id>/preview` (storefront render of an unpublished product);
   CRUD at `/api/admin/{categories,tags,partners,collections,promotions,membership-plans,roles}`;
   `GET /api/admin/{licenses,orders,users,customers,reviews}` plus their action routes
   (revoke/restore/extend/release a license, set an order's status, update a user's role,
@@ -765,6 +809,11 @@ A staff user is seeded for local admin access: `admin@bimhive.ai` / `BimHiveAdmi
 ```bash
 cd api && pytest          # includes golden-master tests for the license API contract
 ```
+
+`api/conftest.py` clears Django's cache around every test. DRF's `ScopedRateThrottle` counts
+requests there, and the test run shares one in-process `LocMemCache` — without the reset, the
+`auth` scope's 10/min budget is spent by earlier tests and whichever login/register test happens to
+run next gets a 429 that has nothing to do with the code it's testing.
 
 `installer/test_builder.py` runs real NSIS builds (no mocking) end to end — needs `makensis` on
 PATH (see Prerequisites). A few of that file's other tests (staging, not full builds) shell out to

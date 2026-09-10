@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon/Icon";
+import { Modal } from "@/components/Modal/Modal";
+import { formatPrice } from "@/config/site";
+import {
+  AdminCheckbox,
+  AdminField,
+  AdminFormGrid,
+  AdminInput,
+  AdminTextarea,
+} from "@/features/admin/AdminForm/AdminForm";
 import { membershipPlansApi, type AdminMembershipPlan } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
@@ -15,6 +24,7 @@ function defaultForm() {
     description: "",
     monthly_price: "",
     yearly_price: "",
+    currency: "USD",
     seats_per_product: 2,
     is_active: true,
     is_featured: false,
@@ -62,6 +72,7 @@ export default function AdminMembershipPlansPage() {
       description: row.description,
       monthly_price: row.monthly_price ?? "",
       yearly_price: row.yearly_price ?? "",
+      currency: row.currency,
       seats_per_product: row.seats_per_product,
       is_active: row.is_active,
       is_featured: row.is_featured,
@@ -92,10 +103,18 @@ export default function AdminMembershipPlansPage() {
     }
   }
 
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this plan? Its members lose access immediately.")) return;
-    await membershipPlansApi.remove(id);
-    load();
+  async function onDelete(row: AdminMembershipPlan) {
+    // Deliberately doesn't promise members lose access: the plan FK is
+    // PROTECT, so a tier anyone has ever been on can't be deleted at all —
+    // the API says so in a real message, surfaced below.
+    if (!window.confirm(`Delete ${row.name}? This only works if nobody has ever been on it.`)) return;
+    setError("");
+    try {
+      await membershipPlansApi.remove(row.id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this plan.");
+    }
   }
 
   return (
@@ -114,94 +133,114 @@ export default function AdminMembershipPlansPage() {
         </button>
       </header>
 
-      {showForm && (
-        <div className={styles.formPanel}>
-          <div className={styles.formGrid}>
-            <input
-              className={styles.searchInput}
-              placeholder="Name, e.g. Standard"
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
-            />
-            <label className={styles.checkboxRow}>
-              Rank (higher = includes lower)
-              <input
-                className={styles.searchInput}
-                type="number"
-                min={1}
-                value={form.rank}
-                onChange={(e) => set("rank", Number(e.target.value))}
-              />
-            </label>
-            <input
-              className={styles.searchInput}
-              placeholder="Tagline (optional)"
-              value={form.tagline}
-              onChange={(e) => set("tagline", e.target.value)}
-            />
-            <label className={styles.checkboxRow}>
-              Monthly price
-              <input
-                className={styles.searchInput}
-                type="number"
-                step="0.01"
-                min={0}
-                value={form.monthly_price}
-                onChange={(e) => set("monthly_price", e.target.value)}
-              />
-            </label>
-            <label className={styles.checkboxRow}>
-              Yearly price
-              <input
-                className={styles.searchInput}
-                type="number"
-                step="0.01"
-                min={0}
-                value={form.yearly_price}
-                onChange={(e) => set("yearly_price", e.target.value)}
-              />
-            </label>
-            <label className={styles.checkboxRow}>
-              Machines per product
-              <input
-                className={styles.searchInput}
-                type="number"
-                min={1}
-                value={form.seats_per_product}
-                onChange={(e) => set("seats_per_product", Number(e.target.value))}
-              />
-            </label>
-            <textarea
-              className={styles.textarea}
-              placeholder="Description (optional)"
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-            />
-
-            <label className={styles.checkboxRow}>
-              <input type="checkbox" checked={form.is_active} onChange={(e) => set("is_active", e.target.checked)} />
-              Active
-            </label>
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={form.is_featured}
-                onChange={(e) => set("is_featured", e.target.checked)}
-              />
-              Featured on the pricing page
-            </label>
-          </div>
-
-          <div className={styles.formActions}>
-            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
-              {editingId ? "Save" : "Create"}
-            </button>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingId ? `Edit ${form.name || "plan"}` : "New membership plan"}
+        description="A higher rank includes everything the lower ranks do."
+        footer={
+          <>
             <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
               Cancel
             </button>
-          </div>
-        </div>
-      )}
+            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
+              {saving ? "Saving…" : editingId ? "Save" : "Create"}
+            </button>
+          </>
+        }
+      >
+        <AdminFormGrid>
+          <AdminField label="Plan name" hint="Shown on the pricing page.">
+            <AdminInput
+              placeholder="e.g. Pro"
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+            />
+          </AdminField>
+          <AdminField label="Rank" hint="Higher tiers include everything the lower ones do.">
+            <AdminInput
+              type="number"
+              min={1}
+              value={form.rank}
+              onChange={(e) => set("rank", Number(e.target.value))}
+            />
+          </AdminField>
+
+          <AdminField label="Tagline" hint="One line under the plan name. Optional.">
+            <AdminInput
+              placeholder="Everything a small team needs"
+              value={form.tagline}
+              onChange={(e) => set("tagline", e.target.value)}
+            />
+          </AdminField>
+          <AdminField label="Currency" hint="Three-letter code, e.g. USD.">
+            <AdminInput
+              maxLength={8}
+              value={form.currency}
+              onChange={(e) => set("currency", e.target.value.toUpperCase())}
+            />
+          </AdminField>
+
+          <AdminField label="Monthly price" hint="Leave blank if this tier isn't sold monthly.">
+            <AdminInput
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="—"
+              value={form.monthly_price}
+              onChange={(e) => set("monthly_price", e.target.value)}
+            />
+          </AdminField>
+          <AdminField label="Yearly price" hint="Below 12× the monthly price to earn a savings badge.">
+            <AdminInput
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="—"
+              value={form.yearly_price}
+              onChange={(e) => set("yearly_price", e.target.value)}
+            />
+          </AdminField>
+
+          <AdminField label="Machines per product" hint="Seats a member gets on each covered product.">
+            <AdminInput
+              type="number"
+              min={1}
+              value={form.seats_per_product}
+              onChange={(e) => set("seats_per_product", Number(e.target.value))}
+            />
+          </AdminField>
+          <AdminField label="Sort order" hint="Ties are broken by rank, then name.">
+            <AdminInput
+              type="number"
+              min={0}
+              value={form.sort_order}
+              onChange={(e) => set("sort_order", Number(e.target.value))}
+            />
+          </AdminField>
+
+          <AdminField label="Description" hint="The longer pitch on the pricing page. Optional." wide>
+            <AdminTextarea
+              placeholder="What this tier includes and who it's for."
+              value={form.description}
+              onChange={(e) => set("description", e.target.value)}
+            />
+          </AdminField>
+
+          <AdminCheckbox
+            label="Active"
+            hint="Inactive tiers stay valid for existing members but can't be bought."
+            checked={form.is_active}
+            onChange={(v) => set("is_active", v)}
+          />
+          <AdminCheckbox
+            label="Featured"
+            hint="Highlighted as the recommended plan."
+            checked={form.is_featured}
+            onChange={(v) => set("is_featured", v)}
+          />
+        </AdminFormGrid>
+      </Modal>
 
       {error && <p className={styles.error}>{error}</p>}
 
@@ -227,8 +266,12 @@ export default function AdminMembershipPlansPage() {
                   {!row.is_active && <span className={styles.count}> · Inactive</span>}
                 </td>
                 <td className={styles.mono}>{row.rank}</td>
-                <td className={styles.muted}>{row.monthly_price ? `$${row.monthly_price}` : "—"}</td>
-                <td className={styles.muted}>{row.yearly_price ? `$${row.yearly_price}` : "—"}</td>
+                <td className={styles.muted}>
+                  {row.monthly_price ? formatPrice(row.monthly_price, row.currency) : "—"}
+                </td>
+                <td className={styles.muted}>
+                  {row.yearly_price ? formatPrice(row.yearly_price, row.currency) : "—"}
+                </td>
                 <td className={styles.muted}>{row.product_count}</td>
                 <td className={styles.muted}>{row.member_count}</td>
                 <td>
@@ -239,7 +282,7 @@ export default function AdminMembershipPlansPage() {
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       aria-label="Delete"
-                      onClick={() => onDelete(row.id)}
+                      onClick={() => onDelete(row)}
                     >
                       <Icon name="trash" size={16} />
                     </button>

@@ -43,3 +43,22 @@
   font-size: var(--fs-xs);
   color: var(--error-fg);
 }
+
+/* Conditionally revealed follow-up inputs (see SelectWithOther) — the parent
+   .field's flex gap already spaces it, so this only handles the entrance. */
+.reveal {
+  animation: revealField var(--dur-fast) var(--ease-standard) both;
+}
+
+@keyframes revealField {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
+}
