@@ -590,16 +590,25 @@ now real, working pages — each backed by data that already existed, not a new 
   (`accounts/security_api.py`) to list/revoke other devices. The caller's own current session can't
   be revoked from here — that's just the regular Log Out button.
 
-  **Log Out is unconditional, by design.** `POST /api/auth/logout` is `AllowAny`, not
-  `IsAuthenticated`, and `lib/auth.ts`'s `logout()` clears the client even if that POST fails. The
-  browser's sessionid cookie routinely outlives the session it points at — expiry, a revoke from
-  another device, a deploy that cleared the session table — and while it does, the UI still shows
-  the user as signed in because `me()` was read once on mount. Gating the endpoint meant that click
-  came back 403, the handler threw before it could clear anything, and the button was permanently
-  dead for exactly the people who needed it. Nothing is given away: `auth.logout()` is a no-op for
-  an anonymous request, an authenticated caller still goes through `SessionAuthentication`'s CSRF
-  check, and `SESSION_COOKIE_SAMESITE = "Lax"` stops a cross-site forced logout carrying the cookie
-  at all. Covered by `accounts/test_logout.py`.
+  **Log Out is unconditional, by design.** `POST /api/auth/logout` is `AllowAny` and uses a
+  CSRF-exempt `SessionAuthentication` (`accounts/api.py::LogoutView`), and `lib/auth.ts`'s
+  `logout()` finishes with a full page load onto `/` rather than updating local state. Each closes
+  a way the button used to fail:
+  - A browser's sessionid cookie routinely outlives its session (expiry, a revoke from another
+    device, a deploy clearing the session table). Gated on `IsAuthenticated`, that click came back
+    403 and the button was dead.
+  - A stale CSRF token or an untrusted Origin also came back 403 — **with the session left
+    alive**. It went unnoticed because an anonymous request never reaches DRF's `enforce_csrf`, so
+    signing *in* kept working and only signing out was broken.
+  - Clearing the nav optimistically then let a racing `me()` (still 200, session alive) flip it
+    straight back: a flash of "Log in / Sign up", then still signed in after a hard refresh. A real
+    reload shows whatever the server says is true.
+
+  Skipping CSRF costs nothing worth keeping: all it guarded was a forced logout, which
+  `SESSION_COOKIE_SAMESITE = "Lax"` already makes unreachable cross-site. Every *other*
+  authenticated write still enforces CSRF (asserted in `accounts/test_logout.py`), and `request()`
+  in `lib/auth.ts` now retries once against a freshly fetched token when a write is rejected with
+  "CSRF Failed" — previously a stale-but-present token was never refreshed, so it failed forever.
 - **`/account/notifications`** — a real activity feed, not a notification system: reuses the
   existing `ActivityLog` (see "Activity" logging elsewhere in this app), filtered to verbs a
   customer could plausibly be the actor of (signed in/up, claimed/bought/downloaded/reviewed) and

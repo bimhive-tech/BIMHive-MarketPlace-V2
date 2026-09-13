@@ -10,6 +10,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django_countries import countries
 from rest_framework import status
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -109,19 +110,41 @@ class LoginView(APIView):
         return Response(UserSerializer(user).data)
 
 
-class LogoutView(APIView):
-    """Deliberately AllowAny, not IsAuthenticated. "Sign me out" has to succeed
-    unconditionally: a session that has already died server-side (expired,
-    revoked from another device, or cleared by a deploy) still leaves a
-    sessionid cookie in the browser, and gating this endpoint answered that
-    click with a 403 — so the button did nothing, the cookie stayed put, and
-    the header kept showing a user who no longer had a session.
+class _SessionAuthWithoutCsrf(SessionAuthentication):
+    """SessionAuthentication that identifies the caller but doesn't refuse them
+    over CSRF. Only for LogoutView — see the reasoning there."""
 
-    Nothing is exposed by allowing it: django.contrib.auth.logout() is a no-op
-    for an anonymous request, and a genuinely authenticated caller still goes
-    through SessionAuthentication's CSRF check.
+    def enforce_csrf(self, request):
+        return None
+
+
+class LogoutView(APIView):
+    """Signing out always works, whatever state the caller's session or CSRF
+    token is in. Both of the ways this endpoint could refuse a click left the
+    user stuck pressing a dead button:
+
+    - Gated on IsAuthenticated, a session that had already died server-side
+      (expired, revoked from another device, cleared by a deploy) answered with
+      a 403 — even though the browser still held a sessionid cookie and still
+      showed the user as signed in. Hence AllowAny; auth.logout() is simply a
+      no-op for an anonymous request.
+    - Under the default SessionAuthentication, a stale CSRF token or an
+      untrusted Origin answered with a 403 *and left the session alive*, so the
+      user stayed signed in with no way to stop being signed in. Note the
+      asymmetry that hid this: an anonymous request never reaches enforce_csrf
+      at all (DRF returns early when there's no user, and APIView is
+      csrf_exempt at the middleware level), so signing *in* kept working
+      normally while signing out was the only broken action.
+
+    Dropping the CSRF check here costs nothing worth keeping. The only thing it
+    protected against is a forced logout — a nuisance, not a breach, with no
+    attacker-readable response — and SESSION_COOKIE_SAMESITE = "Lax" already
+    stops a cross-site POST carrying the session cookie, so it isn't reachable
+    cross-site anyway. Authentication itself is untouched: the session still has
+    to be real for there to be anything to end.
     """
 
+    authentication_classes = [_SessionAuthWithoutCsrf]
     permission_classes = [AllowAny]
 
     def post(self, request):

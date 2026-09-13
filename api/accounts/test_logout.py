@@ -8,6 +8,7 @@ but the endpoint was gated on IsAuthenticated and answered the click with a 403.
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.models import Session
+from django.test import Client
 
 pytestmark = pytest.mark.django_db
 User = get_user_model()
@@ -58,10 +59,49 @@ def test_logout_does_not_end_someone_elses_session(client, user):
     """AllowAny widens who may call it, so prove it still only ever affects the
     caller's own session."""
     other = User.objects.create_user(username="o@x.com", email="o@x.com", password="x")
-    other_client = client.__class__()
+    other_client = Client()
     other_client.force_login(other)
     client.force_login(user)
 
     client.post("/api/auth/logout")
 
     assert other_client.get("/api/auth/me").status_code == 200
+
+
+def test_logout_is_not_blocked_by_a_bad_csrf_token(user):
+    """The real-world failure. Under the default SessionAuthentication a stale
+    token or an untrusted Origin answered with a 403 *and left the session
+    alive*, so the user could not stop being signed in. Note what hid it: an
+    anonymous request never reaches enforce_csrf, so signing in kept working
+    and only signing out was broken."""
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+
+    resp = csrf_client.post("/api/auth/logout", HTTP_X_CSRFTOKEN="not-a-real-token")
+
+    assert resp.status_code == 200
+    assert csrf_client.get("/api/auth/me").status_code in (401, 403)
+
+
+def test_logout_with_no_csrf_token_at_all_still_ends_the_session(user):
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+
+    resp = csrf_client.post("/api/auth/logout")
+
+    assert resp.status_code == 200
+    assert Session.objects.count() == 0
+
+
+def test_other_authenticated_writes_still_enforce_csrf(user):
+    """The exemption is scoped to logout alone — proving it here means a future
+    change that widens it fails loudly rather than quietly."""
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+
+    resp = csrf_client.patch(
+        "/api/auth/me", {"first_name": "Mallory"}, content_type="application/json"
+    )
+
+    assert resp.status_code == 403
+    assert "CSRF" in str(resp.json())

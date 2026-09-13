@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/Button/Button";
@@ -12,7 +11,6 @@ import type { User } from "@/lib/types";
 import styles from "./AuthNav.module.css";
 
 export function AuthNav() {
-  const router = useRouter();
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -44,12 +42,12 @@ export function AuthNav() {
     };
   }, [open]);
 
+  // No local state update or client-side push here on purpose: logout() reloads
+  // onto the homepage, and guessing at the signed-out state before it lands is
+  // what used to make the nav flash "Log in / Sign up" and then flip back.
   async function onLogout() {
     setOpen(false);
     await logout();
-    setUser(null);
-    router.push("/");
-    router.refresh();
   }
 
   // While loading, render nothing to avoid a flash of the wrong state.
