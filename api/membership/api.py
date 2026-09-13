@@ -3,7 +3,7 @@ Public + customer-facing membership API.
 
   GET  /api/membership/plans          — the pricing page
   GET  /api/account/membership        — my membership, my universal key
-  POST /api/account/membership/checkout — start a Paymob payment for a plan
+  POST /api/account/membership/checkout — join a plan: a Paymob payment, or instantly when it's $0
   POST /api/account/membership/cancel   — end my own membership
 """
 from django.conf import settings
@@ -21,7 +21,12 @@ from catalog.serializers import ProductCardSerializer
 from licensing import paymob
 from membership.models import Membership, MembershipPlan
 from membership.serializers import AccountMembershipSerializer, MembershipPlanSerializer
-from membership.services import active_membership_for, covered_products, end_membership
+from membership.services import (
+    activate_membership,
+    active_membership_for,
+    covered_products,
+    end_membership,
+)
 
 
 def _plan_context():
@@ -84,13 +89,19 @@ class AccountMembershipView(APIView):
 
 
 class MembershipCheckoutView(APIView):
-    """Starts a Paymob payment for a plan.
+    """Joins a self-serve plan.
 
-    Creates the membership PENDING and hands back a checkout URL — exactly like
-    CheckoutView does for products. Nothing is granted here; only the
-    HMAC-verified webhook activates a membership (see PaymobWebhookView),
+    A priced plan starts a Paymob payment: the membership is created PENDING
+    and only the HMAC-verified webhook activates it (see PaymobWebhookView),
     because trusting the browser redirect would let anyone unlock the whole
     catalogue by visiting a URL.
+
+    A plan that costs $0 right now (free for launch, or a 100% promotion) has
+    nothing to verify and Paymob can't take a zero amount, so it activates here
+    for a normal billing period. When that period ends the member simply joins
+    again — which, once the plan has a price, means paying. The response keeps
+    checkout's shape, with `checkoutUrl` pointing at the account page, so the
+    client's redirect is the same either way.
     """
 
     permission_classes = [IsAuthenticated]
@@ -103,6 +114,11 @@ class MembershipCheckoutView(APIView):
         ).first()
         if plan is None:
             raise ValidationError({"plan": "That plan isn't available."})
+        if plan.enrollment != MembershipPlan.Enrollment.SELF_SERVE:
+            # Enterprise-style "contact us" tiers and the everyone-has-it Free
+            # tier aren't joined through checkout; the pricing card never
+            # offers it, so only a hand-made request gets here.
+            raise ValidationError({"plan": f"{plan.name} isn't joined online."})
 
         billing_period = (request.data.get("billingPeriod") or "").strip()
         if billing_period not in {choice for choice, _ in Membership.BillingPeriod.choices}:
@@ -135,6 +151,19 @@ class MembershipCheckoutView(APIView):
             currency=plan.currency,
             payment_reference=reference,
         )
+
+        if amount == 0:
+            activate_membership(membership)
+            log_activity(
+                request.user,
+                ActivityVerb.ORDER_PLACED,
+                target_label=f"{plan.name} membership",
+                metadata={"processor": "free", "reference": reference, "membership": True},
+            )
+            return Response(
+                {"checkoutUrl": "/account/membership", "reference": reference, "paid": True},
+                status=201,
+            )
 
         billing_data = {
             "first_name": request.user.first_name or request.user.username,

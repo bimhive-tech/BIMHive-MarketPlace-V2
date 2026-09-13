@@ -160,7 +160,8 @@ def test_partner_can_resave_an_already_published_product_without_touching_status
 ):
     # The frontend always resends the currently-loaded status on every save —
     # a partner editing an already-approved product's description must not get
-    # rejected just because "published" appears in the payload unchanged.
+    # rejected just because "published" appears in the payload unchanged. The
+    # edit itself now goes back to Pending Review (see test_partner_review_gaps).
     product = Product.objects.create(
         name="Mine", short_description="s", description="d", category=category, partner=partner_a,
         status="published",
@@ -173,7 +174,7 @@ def test_partner_can_resave_an_already_published_product_without_touching_status
     assert resp.status_code == 200, resp.json()
     product.refresh_from_db()
     assert product.short_description == "Updated tagline"
-    assert product.status == "published"
+    assert product.status == "pending"
 
 
 def test_partner_can_resave_an_already_rejected_product_without_touching_status(

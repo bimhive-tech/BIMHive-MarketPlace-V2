@@ -2,7 +2,7 @@
  * Client helpers for the staff-only admin API (/api/admin/*). Session cookie is
  * sent automatically; writes include the CSRF token (same pattern as lib/auth).
  */
-import type { ProductDetail } from "@/lib/types";
+import type { PlanEnrollment, ProductDetail } from "@/lib/types";
 
 function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -171,6 +171,8 @@ export interface AdminProductDetail {
   partner: number;
   tags: number[];
   price: string;
+  /** Display-only, struck through beside the real price. Never charged. */
+  original_price: string | null;
   monthly_price: string | null;
   yearly_price: string | null;
   download_count: number;
@@ -346,8 +348,13 @@ export interface AdminMembershipPlan {
   rank: number;
   tagline: string;
   description: string;
+  /** One checklist item per line. */
+  features: string;
+  enrollment: PlanEnrollment;
   monthly_price: string | null;
   yearly_price: string | null;
+  original_monthly_price: string | null;
+  original_yearly_price: string | null;
   currency: string;
   seats_per_product: number;
   is_active: boolean;

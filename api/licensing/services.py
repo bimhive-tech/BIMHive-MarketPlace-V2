@@ -41,6 +41,25 @@ def expires_at_for(billing_period, now):
     return now + duration if duration else None
 
 
+def confirm_purchases_paid(purchases, now=None, card_brand="", card_last4=""):
+    """Marks a checkout's purchases PAID and starts any subscription clock.
+
+    The single place an order becomes real, shared by the two ways one can:
+    PaymobWebhookView after an HMAC-verified payment, and CheckoutView for an
+    order whose total is $0 (a 100% promotion), which never goes to Paymob at
+    all. Already-PAID rows are skipped, so a re-delivered webhook is harmless.
+    """
+    now = now or timezone.now()
+    for purchase in purchases:
+        if purchase.payment_status == ProductPurchase.PaymentStatus.PAID:
+            continue
+        purchase.payment_status = ProductPurchase.PaymentStatus.PAID
+        purchase.expires_at = expires_at_for(purchase.billing_period, now)
+        purchase.card_brand = card_brand
+        purchase.card_last4 = card_last4
+        purchase.save()
+
+
 def sync_license_sku(product):
     """
     Create or update the activation SKU (licensing.LicensedProduct) for a
@@ -221,14 +240,10 @@ def redeem_license_code(code, user, event_time=None):
         )
 
     # A redeemed code is a comp/grant, not a real transaction — force $0
-    # regardless of the product's list price. ProductPurchase.save() backfills
-    # a zero/falsy amount from product.price on every save (right for a normal
-    # purchase, wrong here), and re-runs that backfill even when called with
-    # update_fields=["amount"] — update_fields only limits the SQL columns
-    # written, not which lines of the overridden save() execute. A queryset
-    # .update() bypasses save() entirely, so it's the only way to make this
-    # stick. Sales/Orders revenue reporting sums `amount` for paid purchases,
-    # so this isn't cosmetic — a stale price would inflate real numbers.
+    # regardless of the product's list price, including on a reused row that
+    # may still carry the price of an earlier real purchase. Sales/Orders
+    # revenue reporting sums `amount` for paid purchases, so this isn't
+    # cosmetic — a stale price would inflate real numbers.
     ProductPurchase.objects.filter(pk=purchase.pk).update(amount=Decimal("0.00"))
     purchase.amount = Decimal("0.00")
 

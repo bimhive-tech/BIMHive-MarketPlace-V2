@@ -56,6 +56,16 @@
   background: var(--gold-100);
 }
 
+/* Danger: for the confirm button of an irreversible action (deleting,
+   revoking, refunding) — the one place the semantic error red is a fill. */
+.danger {
+  background: var(--error-fg);
+  color: var(--surface-0);
+}
+.danger:hover {
+  filter: brightness(0.92);
+}
+
 /* Tertiary/text: gold text only. */
 .text {
   background: none;

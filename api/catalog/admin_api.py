@@ -64,6 +64,76 @@ def _effective_partner_id(request):
 
 
 # ─────────────────────────────────────────────────────────────
+# Re-review of a partner's edits to a live product
+# ─────────────────────────────────────────────────────────────
+# What a customer reads or downloads. An approved partner changing any of these
+# on a published product sends it back to Pending Review, the same human check
+# the product passed the first time. Staff edits don't.
+_REVIEWED_PRODUCT_FIELDS = [
+    "name", "short_description", "description", "type", "category_id", "product_code",
+    "price", "original_price", "monthly_price", "yearly_price",
+    "default_trial_days", "default_trial_hours", "default_trial_minutes",
+    "version", "visibility", "membership_plan_id", "cover_image_url", "seo_title", "seo_description",
+]
+
+
+def _unsigned(url):
+    """Media URLs are re-signed on every read (see catalog.storage) and the
+    form posts them back as-is, so only the part before the signature query
+    says whether the file itself changed."""
+    return (url or "").split("?", 1)[0]
+
+
+def review_fingerprint(product_id):
+    """Everything customer-facing about a product, as plain comparable data —
+    read fresh from the database so it reflects a save that just happened."""
+    row = Product.objects.filter(pk=product_id).values(*_REVIEWED_PRODUCT_FIELDS).first() or {}
+    row["cover_image_url"] = _unsigned(row.get("cover_image_url"))
+    ordered = {"product_id": product_id}
+    return (
+        row,
+        list(KeyFeature.objects.filter(**ordered).order_by("sort_order", "id").values_list("title", "description", "icon")),
+        [
+            (kind, _unsigned(url), caption, is_cover)
+            for kind, url, caption, is_cover in ProductMedia.objects.filter(**ordered)
+            .order_by("sort_order", "id")
+            .values_list("media_type", "url", "caption", "is_cover")
+        ],
+        list(ChangelogEntry.objects.filter(**ordered).order_by("sort_order", "id").values_list("version", "released_at", "notes")),
+        list(CompatibilityEntry.objects.filter(**ordered).order_by("sort_order", "id").values_list("label", "value")),
+        list(Documentation.objects.filter(**ordered).values_list("title", "summary", "overview", "is_published")),
+        [
+            (title, body, _unsigned(image_url))
+            for title, body, image_url in DocSection.objects.filter(documentation__product_id=product_id)
+            .order_by("sort_order", "id")
+            .values_list("title", "body", "image_url")
+        ],
+        sorted(Product.tags.through.objects.filter(**ordered).values_list("tag_id", flat=True)),
+    )
+
+
+def send_live_edit_back_for_review(product, request, reason):
+    """Pulls a published product back to Pending Review when a partner changed
+    it. Returns whether it did. No-op for staff and for anything not live.
+
+    Used by the product save below and by every endpoint that changes what a
+    customer downloads (product files, plugin builds and their resources),
+    because swapping the installer is the edit that most needs a second look.
+    """
+    if _effective_partner_id(request) is None or product.status != ProductStatus.PUBLISHED:
+        return False
+    product.status = ProductStatus.PENDING
+    product.save()
+    log_activity(
+        request.user,
+        ActivityVerb.PRODUCT_SUBMITTED_FOR_REVIEW,
+        target_label=product.name,
+        metadata={"partner_id": product.partner_id, "reason": reason, "live_edit": True},
+    )
+    return True
+
+
+# ─────────────────────────────────────────────────────────────
 # Product — list row (compact, for the table)
 # ─────────────────────────────────────────────────────────────
 class AdminProductRowSerializer(serializers.ModelSerializer):
@@ -173,7 +243,8 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             "id", "name", "slug", "product_code", "short_description", "description", "type",
-            "category", "partner", "tags", "price", "monthly_price", "yearly_price", "download_count",
+            "category", "partner", "tags", "price", "original_price", "monthly_price", "yearly_price",
+            "download_count",
             "default_trial_days", "default_trial_hours", "default_trial_minutes",
             "status", "rejection_note", "visibility", "is_featured", "membership_plan",
             "is_hero_featured", "hero_sort_order",
@@ -352,6 +423,12 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         request = self.context.get("request")
         old_status = instance.status
+        # A partner editing their live product: remember exactly what customers
+        # see now, so a save that changes any of it can go back for review.
+        # Compared rather than assumed, because the form resends everything on
+        # every save and an unchanged save mustn't unpublish anything.
+        live_partner_edit = self._is_partner_caller(request) and old_status == ProductStatus.PUBLISHED
+        before = review_fingerprint(instance.pk) if live_partner_edit else None
         tags = validated_data.pop("tags", None)
         validated_data = self._sync_nested(instance, validated_data)
         for attr, value in validated_data.items():
@@ -359,15 +436,25 @@ class AdminProductDetailSerializer(serializers.ModelSerializer):
         instance.save()
         if tags is not None:
             instance.tags.set(tags)
+        if live_partner_edit and review_fingerprint(instance.pk) != before:
+            instance.status = ProductStatus.PENDING
+            instance.save()
         if request:
             verb = ActivityVerb.PRODUCT_UPDATED
+            # partner_id is what puts a review outcome in the seller's own
+            # notifications (see activity.account_api.PARTNER_OUTCOME_VERBS).
+            metadata = {"partner_id": instance.partner_id}
             if instance.status != old_status:
                 verb = {
                     ProductStatus.PENDING: ActivityVerb.PRODUCT_SUBMITTED_FOR_REVIEW,
                     ProductStatus.PUBLISHED: ActivityVerb.PRODUCT_APPROVED,
                     ProductStatus.REJECTED: ActivityVerb.PRODUCT_REJECTED,
                 }.get(instance.status, verb)
-            log_activity(request.user, verb, target_label=instance.name)
+                if instance.status == ProductStatus.REJECTED:
+                    metadata["note"] = instance.rejection_note
+                if live_partner_edit and instance.status == ProductStatus.PENDING:
+                    metadata.update(reason="details", live_edit=True)
+            log_activity(request.user, verb, target_label=instance.name, metadata=metadata)
         return instance
 
 
@@ -517,6 +604,7 @@ class AdminProductFileListCreateView(generics.ListCreateAPIView):
         # the backend applies) is what we record, not the name we asked for.
         key = default_storage.save(f"product_files/{product.id}/{uploaded.name}", uploaded)
         serializer.save(product=product, storage_key=key, file_size_bytes=uploaded.size)
+        send_live_edit_back_for_review(product, self.request, "files")
 
 
 class AdminProductFileDetailView(generics.DestroyAPIView):
@@ -537,7 +625,9 @@ class AdminProductFileDetailView(generics.DestroyAPIView):
 
         if instance.storage_key and default_storage.exists(instance.storage_key):
             default_storage.delete(instance.storage_key)
+        product = instance.product
         instance.delete()
+        send_live_edit_back_for_review(product, self.request, "files")
 
 
 class AdminProductMediaUploadUrlView(APIView):
@@ -779,7 +869,20 @@ class AdminPartnerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Partner.objects.annotate(product_count=Count("products", distinct=True))
 
-        return Response({"email": user.email, "password": password}, status=201)
+    def perform_update(self, serializer):
+        """Records an application decision so the applicant is told in their
+        notifications — the only channel there is, with no email system."""
+        old_status = serializer.instance.status
+        partner = serializer.save()
+        verb = {
+            Partner.ApplicationStatus.APPROVED: ActivityVerb.PARTNER_APPROVED,
+            Partner.ApplicationStatus.REJECTED: ActivityVerb.PARTNER_REJECTED,
+        }.get(partner.status)
+        if verb and partner.status != old_status:
+            metadata = {"partner_id": partner.id}
+            if partner.status == Partner.ApplicationStatus.REJECTED:
+                metadata["note"] = partner.rejection_note
+            log_activity(self.request.user, verb, target_label=partner.name, metadata=metadata)
 
 
 class CollectionSerializer(ProductCountMixin, serializers.ModelSerializer):

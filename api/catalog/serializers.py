@@ -273,6 +273,7 @@ class ProductCardSerializer(ProductPromotionMixin, ProductMembershipMixin, seria
     category = serializers.CharField(source="category.name", read_only=True)
     category_slug = serializers.CharField(source="category.slug", read_only=True)
     price_label = serializers.CharField(read_only=True)
+    original_price_label = serializers.CharField(read_only=True)
     is_subscription = serializers.BooleanField(read_only=True)
     is_new = serializers.BooleanField(read_only=True)
     is_updated = serializers.BooleanField(read_only=True)
@@ -282,7 +283,8 @@ class ProductCardSerializer(ProductPromotionMixin, ProductMembershipMixin, seria
         model = Product
         fields = [
             "id", "name", "slug", "type", "short_description", "cover_image_url",
-            "price", "price_label", "monthly_price", "yearly_price", "is_subscription", "currency",
+            "price", "price_label", "original_price_label",
+            "monthly_price", "yearly_price", "is_subscription", "currency",
             "rating_average", "rating_count", "download_count", "category", "category_slug", "is_featured",
             "promotion", "is_new", "is_updated", "version", "membership",
         ]
@@ -302,6 +304,7 @@ class ProductDetailSerializer(ProductPromotionMixin, ProductMembershipMixin, ser
     documentation = serializers.SerializerMethodField()
     reviews = ReviewSerializer(many=True, read_only=True)
     price_label = serializers.CharField(read_only=True)
+    original_price_label = serializers.CharField(read_only=True)
     is_free = serializers.BooleanField(read_only=True)
     has_trial = serializers.BooleanField(read_only=True)
     is_subscription = serializers.BooleanField(read_only=True)
@@ -316,7 +319,7 @@ class ProductDetailSerializer(ProductPromotionMixin, ProductMembershipMixin, ser
         model = Product
         fields = [
             "id", "name", "slug", "type", "short_description", "description",
-            "price", "currency", "price_label", "is_free",
+            "price", "currency", "price_label", "original_price_label", "is_free",
             "monthly_price", "yearly_price", "is_subscription", "yearly_savings_percent",
             "default_trial_days", "default_trial_hours", "default_trial_minutes", "has_trial",
             "trial_builds", "cover_image_url", "version", "released_at",

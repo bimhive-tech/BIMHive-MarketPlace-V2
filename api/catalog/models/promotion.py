@@ -16,9 +16,11 @@ from django.utils import timezone
 
 from catalog.models.taxonomy import TimeStamped
 
-# A promotion is a discount, not a giveaway: 90% is already extreme, and the
-# cap stops a mistyped "100" from silently making the whole catalog free.
-MAX_DISCOUNT_PERCENT = 90
+# 100% is allowed on purpose: giving tools away with the regular price struck
+# through is a real launch strategy here. A $0 order that results never reaches
+# Paymob — checkout completes it in place (see licensing.services
+# .confirm_purchases_paid and MembershipCheckoutView).
+MAX_DISCOUNT_PERCENT = 100
 CENTS = Decimal("0.01")
 
 

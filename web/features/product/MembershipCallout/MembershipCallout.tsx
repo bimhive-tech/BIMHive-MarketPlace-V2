@@ -37,13 +37,18 @@ export function MembershipCallout({ product }: { product: ProductDetail }) {
     );
   }
 
+  // formatPrice renders 0 as "Free", which would read "from Free/mo" — a plan
+  // that costs nothing right now gets its own wording instead.
+  const monthly = membership.monthly_price === null ? null : Number(membership.monthly_price);
+
   return (
     <Link href="/membership" className={styles.callout}>
       <Icon name="wallet" size={20} className={styles.icon} />
       <div>
         <p className={styles.title}>
           Or get it with {membership.plan_name}
-          {membership.monthly_price && <> from {formatPrice(membership.monthly_price)}/mo</>}
+          {monthly === 0 && <> — free to join for now</>}
+          {monthly !== null && monthly > 0 && <> from {formatPrice(monthly)}/mo</>}
         </p>
         <p className={styles.text}>
           One subscription unlocks this and every other product in the plan.

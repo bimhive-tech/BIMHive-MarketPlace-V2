@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Pill } from "@/components/Pill/Pill";
 import {
   getAdminMemberships,
@@ -22,6 +23,7 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "neutral"> =
 };
 
 export default function AdminMembershipsPage() {
+  const { confirm, dialog } = useConfirm();
   const [rows, setRows] = useState<AdminMembership[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -33,12 +35,13 @@ export default function AdminMembershipsPage() {
   useEffect(load, []);
 
   async function onRevoke(row: AdminMembership) {
-    if (
-      !window.confirm(
-        `Revoke ${row.user_email}'s ${row.plan_name} membership? Its universal key will stop activating all ${row.granted_count} product(s) it opened.`,
-      )
-    )
-      return;
+    const confirmed = await confirm({
+      title: `Revoke ${row.user_email}'s ${row.plan_name} membership?`,
+      message: `Its universal key stops activating all ${row.granted_count} product(s) it opened.`,
+      confirmLabel: "Revoke",
+      danger: true,
+    });
+    if (!confirmed) return;
     setError("");
     setBusyId(row.id);
     try {
@@ -132,6 +135,8 @@ export default function AdminMembershipsPage() {
         {rows === null && <p className={styles.state}>Loading memberships…</p>}
         {rows?.length === 0 && <p className={styles.state}>No memberships yet.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }

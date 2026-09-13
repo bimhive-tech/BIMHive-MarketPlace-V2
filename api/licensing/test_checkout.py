@@ -216,7 +216,9 @@ def test_checkout_rejects_an_unpublished_product(buyer_client, category):
     assert resp.status_code == 400
 
 
-def test_checkout_works_for_a_free_product_too(buyer_client, category, mock_intention):
+def test_a_zero_total_checkout_completes_without_paymob(buyer_client, category, mock_intention):
+    """Used to open a $0 Paymob intention and leave the order PENDING forever —
+    Paymob can't take a zero amount, so nothing could ever confirm it."""
     free_product = Product.objects.create(
         name="Free Checkout Test", product_code="free-checkout-test", category=category,
         short_description="s", description="d", status=ProductStatus.PUBLISHED, price="0.00",
@@ -224,9 +226,49 @@ def test_checkout_works_for_a_free_product_too(buyer_client, category, mock_inte
     client, user = buyer_client
     resp = _checkout(client, [{"slug": free_product.slug, "qty": 1}])
     assert resp.status_code == 201, resp.json()
+    body = resp.json()
+    assert body["paid"] is True
+    assert body["checkoutUrl"] == f"/checkout/confirmation?reference={body['reference']}"
+    mock_intention.assert_not_called()
     purchase = ProductPurchase.objects.get(user=user, product__product=free_product)
-    assert purchase.payment_status == ProductPurchase.PaymentStatus.PENDING
+    assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
     assert str(purchase.amount) == "0.00"
+
+
+def test_a_100_percent_promotion_checks_out_as_a_free_order(buyer_client, product, mock_intention):
+    """Also guards ProductPurchase.save(), which used to re-price a $0 amount
+    at list price — this order was recorded and sent to Paymob at $49."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from catalog.models import Promotion
+
+    Promotion.objects.create(
+        name="Launch giveaway", discount_percent=100, scope=Promotion.Scope.ALL,
+        starts_at=timezone.now() - timedelta(hours=1), ends_at=timezone.now() + timedelta(days=7),
+    )
+    client, user = buyer_client
+
+    resp = _checkout(client, [{"slug": product.slug, "qty": 1}])
+
+    assert resp.status_code == 201, resp.json()
+    mock_intention.assert_not_called()
+    purchase = ProductPurchase.objects.get(user=user, product__product=product)
+    assert purchase.payment_status == ProductPurchase.PaymentStatus.PAID
+    assert str(purchase.amount) == "0.00"
+
+
+def test_a_paid_checkout_still_goes_to_paymob(buyer_client, product, mock_intention):
+    """The free path must never swallow a real order."""
+    client, user = buyer_client
+
+    resp = _checkout(client, [{"slug": product.slug, "qty": 1}])
+
+    assert resp.status_code == 201
+    mock_intention.assert_called_once()
+    assert "paid" not in resp.json()
+    assert ProductPurchase.objects.get(user=user).payment_status == ProductPurchase.PaymentStatus.PENDING
 
 
 def test_checkout_returns_a_clean_400_when_paymob_isnt_configured(buyer_client, product):

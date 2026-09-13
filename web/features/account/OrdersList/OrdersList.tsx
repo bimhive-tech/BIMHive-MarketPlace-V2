@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Pill } from "@/components/Pill/Pill";
 import { AccountApiError, getAccountOrders, refundOrder, type AccountOrder } from "@/lib/accountApi";
@@ -23,6 +24,7 @@ function isWithinRefundWindow(order: AccountOrder): boolean {
 }
 
 export function OrdersList() {
+  const { confirm, dialog } = useConfirm();
   const [orders, setOrders] = useState<AccountOrder[] | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -34,9 +36,12 @@ export function OrdersList() {
   }, []);
 
   async function onRefund(order: AccountOrder) {
-    const confirmed = window.confirm(
-      `Cancel and refund ${order.product_name}? This immediately ends the license — any machine already activated on it will lose access.`,
-    );
+    const confirmed = await confirm({
+      title: `Cancel and refund ${order.product_name}?`,
+      message: "The license ends immediately and any machine activated on it loses access.",
+      confirmLabel: "Cancel and refund",
+      danger: true,
+    });
     if (!confirmed) return;
     setError("");
     setRefundingId(order.id);
@@ -92,6 +97,8 @@ export function OrdersList() {
           )}
         </div>
       ))}
+
+      {dialog}
     </div>
   );
 }

@@ -3,18 +3,23 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { deleteAccount } from "@/lib/auth";
 
 import styles from "./DeleteAccountCard.module.css";
 
 export function DeleteAccountCard() {
+  const { confirm, dialog } = useConfirm();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
 
   async function onDelete() {
-    const confirmed = window.confirm(
-      "This will permanently delete your account. This cannot be undone. Continue?",
-    );
+    const confirmed = await confirm({
+      title: "Delete your account?",
+      message: "Your account, licenses and history are permanently removed. This can't be undone.",
+      confirmLabel: "Delete my account",
+      danger: true,
+    });
     if (!confirmed) return;
     setDeleting(true);
     try {
@@ -33,6 +38,8 @@ export function DeleteAccountCard() {
       <button className={styles.deleteBtn} onClick={onDelete} disabled={deleting}>
         {deleting ? "Deleting…" : "Delete Account"}
       </button>
+
+      {dialog}
     </div>
   );
 }

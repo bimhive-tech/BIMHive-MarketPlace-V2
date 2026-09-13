@@ -1,0 +1,12 @@
+.form,
+.sent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sentText {
+  font-size: var(--fs-sm);
+  color: var(--ink-700);
+  line-height: var(--lh-normal);
+}

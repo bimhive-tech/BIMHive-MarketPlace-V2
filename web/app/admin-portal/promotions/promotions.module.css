@@ -1,13 +1,8 @@
 /* Promotion-specific bits layered on the shared AdminTable styles. */
 
-.wide {
+/* A save error spans the whole form grid inside the modal. */
+.fullRow {
   grid-column: 1 / -1;
-}
-
-.hint {
-  grid-column: 1 / -1;
-  font-size: var(--fs-sm);
-  color: var(--color-muted);
 }
 
 .discount {

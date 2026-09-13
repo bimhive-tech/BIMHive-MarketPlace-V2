@@ -14,7 +14,9 @@ interface ModalProps {
   title: string;
   /** Optional line under the title, e.g. what the form does. */
   description?: string;
-  children: ReactNode;
+  /** Omit for a message-only dialog (e.g. a confirmation), which then has no
+   * empty padded body between the header and the buttons. */
+  children?: ReactNode;
   /** Action buttons pinned to the bottom; omit for a content-only dialog. */
   footer?: ReactNode;
   /** "lg" for dense forms (the admin create/edit panels), "xl" for a preview. */
@@ -114,7 +116,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
           </button>
         </header>
 
-        <div className={styles.body}>{children}</div>
+        {children && <div className={styles.body}>{children}</div>}
 
         {footer && <footer className={styles.footer}>{footer}</footer>}
       </div>

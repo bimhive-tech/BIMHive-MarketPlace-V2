@@ -11,7 +11,7 @@ import { getMembershipPlans, getProducts } from "@/lib/api";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "All-Access membership",
+  title: "Pricing",
   description:
     "One subscription, one license key, and the BIMHive catalogue unlocked — instead of buying each plugin separately.",
 };
@@ -34,7 +34,7 @@ export default async function MembershipPage() {
 
   return (
     <div className={`container ${styles.page}`}>
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "All-Access" }]} />
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Pricing" }]} />
 
       <header className={styles.hero}>
         <p className={styles.eyebrow}>BIMHive All-Access</p>

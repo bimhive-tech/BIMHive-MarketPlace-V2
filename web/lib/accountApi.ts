@@ -107,6 +107,8 @@ export interface AccountActivityEntry {
   id: number;
   verb: string;
   target_label: string;
+  /** Staff's reason, on a rejection a seller is being told about. */
+  note: string;
   created_at: string;
 }
 export const getAccountActivity = () => getJSON<AccountActivityEntry[]>("/api/account/activity");
@@ -205,10 +207,11 @@ export interface AccountMembershipData {
 
 export const getAccountMembership = () => getJSON<AccountMembershipData>("/api/account/membership");
 
-/** Like product checkout: returns a Paymob URL, grants nothing. The membership
- * only becomes active once the webhook confirms payment. */
+/** Joins a self-serve plan. A priced plan returns a Paymob URL and grants
+ * nothing until the webhook confirms payment; a plan that's $0 right now is
+ * activated immediately and `checkoutUrl` is the account page (`paid: true`). */
 export const startMembershipCheckout = (plan: string, billingPeriod: "monthly" | "yearly") =>
-  postJSON<{ checkoutUrl: string; reference: string }>("/api/account/membership/checkout", {
+  postJSON<{ checkoutUrl: string; reference: string; paid?: boolean }>("/api/account/membership/checkout", {
     plan,
     billingPeriod,
   });

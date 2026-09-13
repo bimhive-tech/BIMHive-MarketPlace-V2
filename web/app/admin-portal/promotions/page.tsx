@@ -2,8 +2,18 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
+import { Modal } from "@/components/Modal/Modal";
 import { Pill } from "@/components/Pill/Pill";
+import {
+  AdminCheckbox,
+  AdminCheckGroup,
+  AdminField,
+  AdminFormGrid,
+  AdminInput,
+  AdminSelect,
+} from "@/features/admin/AdminForm/AdminForm";
 import {
   getAdminOptions,
   getAdminProducts,
@@ -78,6 +88,7 @@ export default function AdminPromotionsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog } = useConfirm();
 
   function load() {
     promotionsApi.list().then(setRows).catch(() => setRows([]));
@@ -154,10 +165,20 @@ export default function AdminPromotionsPage() {
     }
   }
 
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this promotion? Prices go back to normal immediately.")) return;
-    await promotionsApi.remove(id);
-    load();
+  async function onDelete(row: AdminPromotion) {
+    const confirmed = await confirm({
+      title: `Delete ${row.name}?`,
+      message: "Prices it discounts go back to normal immediately.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await promotionsApi.remove(row.id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this promotion.");
+    }
   }
 
   function toggleProduct(id: number) {
@@ -185,155 +206,131 @@ export default function AdminPromotionsPage() {
         </button>
       </header>
 
-      {showForm && (
-        <div className={styles.formPanel}>
-          <div className={styles.formGrid}>
-            <input
-              className={styles.searchInput}
-              placeholder="Internal name, e.g. Launch week"
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
-            />
-            <input
-              className={styles.searchInput}
-              placeholder="Badge label, e.g. SPECIAL OFFER"
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        size="lg"
+        title={editingId ? `Edit ${form.name || "promotion"}` : "New promotion"}
+        description="Prices drop while it runs and return to normal on their own when it ends."
+        footer={
+          <>
+            <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
+              Cancel
+            </button>
+            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
+              {saving ? "Saving…" : editingId ? "Save" : "Create"}
+            </button>
+          </>
+        }
+      >
+        <AdminFormGrid>
+          {error && <p className={`${styles.error} ${promo.fullRow}`}>{error}</p>}
+          <AdminField label="Internal name" hint="Only staff see this.">
+            <AdminInput placeholder="e.g. Launch week" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </AdminField>
+          <AdminField label="Badge label" hint="The small tag on discounted prices.">
+            <AdminInput
+              placeholder="e.g. SPECIAL OFFER"
               value={form.badge_label}
               onChange={(e) => set("badge_label", e.target.value)}
             />
-            <input
-              className={`${styles.searchInput} ${promo.wide}`}
-              placeholder="Headline customers read, e.g. This price won't last long..."
+          </AdminField>
+          <AdminField label="Headline" hint="What customers read beside the discount." wide>
+            <AdminInput
+              placeholder="e.g. This price won't last long..."
               value={form.headline}
               onChange={(e) => set("headline", e.target.value)}
             />
+          </AdminField>
 
-            <label className={styles.checkboxRow}>
-              Discount %
-              <input
-                className={styles.searchInput}
-                type="number"
-                min={1}
-                max={90}
-                value={form.discount_percent}
-                onChange={(e) => set("discount_percent", Number(e.target.value))}
-              />
-            </label>
-            <select
-              className={styles.select}
-              value={form.scope}
-              onChange={(e) => set("scope", e.target.value as AdminPromotion["scope"])}
-            >
+          <AdminField label="Discount %" hint="1 to 100. 100 makes what it covers free.">
+            <AdminInput
+              type="number"
+              min={1}
+              max={100}
+              value={form.discount_percent}
+              onChange={(e) => set("discount_percent", Number(e.target.value))}
+            />
+          </AdminField>
+          <AdminField label="Applies to">
+            <AdminSelect value={form.scope} onChange={(e) => set("scope", e.target.value as AdminPromotion["scope"])}>
               {SCOPES.map((scope) => (
                 <option key={scope.value} value={scope.value}>
                   {scope.label}
                 </option>
               ))}
-            </select>
+            </AdminSelect>
+          </AdminField>
 
-            {form.scope === "plan" && (
-              <select className={styles.select} value={form.plan} onChange={(e) => set("plan", e.target.value)}>
+          {form.scope === "plan" && (
+            <AdminField label="Plan" wide>
+              <AdminSelect value={form.plan} onChange={(e) => set("plan", e.target.value)}>
                 <option value="">Pick a plan</option>
                 {options?.membership_plans.map((plan) => (
                   <option key={plan.id} value={plan.id}>
                     {plan.name}
                   </option>
                 ))}
-              </select>
-            )}
+              </AdminSelect>
+            </AdminField>
+          )}
 
-            {form.scope === "category" && (
-              <select
-                className={styles.select}
-                value={form.category}
-                onChange={(e) => set("category", e.target.value)}
-              >
+          {form.scope === "category" && (
+            <AdminField label="Category" hint="Its subcategories are included." wide>
+              <AdminSelect value={form.category} onChange={(e) => set("category", e.target.value)}>
                 <option value="">Pick a category</option>
                 {options?.categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.parent_name ? `— ${c.name}` : c.name}
                   </option>
                 ))}
-              </select>
-            )}
+              </AdminSelect>
+            </AdminField>
+          )}
 
-            {form.scope === "products" && (
-              <div className={promo.wide}>
-                <p className={promo.hint}>Products in this promotion</p>
-                {products.map((product) => (
-                  <label key={product.id} className={styles.checkboxRow}>
-                    <input
-                      type="checkbox"
-                      checked={form.products.includes(product.id)}
-                      onChange={() => toggleProduct(product.id)}
-                    />
-                    {product.name}
-                  </label>
-                ))}
-              </div>
-            )}
-
-            <label className={styles.checkboxRow}>
-              Starts
-              <input
-                className={styles.searchInput}
-                type="datetime-local"
-                value={form.starts_at}
-                onChange={(e) => set("starts_at", e.target.value)}
-              />
-            </label>
-            <label className={styles.checkboxRow}>
-              Ends
-              <input
-                className={styles.searchInput}
-                type="datetime-local"
-                value={form.ends_at}
-                onChange={(e) => set("ends_at", e.target.value)}
-              />
-            </label>
-
-            <input
-              className={styles.searchInput}
-              placeholder="Banner button label (optional)"
-              value={form.cta_label}
-              onChange={(e) => set("cta_label", e.target.value)}
-            />
-            <input
-              className={styles.searchInput}
-              placeholder="Banner button link, e.g. /catalog"
-              value={form.cta_url}
-              onChange={(e) => set("cta_url", e.target.value)}
-            />
-
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={form.is_active}
-                onChange={(e) => set("is_active", e.target.checked)}
-              />
-              Active
-            </label>
-            {form.scope === "plan" && (
-              <label className={styles.checkboxRow}>
-                <input
-                  type="checkbox"
-                  checked={form.show_countdown}
-                  onChange={(e) => set("show_countdown", e.target.checked)}
+          {form.scope === "products" && (
+            <AdminCheckGroup title="Products in this promotion">
+              {products.map((product) => (
+                <AdminCheckbox
+                  key={product.id}
+                  label={product.name}
+                  checked={form.products.includes(product.id)}
+                  onChange={() => toggleProduct(product.id)}
                 />
-                Show in the countdown bar above the nav
-              </label>
-            )}
-          </div>
+              ))}
+            </AdminCheckGroup>
+          )}
 
-          <div className={styles.formActions}>
-            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
-              {editingId ? "Save" : "Create"}
-            </button>
-            <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+          <AdminField label="Starts">
+            <AdminInput type="datetime-local" value={form.starts_at} onChange={(e) => set("starts_at", e.target.value)} />
+          </AdminField>
+          <AdminField label="Ends">
+            <AdminInput type="datetime-local" value={form.ends_at} onChange={(e) => set("ends_at", e.target.value)} />
+          </AdminField>
+
+          <AdminField label="Banner button label" hint="Optional.">
+            <AdminInput value={form.cta_label} onChange={(e) => set("cta_label", e.target.value)} />
+          </AdminField>
+          <AdminField label="Banner button link" hint="e.g. /catalog. Optional.">
+            <AdminInput value={form.cta_url} onChange={(e) => set("cta_url", e.target.value)} />
+          </AdminField>
+
+          <AdminCheckbox
+            label="Active"
+            hint="Switch it off without changing its dates."
+            checked={form.is_active}
+            onChange={(v) => set("is_active", v)}
+          />
+          {form.scope === "plan" && (
+            <AdminCheckbox
+              label="Show in the countdown bar"
+              hint="The strip above the nav. Plan promotions only."
+              checked={form.show_countdown}
+              onChange={(v) => set("show_countdown", v)}
+            />
+          )}
+        </AdminFormGrid>
+      </Modal>
 
       {error && <p className={styles.error}>{error}</p>}
 
@@ -379,7 +376,7 @@ export default function AdminPromotionsPage() {
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       aria-label="Delete"
-                      onClick={() => onDelete(row.id)}
+                      onClick={() => onDelete(row)}
                     >
                       <Icon name="trash" size={16} />
                     </button>
@@ -392,6 +389,8 @@ export default function AdminPromotionsPage() {
         {rows === null && <p className={styles.state}>Loading promotions…</p>}
         {rows?.length === 0 && <p className={styles.state}>No promotions yet.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }

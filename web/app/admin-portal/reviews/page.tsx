@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { deleteAdminReview, getAdminReviews, type AdminReview } from "@/lib/adminApi";
@@ -13,6 +14,7 @@ function formatDate(value: string): string {
 }
 
 export default function AdminReviewsPage() {
+  const { confirm, dialog } = useConfirm();
   const [rows, setRows] = useState<AdminReview[] | null>(null);
 
   useEffect(() => {
@@ -20,7 +22,12 @@ export default function AdminReviewsPage() {
   }, []);
 
   async function onDelete(id: number) {
-    const confirmed = window.confirm("Remove this review? This cannot be undone.");
+    const confirmed = await confirm({
+      title: "Remove this review?",
+      message: "This can't be undone.",
+      confirmLabel: "Remove",
+      danger: true,
+    });
     if (!confirmed) return;
     await deleteAdminReview(id);
     setRows((list) => list?.filter((r) => r.id !== id) ?? null);
@@ -85,6 +92,8 @@ export default function AdminReviewsPage() {
           Showing {rows.length} {rows.length === 1 ? "review" : "reviews"}
         </p>
       )}
+
+      {dialog}
     </div>
   );
 }

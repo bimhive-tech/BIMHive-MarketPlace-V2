@@ -125,7 +125,10 @@ function FreeBuyBox({
 
   return (
     <aside className={styles.box}>
-      <div className={styles.price}>Free</div>
+      <div className={styles.price}>
+        <span className={product.original_price_label ? styles.priceSale : undefined}>Free</span>
+        {product.original_price_label && <s className={styles.priceWas}>{product.original_price_label}</s>}
+      </div>
 
       {ownership ? (
         <OwnedNotice billingPeriod={ownership.billingPeriod} />
@@ -181,6 +184,11 @@ function PaidBuyBox({ product, ownership }: { product: ProductDetail; ownership:
   // recomputes server-side (see lib/pricing.ts).
   const unitPrice = priceForPeriod(product, billingPeriod);
   const wasPrice = listPrice(product, billingPeriod);
+  // A promotion's list price wins; otherwise a one-time product's own
+  // display-only original price (the server already hides it for
+  // subscriptions and when it isn't actually higher).
+  const wasLabel =
+    wasPrice !== null ? formatPrice(wasPrice, product.currency) : product.original_price_label;
   const cartItem = items.find((i) => i.productId === product.id && (i.billingPeriod ?? "") === billingPeriod);
 
   function handleAddToCart() {
@@ -218,15 +226,13 @@ function PaidBuyBox({ product, ownership }: { product: ProductDetail; ownership:
       )}
 
       <div className={styles.price}>
-        <span className={product.promotion ? styles.priceSale : undefined}>
+        <span className={wasLabel ? styles.priceSale : undefined}>
           {formatPrice(unitPrice, product.currency)}
         </span>
         {product.is_subscription && (
           <span className={styles.priceInterval}>/{billingInterval === "yearly" ? "yr" : "mo"}</span>
         )}
-        {wasPrice !== null && (
-          <s className={styles.priceWas}>{formatPrice(wasPrice, product.currency)}</s>
-        )}
+        {wasLabel && <s className={styles.priceWas}>{wasLabel}</s>}
       </div>
       {!ownership && product.promotion && (
         <p className={styles.promoNote}>

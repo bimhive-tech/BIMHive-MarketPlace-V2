@@ -254,8 +254,12 @@ class ProductPurchase(models.Model):
     def save(self, *args, **kwargs):
         if not self.license_key:
             self.license_key = generate_license_key()
-        if not self.amount:
-            self.amount = self.product.price
+        # No fallback from a $0 amount to the product's list price. There used
+        # to be one, and `not Decimal("0.00")` is True, so it re-priced every
+        # legitimately free row at full price on each save: a 100%-discounted
+        # order recorded (and sent to Paymob) at list price, and membership-
+        # minted grants inflating revenue despite being created at $0. Every
+        # creation site passes the amount it means; the field default is $0.
         if not self.currency:
             self.currency = self.product.currency
         if self.payment_status == self.PaymentStatus.PAID and self.paid_at is None:

@@ -201,6 +201,25 @@ an Admin can then deliberately demote specific accounts to Staff-with-limited-pe
 `AdminUserUpdateSerializer` refuses to demote the last remaining Admin, so there's no way to
 accidentally lock everyone out of Users/Roles/Settings.
 
+## Partner review: live edits, re-applying, and being told the outcome
+
+- **Editing a live product sends it back for review.** When an approved partner changes anything a
+  customer reads or downloads on a published product (details, prices, media, docs, tags, product
+  files, plugin builds or their resources), it returns to **Pending Review** and is hidden from the
+  store until staff approve it again (`catalog.admin_api.send_live_edit_back_for_review`). The
+  product save compares a before/after `review_fingerprint` rather than assuming, because the form
+  resends every field on every save: an unchanged save stays live, and re-signed media URLs
+  (whose signature changes on every read) don't count as a change. Staff edits never trigger it.
+  The partner product form warns about this whenever the product was live when opened.
+- **A rejected seller can re-apply.** The rejection screen and the profile page have **Resubmit
+  application**, which puts it back in the Partners → Pending Review tab and clears the old note.
+  Before this a rejection was permanent.
+- **Outcomes reach the seller in-app.** There's no email system, so application and product
+  approvals/rejections (with staff's rejection note) and live edits sent back for review appear in
+  the seller's **Notifications** page. They're logged with `metadata.partner_id`, which is how
+  `activity.account_api` includes them for that partner's user even though staff performed them.
+- Still one login per partner company; inviting teammates isn't built.
+
 ## Admin editing: one modal, one field kit, and a real storefront preview
 
 Admin editors open in a shared **`Modal`** (`web/components/Modal/Modal.tsx`) rather than an inline
@@ -208,9 +227,16 @@ panel that pushes the page around. It portals to `<body>` at `--z-modal`, traps 
 Escape or a backdrop click, locks background scroll, restores focus to whatever opened it, and
 becomes a bottom sheet under 560px. Fields inside come from
 `web/features/admin/AdminForm/AdminForm.tsx` (`AdminFormGrid` / `AdminField` / `AdminInput` /
-`AdminTextarea` / `AdminCheckbox`) so every admin form labels and spaces its
-controls the same way. Membership Plans uses both today; the other admin editors follow the same
-shape and can move over one at a time.
+`AdminSelect` / `AdminTextarea` / `AdminCheckbox` / `AdminCheckGroup`) so every admin form labels
+and spaces its controls the same way. Every create/edit editor uses both: Membership Plans,
+Categories, Collections, Partners, Promotions, Roles & Permissions and License Codes.
+
+**No browser dialogs anywhere.** `window.confirm()` and `window.prompt()` are replaced app-wide by
+two hooks built on the same `Modal`: `useConfirm()` (`web/components/ConfirmDialog/`), used as
+`if (!(await confirm({ title, message, danger: true }))) return;` with a red `danger` button for
+anything irreversible, and `useNumberPrompt()` (`web/components/PromptDialog/`), which validates a
+whole number before resolving (license "Extend" days, order "Set seats"). Both return a `dialog`
+element the page renders once. Closing either any other way counts as "no".
 
 **Deleting a membership plan** now fails honestly instead of 500ing. `Membership.plan` is
 `on_delete=PROTECT`, so a tier anyone has ever been on cannot be deleted at all — the API returns a
@@ -748,9 +774,42 @@ every product that plan covers — the new `membership` app.
   normal order — the universal key stops opening anything immediately, with no per-product cleanup
   step. Reinstating (staff, or a real Paymob payment via the same webhook `CheckoutView` uses) does
   the reverse and re-opens everything the plan currently covers.
-- Buy-box cross-sell (`MembershipCallout.tsx`) shows "Or get it with {plan} from $X/mo" on any
+- Buy-box cross-sell (`MembershipCallout.tsx`) shows "Or get it with {plan} from $X/mo" (or "free to
+  join for now" when the plan costs $0) on any
   covered product's page, or "Included in your plan — activate with your universal key" if the
   viewer's own membership already covers it.
+
+## Pricing: four tiers, free for now, real prices struck through
+
+The nav's **Pricing** link (was "All-Access") opens `/membership`, which now shows four tiers built on
+the same membership system: **Free** (rank 0), **Pro** (1), **Teams** (2), **Enterprise** (3). Ranks
+are cumulative, so every plugin assigned to Pro is also in Teams and Enterprise.
+
+- **How a plan is joined** is `MembershipPlan.enrollment`, set in the plan popup as *How people join*:
+  `self_serve` (Pro, Teams: checkout), `request` (Enterprise: a **Contact us** form that opens a
+  support ticket titled "Enterprise plan request", answered from the support inbox; there's no
+  checkout and no price) and `included` (Free: everyone has it, the button just browses or signs up).
+  Only a `self_serve` plan needs a price.
+- **Free for now.** Pro and Teams are priced at `0`. `MembershipCheckoutView` activates a $0 plan on
+  the spot (no Paymob, which can't take a zero amount) for a normal 30/365-day period; when that ends
+  the member joins again, which means paying once the plan has a real price. Product checkout does
+  the same for a $0 cart via `licensing.services.confirm_purchases_paid`, the one function the Paymob
+  webhook also uses, so a 100%-off order is completed rather than sent to Paymob.
+- **Struck-through prices are display-only.** `Product.original_price` and
+  `MembershipPlan.original_monthly_price`/`original_yearly_price` are never charged. They render
+  crossed out beside the real price (`~~$29.00~~ Free`) on cards, the buy box and the pricing page, via
+  `Product.original_price_label`, which hides it when it isn't higher than the price or the product is
+  a subscription. During a promotion the list price is struck through instead.
+- **What's included** (`MembershipPlan.features`, one line per item) is the card's checklist, after
+  the facts the server computes (plugin count, universal key, machines per plugin), so the typed
+  list can't contradict real numbers.
+- **The discount cap is 100%** (`MAX_DISCOUNT_PERCENT`).
+- `ProductPurchase.save()` no longer re-prices a $0.00 amount at the product's list price. That
+  fallback treated `Decimal("0.00")` as "unset", so a fully discounted order was recorded (and would
+  have been charged) at full price, and membership-minted grants inflated revenue.
+
+To start charging later: edit a plan's monthly/yearly price (and clear or keep the original price),
+and edit each product's price in its form. Nothing else changes.
 
 ## API endpoints
 
@@ -774,7 +833,8 @@ every product that plan covers — the new `membership` app.
   reinstate}` (see "All-Access membership" above). A product's `product_code` auto-syncs to its
   licensing SKU on save (see `catalog/signals.py`) — creating/editing/publishing a product is
   immediately reflected in what the activation API will authorize.
-- Partner self-service (auth-gated): `POST /api/partner/apply` (become a seller — company name +
+- Partner self-service (auth-gated): `POST /api/partner/application/resubmit` (a rejected
+  application goes back to Pending Review, old note cleared), `POST /api/partner/apply` (become a seller — company name +
   optional logo, creates a pending `Partner`), `GET|PATCH /api/partner/profile` (reachable at any
   application status), `GET /api/partner/sales` (approved partners only — own orders/revenue, no
   customer PII). Product/file/media CRUD is shared with staff via the `/api/admin/products*` routes

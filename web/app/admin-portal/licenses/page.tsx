@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
+import { useNumberPrompt } from "@/components/PromptDialog/useNumberPrompt";
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import { LicenseCodesPanel } from "@/features/admin/LicenseCodesPanel/LicenseCodesPanel";
@@ -35,6 +37,8 @@ function formatDate(value: string): string {
 }
 
 export default function AdminLicensesPage() {
+  const { confirm, dialog } = useConfirm();
+  const { prompt, dialog: promptDialog } = useNumberPrompt();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("activations");
   const [rows, setRows] = useState<AdminLicense[] | null>(null);
   const [search, setSearch] = useState("");
@@ -73,11 +77,18 @@ export default function AdminLicensesPage() {
   }
 
   async function onExtend(id: string) {
-    const days = window.prompt("Extend how many days?", "30");
-    if (!days) return;
+    const days = await prompt({
+      title: "Extend this license",
+      message: "Adds days on top of its current expiry.",
+      label: "Days to add",
+      initialValue: 30,
+      min: 1,
+      confirmLabel: "Extend",
+    });
+    if (days === null) return;
     setBusyId(id);
     try {
-      const updated = await extendLicense(id, Number(days));
+      const updated = await extendLicense(id, days);
       setRows((list) => list?.map((r) => (r.id === id ? updated : r)) ?? null);
     } finally {
       setBusyId(null);
@@ -85,9 +96,13 @@ export default function AdminLicensesPage() {
   }
 
   async function onRelease(id: string) {
-    const confirmed = window.confirm(
-      "This frees the seat so a different machine can activate it — the customer's own device won't be able to reactivate afterward. Continue?",
-    );
+    const confirmed = await confirm({
+      title: "Release this seat?",
+      message:
+        "A different machine can then activate it, and the customer's current device won't be able to reactivate.",
+      confirmLabel: "Release seat",
+      danger: true,
+    });
     if (!confirmed) return;
     setBusyId(id);
     try {
@@ -231,6 +246,9 @@ export default function AdminLicensesPage() {
           )}
         </>
       )}
+
+      {dialog}
+      {promptDialog}
     </div>
   );
 }

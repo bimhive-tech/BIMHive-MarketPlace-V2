@@ -16,10 +16,10 @@
   }
 }
 
-@media (min-width: 1024px) {
+/* Four tiers side by side once there's room for them to breathe; below that
+   they pair up rather than squeezing into narrow columns. */
+@media (min-width: 1200px) {
   .grid {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    max-width: 900px;
-    margin-inline: auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

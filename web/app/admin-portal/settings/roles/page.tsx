@@ -2,8 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
+import { Modal } from "@/components/Modal/Modal";
 import { Pill } from "@/components/Pill/Pill";
+import {
+  AdminCheckbox,
+  AdminCheckGroup,
+  AdminField,
+  AdminFormGrid,
+  AdminInput,
+} from "@/features/admin/AdminForm/AdminForm";
 import { ADMIN_PERMISSIONS, rolesApi, type AdminRole } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
@@ -18,6 +27,7 @@ export default function AdminRolesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog } = useConfirm();
 
   // Grouped once, not per render — ADMIN_PERMISSIONS is a fixed constant.
   const groups = useMemo(() => {
@@ -78,10 +88,20 @@ export default function AdminRolesPage() {
     }
   }
 
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this role? Users with it keep their account but lose the role.")) return;
-    await rolesApi.remove(id);
-    load();
+  async function onDelete(row: AdminRole) {
+    const confirmed = await confirm({
+      title: `Delete the ${row.name} role?`,
+      message: "Users with it keep their account but lose the role.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await rolesApi.remove(row.id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this role.");
+    }
   }
 
   return (
@@ -100,66 +120,60 @@ export default function AdminRolesPage() {
         </button>
       </header>
 
-      {showForm && (
-        <div className={styles.formPanel}>
-          <div className={styles.formGrid}>
-            <input
-              className={styles.searchInput}
-              placeholder="Role name, e.g. Support Agent"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <input
-              className={styles.searchInput}
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            />
-          </div>
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={form.grants_staff_access}
-              onChange={(e) => setForm((f) => ({ ...f, grants_staff_access: e.target.checked }))}
-            />
-            Grants admin portal access (this role makes a user Staff)
-          </label>
-
-          {form.grants_staff_access && (
-            <div>
-              <p className={styles.loginPanelTitle}>Permissions</p>
-              {groups.map(([group, perms]) => (
-                <div key={group} style={{ marginTop: "var(--space-3)" }}>
-                  <p className={styles.muted} style={{ marginBottom: "var(--space-2)" }}>
-                    {group}
-                  </p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)" }}>
-                    {perms.map((perm) => (
-                      <label key={perm.key} className={styles.checkboxRow}>
-                        <input
-                          type="checkbox"
-                          checked={form.permissions.includes(perm.key)}
-                          onChange={() => togglePermission(perm.key)}
-                        />
-                        {perm.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className={styles.formActions}>
-            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
-              {editingId ? "Save" : "Create"}
-            </button>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        size="lg"
+        title={editingId ? `Edit ${form.name || "role"}` : "New role"}
+        description="Users, Roles & Permissions and Settings are Admin-only and never appear here."
+        footer={
+          <>
             <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
               Cancel
             </button>
-          </div>
-        </div>
-      )}
+            <button className={styles.primaryBtn} disabled={saving || !form.name.trim()} onClick={onSave}>
+              {saving ? "Saving…" : editingId ? "Save" : "Create"}
+            </button>
+          </>
+        }
+      >
+        <AdminFormGrid>
+          <AdminField label="Role name">
+            <AdminInput
+              placeholder="e.g. Support Agent"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </AdminField>
+          <AdminField label="Description" hint="Optional.">
+            <AdminInput
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </AdminField>
+          <AdminCheckbox
+            wide
+            label="Grants admin portal access"
+            hint="This role makes a user Staff. Pick what they can reach below."
+            checked={form.grants_staff_access}
+            onChange={(v) => setForm((f) => ({ ...f, grants_staff_access: v }))}
+          />
+
+          {form.grants_staff_access &&
+            groups.map(([group, perms]) => (
+              <AdminCheckGroup key={group} title={group}>
+                {perms.map((perm) => (
+                  <AdminCheckbox
+                    key={perm.key}
+                    label={perm.label}
+                    checked={form.permissions.includes(perm.key)}
+                    onChange={() => togglePermission(perm.key)}
+                  />
+                ))}
+              </AdminCheckGroup>
+            ))}
+        </AdminFormGrid>
+      </Modal>
 
       {error && <p className={styles.error}>{error}</p>}
 
@@ -199,7 +213,7 @@ export default function AdminRolesPage() {
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       aria-label="Delete"
-                      onClick={() => onDelete(row.id)}
+                      onClick={() => onDelete(row)}
                     >
                       <Icon name="trash" size={16} />
                     </button>
@@ -212,6 +226,8 @@ export default function AdminRolesPage() {
         {rows === null && <p className={styles.state}>Loading roles…</p>}
         {rows?.length === 0 && <p className={styles.state}>No roles yet.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }

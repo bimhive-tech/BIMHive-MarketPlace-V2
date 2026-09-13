@@ -53,3 +53,10 @@
   font-size: var(--fs-xs);
   color: var(--color-muted);
 }
+
+/* Staff's reason under a rejection — the one row type that carries a message. */
+.note {
+  font-size: var(--fs-sm);
+  color: var(--ink-700);
+  line-height: var(--lh-normal);
+}

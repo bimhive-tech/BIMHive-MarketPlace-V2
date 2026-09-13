@@ -1,6 +1,6 @@
 "use client";
 
-import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 import styles from "./AdminForm.module.css";
 
@@ -38,6 +38,10 @@ export function AdminInput({ className = "", ...rest }: InputHTMLAttributes<HTML
   return <input {...rest} className={`${styles.control} ${className}`} />;
 }
 
+export function AdminSelect({ className = "", ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...rest} className={`${styles.control} ${className}`} />;
+}
+
 export function AdminTextarea({ className = "", rows = 3, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...rest} rows={rows} className={`${styles.control} ${styles.textarea} ${className}`} />;
 }
@@ -59,5 +63,15 @@ export function AdminCheckbox({ label, checked, onChange, hint, wide }: AdminChe
         {hint && <span className={styles.hint}>{hint}</span>}
       </span>
     </label>
+  );
+}
+
+/** A titled, full-width set of checkboxes (e.g. one permission group). */
+export function AdminCheckGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <fieldset className={`${styles.checkGroup} ${styles.wide}`}>
+      <legend className={styles.label}>{title}</legend>
+      <div className={styles.checkGrid}>{children}</div>
+    </fieldset>
   );
 }

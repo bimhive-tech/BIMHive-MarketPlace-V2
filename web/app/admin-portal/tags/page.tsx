@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
 import { tagsApi, type AdminTag } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
 
 export default function AdminTagsPage() {
+  const { confirm, dialog } = useConfirm();
   const [rows, setRows] = useState<AdminTag[] | null>(null);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -31,7 +33,13 @@ export default function AdminTagsPage() {
   }
 
   async function onDelete(id: number) {
-    if (!window.confirm("Delete this tag? It will be removed from all products.")) return;
+    const confirmed = await confirm({
+      title: "Delete this tag?",
+      message: "It's removed from every product that has it.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     await tagsApi.remove(id);
     load();
   }
@@ -91,6 +99,8 @@ export default function AdminTagsPage() {
         {rows === null && <p className={styles.state}>Loading tags…</p>}
         {rows?.length === 0 && <p className={styles.state}>No tags yet.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }

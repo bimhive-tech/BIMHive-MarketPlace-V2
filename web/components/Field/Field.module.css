@@ -34,6 +34,13 @@
   border-color: var(--error-fg);
 }
 
+.textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: var(--lh-normal);
+  font-family: inherit;
+}
+
 .hint {
   font-size: var(--fs-xs);
   color: var(--color-muted);

@@ -1,11 +1,16 @@
 """
 Customer-facing "Notifications" feed (/account/notifications) — a real activity
 feed backed by the same ActivityLog every admin/staff action already writes to
-(see activity/services.py::log_activity), scoped to the caller's own actions.
-There's no separate notification system (no email digests, no cross-user "staff
-did X to your order" events yet) — this is honestly just "your recent account
-activity," which is what's actually buildable from data that exists today.
+(see activity/services.py::log_activity).
+
+Two kinds of row: the caller's own account activity, and — for a seller — the
+review outcomes staff record about their partner company (application or
+product approved/rejected, a live product sent back for review). Those rows
+are actored by the staff member, so they're matched on `metadata.partner_id`
+rather than `actor`; that tag is written wherever the outcome is logged (see
+catalog.admin_api). There's still no email: this is the in-app channel.
 """
+from django.db.models import Q
 from rest_framework import generics, serializers
 from rest_framework.permissions import IsAuthenticated
 
@@ -30,10 +35,27 @@ CUSTOMER_VERBS = [
 ]
 
 
+# Review outcomes a seller is told about. Matched on the partner they concern,
+# never on who performed them.
+PARTNER_OUTCOME_VERBS = [
+    ActivityVerb.PARTNER_APPROVED,
+    ActivityVerb.PARTNER_REJECTED,
+    ActivityVerb.PRODUCT_APPROVED,
+    ActivityVerb.PRODUCT_REJECTED,
+    ActivityVerb.PRODUCT_SUBMITTED_FOR_REVIEW,
+]
+
+
 class AccountActivitySerializer(serializers.ModelSerializer):
+    # Staff's reason on a rejection, so the seller reads it where they're told.
+    note = serializers.SerializerMethodField()
+
     class Meta:
         model = ActivityLog
-        fields = ["id", "verb", "target_label", "created_at"]
+        fields = ["id", "verb", "target_label", "note", "created_at"]
+
+    def get_note(self, obj):
+        return (obj.metadata or {}).get("note", "")
 
 
 class AccountActivityListView(generics.ListAPIView):
@@ -41,4 +63,8 @@ class AccountActivityListView(generics.ListAPIView):
     serializer_class = AccountActivitySerializer
 
     def get_queryset(self):
-        return ActivityLog.objects.filter(actor=self.request.user, verb__in=CUSTOMER_VERBS)[:MAX_ROWS]
+        user = self.request.user
+        visible = Q(actor=user, verb__in=CUSTOMER_VERBS)
+        if user.partner_id:
+            visible |= Q(verb__in=PARTNER_OUTCOME_VERBS, metadata__partner_id=user.partner_id)
+        return ActivityLog.objects.filter(visible)[:MAX_ROWS]

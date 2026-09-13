@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import styles from "./Button.module.css";
 
-type Variant = "primary" | "secondary" | "text";
+type Variant = "primary" | "secondary" | "text" | "danger";
 type Size = "md" | "lg";
 
 interface BaseProps {

@@ -133,6 +133,10 @@ export interface ProductMembership {
   included_in_my_plan: boolean;
 }
 
+/** How a customer gets onto a plan (MembershipPlan.Enrollment): joined online,
+ * requested through a "Contact us" form, or held by everyone without signing up. */
+export type PlanEnrollment = "self_serve" | "request" | "included";
+
 /** A purchasable All-Access tier (`/api/membership/plans`). */
 export interface MembershipPlan {
   id: number;
@@ -141,8 +145,14 @@ export interface MembershipPlan {
   rank: number;
   tagline: string;
   description: string;
+  /** What the plan includes, one entry per checklist line. */
+  features: string[];
+  enrollment: PlanEnrollment;
   monthly_price: string | null;
   yearly_price: string | null;
+  /** Display-only, struck through beside the real price. Never charged. */
+  original_monthly_price: string | null;
+  original_yearly_price: string | null;
   currency: string;
   yearly_savings_percent: number | null;
   seats_per_product: number;
@@ -179,6 +189,9 @@ export interface ProductCard {
   cover_image_url: string;
   price: string;
   price_label: string;
+  /** Display-only "was" price, struck through beside `price_label` (e.g.
+   * "~~$29.00~~ Free"). Null when there's nothing honest to cross out. */
+  original_price_label: string | null;
   monthly_price: string | null;
   yearly_price: string | null;
   is_subscription: boolean;

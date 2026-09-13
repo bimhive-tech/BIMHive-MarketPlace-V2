@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import HasAdminPermission
-from catalog.admin_api import _effective_partner_id
+from catalog.admin_api import _effective_partner_id, send_live_edit_back_for_review
 from catalog.models import Product
 from catalog.models.product import ProductType
 from catalog.permissions import IsApprovedPartner
@@ -98,6 +98,7 @@ class PluginBuildListCreateView(generics.ListCreateAPIView):
         if PluginBuild.objects.filter(product=product, revit_year=revit_year).exists():
             raise ValidationError({"revit_year": "A build for this Revit year already exists."})
         serializer.save(product=product, revit_year=revit_year)
+        send_live_edit_back_for_review(product, self.request, "plugin build")
 
 
 class PluginBuildDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -110,6 +111,15 @@ class PluginBuildDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return _build_queryset(self.request)
+
+    def perform_update(self, serializer):
+        build = serializer.save()
+        send_live_edit_back_for_review(build.product, self.request, "plugin build")
+
+    def perform_destroy(self, instance):
+        product = instance.product
+        super().perform_destroy(instance)
+        send_live_edit_back_for_review(product, self.request, "plugin build")
 
 
 class PluginBuildDllUploadView(APIView):
@@ -128,6 +138,7 @@ class PluginBuildDllUploadView(APIView):
         build.dll_storage_key = key
         build.dll_filename = uploaded.name
         build.save(update_fields=["dll_storage_key", "dll_filename", "updated_at"])
+        send_live_edit_back_for_review(build.product, request, "plugin build")
         return Response(PluginBuildSerializer(build).data)
 
 
@@ -149,6 +160,7 @@ class PluginBuildAddinUploadView(APIView):
         build.addin_storage_key = key
         build.addin_filename = uploaded.name
         build.save(update_fields=["addin_storage_key", "addin_filename", "updated_at"])
+        send_live_edit_back_for_review(build.product, request, "plugin build")
         return Response(PluginBuildSerializer(build).data)
 
 
@@ -188,6 +200,7 @@ class PluginResourceListCreateView(APIView):
             sort_order=build.resource_files.count(),
         )
         _resync_scope(build)
+        send_live_edit_back_for_review(build.product, request, "plugin build")
         return Response(PluginResourceFileSerializer(resource).data, status=201)
 
 
@@ -202,6 +215,7 @@ class PluginResourceDetailView(APIView):
             default_storage.delete(resource.storage_key)
         resource.delete()
         _resync_scope(build)
+        send_live_edit_back_for_review(build.product, request, "plugin build")
         return Response(status=204)
 
 

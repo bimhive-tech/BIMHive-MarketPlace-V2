@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useNumberPrompt } from "@/components/PromptDialog/useNumberPrompt";
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import { formatPrice } from "@/config/site";
@@ -32,6 +33,7 @@ function formatDate(value: string | null): string {
 }
 
 export default function AdminOrdersPage() {
+  const { prompt, dialog } = useNumberPrompt();
   const [tab, setTab] = useState("all");
   const [rows, setRows] = useState<AdminOrder[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -52,11 +54,17 @@ export default function AdminOrdersPage() {
   }
 
   async function onSetSeats(id: string, currentSeats: number) {
-    const seats = window.prompt("How many machines may this license activate at once?", String(currentSeats));
-    if (!seats) return;
+    const seats = await prompt({
+      title: "Set machine seats",
+      message: "How many machines this license may activate at the same time.",
+      label: "Seats",
+      initialValue: currentSeats,
+      min: 1,
+    });
+    if (seats === null) return;
     setBusyId(id);
     try {
-      const updated = await setOrderSeats(id, Number(seats));
+      const updated = await setOrderSeats(id, seats);
       setRows((list) => list?.map((r) => (r.id === id ? updated : r)) ?? null);
     } finally {
       setBusyId(null);
@@ -164,6 +172,8 @@ export default function AdminOrdersPage() {
           Showing {rows.length} {rows.length === 1 ? "order" : "orders"}
         </p>
       )}
+
+      {dialog}
     </div>
   );
 }

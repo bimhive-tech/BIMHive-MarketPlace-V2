@@ -8,7 +8,8 @@ import { getAccountActivity, type AccountActivityEntry } from "@/lib/accountApi"
 
 import styles from "./NotificationsFeed.module.css";
 
-// Mirrors activity.account_api.CUSTOMER_VERBS on the backend — keep in sync.
+// Mirrors activity.account_api.CUSTOMER_VERBS + PARTNER_OUTCOME_VERBS on the
+// backend — keep in sync.
 const VERB_ICON: Record<string, IconName> = {
   signed_in: "lock",
   signed_up: "users",
@@ -18,6 +19,11 @@ const VERB_ICON: Record<string, IconName> = {
   downloaded_file: "download",
   posted_review: "star",
   redeemed_license_code: "library",
+  partner_approved: "check-circle",
+  partner_rejected: "x",
+  product_approved: "check-circle",
+  product_rejected: "x",
+  product_submitted_for_review: "shield",
 };
 
 function describe(entry: AccountActivityEntry): string {
@@ -39,6 +45,18 @@ function describe(entry: AccountActivityEntry): string {
       return target ? `You posted a review for ${target}` : "You posted a review";
     case "redeemed_license_code":
       return target ? `You redeemed a license code for ${target}` : "You redeemed a license code";
+    // Review outcomes staff recorded about your seller account — phrased from
+    // your side, since staff did them rather than you.
+    case "partner_approved":
+      return "Your seller application was approved";
+    case "partner_rejected":
+      return "Your seller application was rejected";
+    case "product_approved":
+      return `${target || "Your product"} was approved and is live`;
+    case "product_rejected":
+      return `${target || "Your product"} needs changes before it can go live`;
+    case "product_submitted_for_review":
+      return `${target || "Your product"} is waiting for review`;
     default:
       return target || entry.verb;
   }
@@ -80,6 +98,7 @@ export function NotificationsFeed() {
           </span>
           <div className={styles.info}>
             <span className={styles.message}>{describe(entry)}</span>
+            {entry.note && <span className={styles.note}>{entry.note}</span>}
             <span className={styles.time}>{formatDateTime(entry.created_at)}</span>
           </div>
         </div>

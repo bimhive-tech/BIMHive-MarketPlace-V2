@@ -3,6 +3,7 @@ All-Access membership: tiered coverage, the universal key at
 /api/license/activate, and revocation pulling every granted license with it.
 """
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -395,3 +396,89 @@ def test_a_retired_plan_keeps_its_existing_members(staff_client, plans, user):
     assert resp.status_code == 200
     membership.refresh_from_db()
     assert membership.status == Membership.Status.ACTIVE
+
+
+# ── Tiers that are free for now, by request, or included for everyone ──
+def _join(client, plan, period="yearly"):
+    return client.post(
+        "/api/account/membership/checkout",
+        {"plan": plan.slug, "billingPeriod": period},
+        content_type="application/json",
+    )
+
+
+def test_joining_a_free_plan_activates_it_without_paymob(client, category, user):
+    free_pro = MembershipPlan.objects.create(
+        name="Pro", rank=1, monthly_price="0.00", yearly_price="0.00",
+        original_monthly_price="29.00", original_yearly_price="290.00",
+    )
+    product = make_product("Pro Tool", category, free_pro)
+    client.force_login(user)
+
+    with patch("membership.api.paymob.create_intention") as intention:
+        resp = _join(client, free_pro)
+
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["paid"] is True
+    assert resp.json()["checkoutUrl"] == "/account/membership"
+    intention.assert_not_called()
+    membership = Membership.objects.get(user=user)
+    assert membership.status == Membership.Status.ACTIVE
+    assert membership.expires_at is not None, "a free join still runs a normal billing period"
+    assert has_entitlement(user, product)
+
+
+def test_a_by_request_plan_cant_be_joined_through_checkout(client, user):
+    enterprise = MembershipPlan.objects.create(
+        name="Enterprise", rank=3, enrollment=MembershipPlan.Enrollment.REQUEST
+    )
+    client.force_login(user)
+
+    resp = _join(client, enterprise)
+
+    assert resp.status_code == 400
+    assert not Membership.objects.filter(user=user).exists()
+
+
+def test_the_everyone_has_it_plan_cant_be_joined_through_checkout(client, user):
+    free = MembershipPlan.objects.create(
+        name="Free", rank=0, monthly_price="0.00", enrollment=MembershipPlan.Enrollment.INCLUDED
+    )
+    client.force_login(user)
+
+    assert _join(client, free, "monthly").status_code == 400
+
+
+def test_the_pricing_page_gets_features_enrollment_and_original_prices(client):
+    MembershipPlan.objects.create(
+        name="Teams", rank=2, monthly_price="0.00", yearly_price="0.00",
+        original_monthly_price="79.00", original_yearly_price="790.00",
+        features="All plugins\n\n  Priority support  \n",
+    )
+
+    plan = client.get("/api/membership/plans").json()["plans"][0]
+
+    assert plan["features"] == ["All plugins", "Priority support"], "blank lines and padding are dropped"
+    assert plan["enrollment"] == "self_serve"
+    assert plan["original_monthly_price"] == "79.00"
+    assert plan["original_yearly_price"] == "790.00"
+
+
+def test_admin_can_create_a_by_request_plan_with_no_price(staff_client):
+    resp = staff_client.post(
+        "/api/admin/membership-plans",
+        {"name": "Enterprise", "rank": 3, "enrollment": "request"},
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 201, resp.json()
+
+
+def test_admin_can_make_an_online_plan_free_with_a_zero_price(staff_client):
+    resp = staff_client.post(
+        "/api/admin/membership-plans",
+        {"name": "Pro", "rank": 1, "monthly_price": "0.00", "original_monthly_price": "29.00"},
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 201, resp.json()

@@ -22,6 +22,7 @@ from licensing import paymob
 from licensing.models import LicensedProduct, MachineLicense, ProductPurchase
 from licensing.services import (
     LicenseCodeError,
+    confirm_purchases_paid,
     expires_at_for,
     redeem_license_code,
     restore_purchase_access,
@@ -735,6 +736,28 @@ class CheckoutView(APIView):
                     )
 
         total_cents = sum(int(p.amount * 100) for p in purchases)
+        if total_cents == 0:
+            # A fully discounted cart (a 100% promotion). Paymob can't take a
+            # zero-amount intention, and there's nothing to verify anyway, so
+            # the order completes here. The response keeps the same shape, with
+            # checkoutUrl pointing straight at the confirmation page: the
+            # client's existing redirect then just works.
+            confirm_purchases_paid(purchases)
+            log_activity(
+                request.user,
+                ActivityVerb.ORDER_PLACED,
+                target_label=", ".join(p.product.name for p in purchases),
+                metadata={"item_count": len(purchases), "processor": "free", "reference": order_reference},
+            )
+            return Response(
+                {
+                    "checkoutUrl": f"/checkout/confirmation?reference={order_reference}",
+                    "reference": order_reference,
+                    "paid": True,
+                },
+                status=201,
+            )
+
         items = [
             {
                 "name": p.product.name[:100],
@@ -852,15 +875,7 @@ class PaymobWebhookView(APIView):
             logger.warning("Paymob webhook: no PENDING purchases found for reference %s", reference)
             return Response({"ok": True})
 
-        now = timezone.now()
-        for purchase in purchases:
-            if purchase.payment_status == ProductPurchase.PaymentStatus.PAID:
-                continue  # already processed — webhooks can be delivered more than once
-            purchase.payment_status = ProductPurchase.PaymentStatus.PAID
-            purchase.expires_at = _expires_at_for(purchase.billing_period, now)
-            purchase.card_brand = card_brand
-            purchase.card_last4 = card_last4
-            purchase.save()
+        confirm_purchases_paid(purchases, card_brand=card_brand, card_last4=card_last4)
 
         user = purchases[0].user
         log_activity(

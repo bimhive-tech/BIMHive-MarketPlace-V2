@@ -30,7 +30,7 @@ export const SITE = {
 /** Plain (non-dropdown) top-nav links — Solutions/Resources are mega menus, handled directly in Header.tsx. */
 export const NAV_LINKS = [
   { label: "Categories", href: "/catalog" },
-  { label: "All-Access", href: "/membership" },
+  { label: "Pricing", href: "/membership" },
 ] as const;
 
 /** The three reasons to subscribe, on /membership. */

@@ -38,17 +38,33 @@ class MembershipPlan(models.Model):
     plan includes every product whose own plan ranks at or below it, so adding a
     higher tier later never removes anything from an existing one."""
 
+    class Enrollment(models.TextChoices):
+        """How a customer gets onto the plan — which decides the pricing card's
+        button, and whether checkout will accept it at all."""
+
+        SELF_SERVE = "self_serve", "Join online"
+        REQUEST = "request", "By request (Contact us)"
+        INCLUDED = "included", "Included for everyone (no sign-up)"
+
     name = models.CharField(max_length=80, unique=True)
     slug = models.SlugField(max_length=100, unique=True, blank=True)
     rank = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Higher tiers include everything the lower ones do. Standard=1, Pro=2, ...",
+        help_text="Higher tiers include everything the lower ones do. Free=0, Pro=1, Teams=2, ...",
     )
     tagline = models.CharField(max_length=180, blank=True)
     description = models.TextField(blank=True)
+    features = models.TextField(
+        blank=True, help_text="What the plan includes, one item per line. Shown as the card's checklist."
+    )
+    enrollment = models.CharField(max_length=20, choices=Enrollment.choices, default=Enrollment.SELF_SERVE)
 
     monthly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     yearly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # Display-only, struck through beside the real price — same idea as
+    # catalog.Product.original_price. Never charged.
+    original_monthly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    original_yearly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=8, default="USD")
 
     # How many machines a member may run any ONE covered product on. Copied onto
@@ -87,6 +103,10 @@ class MembershipPlan(models.Model):
         if self.yearly_price >= twelve_months:
             return None
         return round((twelve_months - self.yearly_price) / twelve_months * 100)
+
+    @property
+    def feature_list(self):
+        return [line.strip() for line in self.features.splitlines() if line.strip()]
 
     def covers_plan(self, other):
         """Whether a membership on this plan includes products assigned to

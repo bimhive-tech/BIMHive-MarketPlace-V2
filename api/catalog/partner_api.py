@@ -11,6 +11,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from activity.models import ActivityVerb
+from activity.services import log_activity
 from catalog.models import Partner
 from catalog.permissions import IsApprovedPartner, IsPartnerUser
 from catalog.storage import refresh_storage_url
@@ -119,6 +121,33 @@ class BecomeSellerView(APIView):
         request.user.save(update_fields=["partner"])
 
         return Response(PartnerProfileSerializer(partner).data, status=201)
+
+
+class PartnerApplicationResubmitView(APIView):
+    """Puts a rejected seller application back in the review queue.
+
+    Without it a rejection was permanent: BecomeSellerView refuses anyone who
+    already has a partner record, and editing the profile never touched the
+    status, so an applicant told "fix X" could fix it and still never be looked
+    at again. Clears the old note so staff don't read a stale reason.
+    """
+
+    permission_classes = [IsPartnerUser]
+
+    def post(self, request):
+        partner = request.user.partner
+        if partner.status != Partner.ApplicationStatus.REJECTED:
+            raise ValidationError({"detail": "Only a rejected application can be resubmitted."})
+        partner.status = Partner.ApplicationStatus.PENDING
+        partner.rejection_note = ""
+        partner.save(update_fields=["status", "rejection_note"])
+        log_activity(
+            request.user,
+            ActivityVerb.PARTNER_RESUBMITTED,
+            target_label=partner.name,
+            metadata={"partner_id": partner.id},
+        )
+        return Response(PartnerProfileSerializer(partner).data)
 
 
 class PartnerSaleSerializer(serializers.ModelSerializer):

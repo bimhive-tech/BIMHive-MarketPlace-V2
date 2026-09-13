@@ -8,12 +8,14 @@ class MembershipPlanSerializer(serializers.ModelSerializer):
     yearly_savings_percent = serializers.IntegerField(read_only=True)
     product_count = serializers.SerializerMethodField()
     promotion = serializers.SerializerMethodField()
+    features = serializers.ListField(source="feature_list", child=serializers.CharField(), read_only=True)
 
     class Meta:
         model = MembershipPlan
         fields = [
-            "id", "name", "slug", "rank", "tagline", "description",
-            "monthly_price", "yearly_price", "currency", "yearly_savings_percent",
+            "id", "name", "slug", "rank", "tagline", "description", "features", "enrollment",
+            "monthly_price", "yearly_price", "original_monthly_price", "original_yearly_price",
+            "currency", "yearly_savings_percent",
             "seats_per_product", "is_featured", "product_count", "promotion",
         ]
 

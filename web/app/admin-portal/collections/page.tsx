@@ -2,20 +2,33 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
+import { Modal } from "@/components/Modal/Modal";
 import { Pill } from "@/components/Pill/Pill";
+import {
+  AdminCheckbox,
+  AdminField,
+  AdminFormGrid,
+  AdminInput,
+  AdminTextarea,
+} from "@/features/admin/AdminForm/AdminForm";
 import { collectionsApi, type AdminCollection } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
 
 const EMPTY = { name: "", description: "", is_featured: false };
 
+type CollectionForm = typeof EMPTY;
+
 export default function AdminCollectionsPage() {
   const [rows, setRows] = useState<AdminCollection[] | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState<CollectionForm>(EMPTY);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { confirm, dialog } = useConfirm();
 
   function load() {
     collectionsApi.list().then(setRows).catch(() => setRows([]));
@@ -23,35 +36,54 @@ export default function AdminCollectionsPage() {
 
   useEffect(load, []);
 
+  function set<K extends keyof CollectionForm>(key: K, value: CollectionForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
   function startEdit(row: AdminCollection) {
     setEditingId(row.id);
     setForm({ name: row.name, description: row.description, is_featured: row.is_featured });
+    setError("");
     setShowForm(true);
   }
 
   function startNew() {
     setEditingId(null);
     setForm(EMPTY);
+    setError("");
     setShowForm(true);
   }
 
   async function onSave() {
     if (!form.name.trim()) return;
     setSaving(true);
+    setError("");
     try {
       if (editingId) await collectionsApi.update(editingId, form);
       else await collectionsApi.create(form);
       setShowForm(false);
       load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this collection.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this collection? Products in it are not deleted.")) return;
-    await collectionsApi.remove(id);
-    load();
+  async function onDelete(row: AdminCollection) {
+    const confirmed = await confirm({
+      title: `Delete ${row.name}?`,
+      message: "Products in it are not deleted.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await collectionsApi.remove(row.id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this collection.");
+    }
   }
 
   return (
@@ -67,42 +99,39 @@ export default function AdminCollectionsPage() {
         </button>
       </header>
 
-      {showForm && (
-        <div className={styles.tableWrap} style={{ padding: "var(--space-5)" }}>
-          <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", alignItems: "center" }}>
-            <input
-              className={styles.searchInput}
-              placeholder="Name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <input
-              className={styles.searchInput}
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            />
-            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--fs-sm)" }}>
-              <input
-                type="checkbox"
-                checked={form.is_featured}
-                onChange={(e) => setForm((f) => ({ ...f, is_featured: e.target.checked }))}
-              />
-              Featured
-            </label>
-            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
-              {editingId ? "Save" : "Create"}
-            </button>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingId ? `Edit ${form.name || "collection"}` : "New collection"}
+        description="Products are added to a collection from Django admin for now."
+        footer={
+          <>
             <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
               Cancel
             </button>
-          </div>
-          <p className={styles.sub} style={{ marginTop: "var(--space-3)" }}>
-            Add products to this collection from the product&apos;s own edit page (coming soon), or via
-            Django admin for now.
-          </p>
-        </div>
-      )}
+            <button className={styles.primaryBtn} disabled={saving || !form.name.trim()} onClick={onSave}>
+              {saving ? "Saving…" : editingId ? "Save" : "Create"}
+            </button>
+          </>
+        }
+      >
+        <AdminFormGrid>
+          <AdminField label="Name" wide>
+            <AdminInput placeholder="e.g. Documentation essentials" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </AdminField>
+          <AdminField label="Description" hint="Optional." wide>
+            <AdminTextarea value={form.description} onChange={(e) => set("description", e.target.value)} />
+          </AdminField>
+          <AdminCheckbox
+            label="Featured"
+            hint="Shown prominently on the storefront."
+            checked={form.is_featured}
+            onChange={(v) => set("is_featured", v)}
+          />
+        </AdminFormGrid>
+      </Modal>
+
+      {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -132,7 +161,7 @@ export default function AdminCollectionsPage() {
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       aria-label="Delete"
-                      onClick={() => onDelete(row.id)}
+                      onClick={() => onDelete(row)}
                     >
                       <Icon name="trash" size={16} />
                     </button>
@@ -145,6 +174,8 @@ export default function AdminCollectionsPage() {
         {rows === null && <p className={styles.state}>Loading collections…</p>}
         {rows?.length === 0 && <p className={styles.state}>No collections yet.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }

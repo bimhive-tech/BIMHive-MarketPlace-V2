@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import { SUPPORTED_REVIT_YEARS } from "@/config/site";
@@ -25,6 +26,7 @@ interface InstallerBuildTabProps {
 }
 
 export function InstallerBuildTab({ productId, ensureSaved, asPartner = false }: InstallerBuildTabProps) {
+  const { confirm, dialog } = useConfirm();
   const [builds, setBuilds] = useState<PluginBuild[] | null>(null);
   const [destinationOptions, setDestinationOptions] = useState<DestinationOption[]>([]);
   const [newYear, setNewYear] = useState("");
@@ -68,9 +70,13 @@ export function InstallerBuildTab({ productId, ensureSaved, asPartner = false }:
   }
 
   async function onRemoveBuild(buildId: string) {
-    if (!window.confirm("Remove this Revit-year build? The uploaded .dll, .addin, and resource files are deleted.")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Remove this Revit-year build?",
+      message: "Its uploaded .dll, .addin and resource files are deleted.",
+      confirmLabel: "Remove build",
+      danger: true,
+    });
+    if (!confirmed) return;
     await deletePluginBuild(buildId, asPartner);
     setBuilds((list) => (list ?? []).filter((b) => b.id !== buildId));
   }
@@ -134,6 +140,8 @@ export function InstallerBuildTab({ productId, ensureSaved, asPartner = false }:
           ))}
         </>
       )}
+
+      {dialog}
     </div>
   );
 }

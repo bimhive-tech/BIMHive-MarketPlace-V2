@@ -88,6 +88,16 @@ class Product(TimeStamped):
     monthly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     yearly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=8, default="USD")
+    # Display-only reference price, struck through beside what the product
+    # actually costs — e.g. "~~$29~~ Free" while tools are given away. Never
+    # charged: checkout prices from `price` alone (see catalog.pricing).
+    original_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Shown crossed out next to the real price. Leave blank for none.",
+    )
 
     # ── All-Access membership ──
     # The LOWEST membership tier that includes this product; null means it's
@@ -242,6 +252,16 @@ class Product(TimeStamped):
         # A subscription product's one-time `price` is unused/irrelevant —
         # it's never actually free just because that field defaults to 0.
         return self.price <= 0 and not self.is_subscription
+
+    @property
+    def original_price_label(self):
+        """The struck-through "was" figure from `original_price`, or None when
+        there's nothing honest to cross out: no reference price, one that isn't
+        actually higher, or a subscription product (whose `price` isn't what it
+        charges, so a one-time "was" price would compare against nothing)."""
+        if self.is_subscription or not self.original_price or self.original_price <= self.price:
+            return None
+        return f"${self.original_price:.2f}"
 
     @property
     def price_label(self):

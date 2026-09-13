@@ -5,29 +5,38 @@ import styles from "./PriceTag.module.css";
 
 type PriceSource = Pick<
   ProductCard,
-  "price" | "price_label" | "currency" | "is_subscription" | "monthly_price" | "yearly_price" | "promotion"
+  | "price"
+  | "price_label"
+  | "original_price_label"
+  | "currency"
+  | "is_subscription"
+  | "monthly_price"
+  | "yearly_price"
+  | "promotion"
 >;
 
 /**
- * A product's price, with the pre-discount price struck through beside it when
- * a promotion is running.
+ * A product's price, with a higher "was" price struck through beside it when
+ * there is one: the list price while a promotion runs, otherwise the product's
+ * own display-only original price (e.g. "~~$29.00~~ Free").
  *
- * The sale figure comes from the server (`product.promotion`), never from
- * multiplying on the client — the same number checkout will charge.
+ * Every figure comes from the server, never from multiplying on the client —
+ * the same numbers checkout will charge.
  */
 export function PriceTag({ product, size = "md" }: { product: PriceSource; size?: "md" | "lg" }) {
   const { promotion } = product;
+  const wasLabel = promotion ? product.price_label : product.original_price_label;
 
-  if (!promotion) {
+  if (!wasLabel) {
     return <span className={`${styles.price} ${styles[size]}`}>{product.price_label}</span>;
   }
 
   return (
     <span className={styles.group}>
       <span className={`${styles.price} ${styles.sale} ${styles[size]}`}>
-        {salePriceLabel(product)}
+        {promotion ? salePriceLabel(product) : product.price_label}
       </span>
-      <s className={styles.was}>{product.price_label}</s>
+      <s className={styles.was}>{wasLabel}</s>
     </span>
   );
 }

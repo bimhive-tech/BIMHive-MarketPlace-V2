@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
@@ -23,6 +24,7 @@ function formatDate(value: string): string {
 }
 
 export function ReviewsList() {
+  const { confirm, dialog } = useConfirm();
   const [reviews, setReviews] = useState<AccountReview[] | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -37,7 +39,13 @@ export function ReviewsList() {
   }
 
   async function onDelete(id: number) {
-    if (!window.confirm("Delete this review? This cannot be undone.")) return;
+    const confirmed = await confirm({
+      title: "Delete this review?",
+      message: "This can't be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     await deleteAccountReview(id);
     setReviews((list) => (list ?? []).filter((r) => r.id !== id));
   }
@@ -94,6 +102,8 @@ export function ReviewsList() {
           </div>
         ),
       )}
+
+      {dialog}
     </div>
   );
 }

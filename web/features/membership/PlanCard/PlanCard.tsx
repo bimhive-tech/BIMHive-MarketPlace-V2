@@ -1,12 +1,7 @@
-"use client";
-
-import { useState } from "react";
-
-import { Button } from "@/components/Button/Button";
 import { Icon } from "@/components/Icon/Icon";
-import { formatPrice } from "@/config/site";
-import { AccountApiError, startMembershipCheckout } from "@/lib/accountApi";
 import type { MembershipPlan, User } from "@/lib/types";
+import { PlanAction } from "@/features/membership/PlanCard/PlanAction";
+import { PlanPrice, planPriceNote } from "@/features/membership/PlanCard/PlanPrice";
 
 import styles from "./PlanCard.module.css";
 
@@ -20,26 +15,8 @@ interface PlanCardProps {
 }
 
 export function PlanCard({ plan, interval, user, currentPlanSlug }: PlanCardProps) {
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState("");
-
-  const listPrice = interval === "yearly" ? plan.yearly_price : plan.monthly_price;
-  const salePrice = interval === "yearly" ? plan.promotion?.yearly_price : plan.promotion?.monthly_price;
-  const price = salePrice ?? listPrice;
-  const isCurrent = currentPlanSlug === plan.slug;
-  const unavailable = listPrice == null;
-
-  async function handleSubscribe() {
-    setError("");
-    setStarting(true);
-    try {
-      const { checkoutUrl } = await startMembershipCheckout(plan.slug, interval);
-      window.location.href = checkoutUrl;
-    } catch (err) {
-      setError(err instanceof AccountApiError ? err.detail : "Couldn't start checkout.");
-      setStarting(false);
-    }
-  }
+  const note = planPriceNote(plan, interval);
+  const joinsOnline = plan.enrollment === "self_serve";
 
   return (
     <article className={`${styles.card} ${plan.is_featured ? styles.featured : ""}`}>
@@ -48,67 +25,31 @@ export function PlanCard({ plan, interval, user, currentPlanSlug }: PlanCardProp
       <h2 className={styles.name}>{plan.name}</h2>
       {plan.tagline && <p className={styles.tagline}>{plan.tagline}</p>}
 
-      <p className={styles.price}>
-        {unavailable ? (
-          <span className={styles.unavailable}>Not sold {interval}</span>
-        ) : (
-          <>
-            <span className={`${styles.amount} ${salePrice ? styles.amountSale : ""}`}>
-              {/* `price` can't actually be null here — `unavailable` (guarding
-                  this branch) is true whenever listPrice is null. */}
-              {formatPrice(price as string, plan.currency)}
-            </span>
-            <span className={styles.interval}>/{interval === "yearly" ? "yr" : "mo"}</span>
-            {salePrice && <s className={styles.wasPrice}>{formatPrice(listPrice as string, plan.currency)}</s>}
-          </>
-        )}
-      </p>
-      {plan.promotion ? (
-        <p className={styles.saving}>
-          {plan.promotion.discount_percent}% off — {plan.promotion.headline}
-        </p>
-      ) : (
-        interval === "yearly" &&
-        plan.yearly_savings_percent !== null && (
-          <p className={styles.saving}>Save {plan.yearly_savings_percent}% vs. monthly</p>
-        )
-      )}
+      <PlanPrice plan={plan} interval={interval} />
+      {note && <p className={styles.saving}>{note}</p>}
 
+      {/* Facts the server computes come first, then what staff wrote for the
+          plan — so a checklist line can never contradict the real numbers. */}
       <ul className={styles.perks}>
-        <Perk>
-          <strong>{plan.product_count}</strong> product{plan.product_count === 1 ? "" : "s"} included
-        </Perk>
-        <Perk>One universal license key for all of them</Perk>
-        <Perk>
-          Up to <strong>{plan.seats_per_product}</strong> machines per product
-        </Perk>
-        <Perk>New releases added to your plan automatically</Perk>
-        <Perk>Cancel any time</Perk>
+        {plan.product_count > 0 && (
+          <Perk>
+            <strong>{plan.product_count}</strong> plugin{plan.product_count === 1 ? "" : "s"} included
+          </Perk>
+        )}
+        {joinsOnline && <Perk>One universal license key for all of them</Perk>}
+        {joinsOnline && (
+          <Perk>
+            Up to <strong>{plan.seats_per_product}</strong> machines per plugin
+          </Perk>
+        )}
+        {plan.features.map((feature) => (
+          <Perk key={feature}>{feature}</Perk>
+        ))}
       </ul>
 
       {plan.description && <p className={styles.description}>{plan.description}</p>}
 
-      {error && <p className={styles.error}>{error}</p>}
-
-      {isCurrent ? (
-        <Button href="/account/membership" variant="secondary" fullWidth size="lg">
-          Your current plan
-        </Button>
-      ) : user === null ? (
-        <Button href="/login?next=/membership" fullWidth size="lg">
-          Sign in to subscribe
-        </Button>
-      ) : (
-        <Button
-          fullWidth
-          size="lg"
-          onClick={handleSubscribe}
-          disabled={starting || unavailable || user === undefined}
-          variant={plan.is_featured ? "primary" : "secondary"}
-        >
-          {starting ? "Starting checkout…" : `Get ${plan.name}`}
-        </Button>
-      )}
+      <PlanAction plan={plan} interval={interval} user={user} isCurrent={currentPlanSlug === plan.slug} />
     </article>
   );
 }

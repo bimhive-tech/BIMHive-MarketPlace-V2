@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/Modal/Modal";
+import { PriceTag } from "@/components/PriceTag/PriceTag";
 import { ProductBadgesInline } from "@/components/ProductBadges/ProductBadges";
 import { StarRating } from "@/components/StarRating/StarRating";
 import { ProductGallery } from "@/features/product/ProductGallery/ProductGallery";
@@ -80,7 +81,7 @@ export function ProductPreviewModal({
               <StarRating value={Number(product.rating_average)} count={product.rating_count} />
 
               <div className={styles.priceBox}>
-                <span className={styles.price}>{product.price_label}</span>
+                <PriceTag product={product} size="lg" />
                 <span className={styles.priceNote}>
                   The live buy box is hidden in preview — it reads a real customer&apos;s licences.
                 </span>

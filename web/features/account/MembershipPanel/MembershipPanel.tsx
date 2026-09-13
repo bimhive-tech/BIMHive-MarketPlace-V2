@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Button } from "@/components/Button/Button";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 import { Icon } from "@/components/Icon/Icon";
@@ -27,6 +28,7 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "neutral"> =
 };
 
 export function MembershipPanel() {
+  const { confirm, dialog } = useConfirm();
   const [data, setData] = useState<AccountMembershipData | null | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -49,7 +51,13 @@ export function MembershipPanel() {
   }
 
   async function onCancel() {
-    if (!window.confirm("Cancel your membership? The universal key stops working right away.")) return;
+    const confirmed = await confirm({
+      title: "Cancel your membership?",
+      message: "Your universal key stops working right away.",
+      confirmLabel: "Cancel membership",
+      danger: true,
+    });
+    if (!confirmed) return;
     setError("");
     setCancelling(true);
     try {
@@ -157,6 +165,8 @@ export function MembershipPanel() {
           </div>
         </section>
       )}
+
+      {dialog}
     </div>
   );
 }

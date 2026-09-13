@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
 import { CompatibilityTab } from "@/features/admin/ProductForm/CompatibilityTab";
 import { DocumentationTab } from "@/features/admin/ProductForm/DocumentationTab";
@@ -70,6 +71,7 @@ const EMPTY_FORM = {
   membership_plan: "",
   product_code: "",
   price: "0",
+  original_price: "",
   monthly_price: "",
   yearly_price: "",
   default_trial_days: "7",
@@ -98,6 +100,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ productId, mode = "admin", partnerName }: ProductFormProps) {
+  const { confirm, dialog } = useConfirm();
   const router = useRouter();
   const asPartner = mode === "partner";
   const basePath = asPartner ? "/partner-portal" : "/admin-portal";
@@ -113,6 +116,10 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
   // unsaved "add new" form silently auto-saves as a draft on first upload —
   // see ensureSaved() below.
   const [savedId, setSavedId] = useState<number | undefined>(productId);
+  // Whether the product was live when the form opened — a partner's changes
+  // to a live product send it back for review (see catalog.admin_api
+  // .send_live_edit_back_for_review), which they should know before saving.
+  const [liveOnLoad, setLiveOnLoad] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const [form, setForm] = useState(() => ({
@@ -147,6 +154,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           membership_plan: p.membership_plan != null ? String(p.membership_plan) : "",
           product_code: p.product_code,
           price: p.price,
+          original_price: p.original_price ?? "",
           monthly_price: p.monthly_price ?? "",
           yearly_price: p.yearly_price ?? "",
           default_trial_days: String(p.default_trial_days),
@@ -162,6 +170,7 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
           seo_title: p.seo_title,
           seo_description: p.seo_description,
         });
+        setLiveOnLoad(p.status === "published");
         setTags(p.tags);
         setFeatures(p.features.length ? p.features : [{ title: "", description: "", icon: "", sort_order: 0 }]);
         setMedia(p.media);
@@ -211,6 +220,8 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       membership_plan: form.membership_plan ? Number(form.membership_plan) : null,
       product_code: form.product_code.trim(),
       price: form.price || "0",
+      // Blank = nothing crossed out, sent as null rather than 0.
+      original_price: form.original_price.trim() ? form.original_price : null,
       // Blank means "not a subscription" — sent as null, not "0" (a $0/mo
       // plan isn't a thing here, see Product.is_subscription).
       monthly_price: form.monthly_price.trim() ? form.monthly_price : null,
@@ -343,7 +354,12 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
 
   async function onDelete() {
     if (!savedId) return;
-    const confirmed = window.confirm(`Delete "${form.name}"? This cannot be undone.`);
+    const confirmed = await confirm({
+      title: `Delete ${form.name || "this product"}?`,
+      message: "This can't be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
     if (!confirmed) return;
     setDeleting(true);
     try {
@@ -400,6 +416,15 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
       </header>
 
       {error && <div className={styles.error}>{error}</div>}
+      {asPartner && liveOnLoad && (
+        <div className={styles.liveNotice}>
+          <Icon name="shield" size={18} />
+          <span>
+            This product is live. Saving changes to its details, files or plugin builds sends it back to
+            BIMHIVE for review, and it&apos;s hidden from the store until it&apos;s approved again.
+          </span>
+        </div>
+      )}
 
       <div className={styles.layout}>
         <div className={styles.formCol}>
@@ -591,12 +616,27 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
                   <span className={styles.hint}>The one-time price, used unless a monthly or yearly price is set below.</span>
                 </label>
                 <label className={styles.label}>
-                  Product Type
-                  <select className={styles.input} value={form.type} onChange={(e) => set("type", e.target.value)}>
-                    {options?.types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
+                  Original price (USD)
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="None"
+                    value={form.original_price}
+                    onChange={(e) => set("original_price", e.target.value)}
+                  />
+                  <span className={styles.hint}>
+                    Shown crossed out beside the price, e.g. $29 next to Free. Only appears when it's higher. Never charged.
+                  </span>
                 </label>
               </div>
+              <label className={styles.label}>
+                Product Type
+                <select className={styles.input} value={form.type} onChange={(e) => set("type", e.target.value)}>
+                  {options?.types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </label>
               <label className={styles.label}>
                 Subscription Pricing (optional)
                 <div className={styles.row}>
@@ -826,6 +866,8 @@ export function ProductForm({ productId, mode = "admin", partnerName }: ProductF
         asPartner={asPartner}
         dirty={previewIsStale}
       />
+
+      {dialog}
     </div>
   );
 }

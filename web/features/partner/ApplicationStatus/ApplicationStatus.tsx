@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon/Icon";
 import { Pill } from "@/components/Pill/Pill";
 import type { User } from "@/lib/types";
+import { ResubmitApplicationButton } from "@/features/partner/ResubmitApplicationButton/ResubmitApplicationButton";
 
 import styles from "./ApplicationStatus.module.css";
 
@@ -26,10 +27,14 @@ export function ApplicationStatus({ partner }: { partner: NonNullable<User["part
             ? "BIMHive staff will review your application soon — you'll get full partner dashboard access once it's approved."
             : partner.rejection_note || "No reason was given."}
         </p>
+        {!pending && (
+          <p className={styles.text}>Fix what&apos;s mentioned in your profile, then send it back for review.</p>
+        )}
         <Link href="/partner-portal/profile" className={styles.link}>
           View &amp; edit your application
           <Icon name="arrow-right" size={14} />
         </Link>
+        {!pending && <ResubmitApplicationButton />}
       </div>
     </div>
   );

@@ -528,3 +528,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* A partner editing a live product: saving sends it back for review. */
+.liveNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+}

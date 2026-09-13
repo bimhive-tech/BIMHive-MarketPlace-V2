@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
+import { Modal } from "@/components/Modal/Modal";
+import {
+  AdminField,
+  AdminFormGrid,
+  AdminInput,
+  AdminSelect,
+} from "@/features/admin/AdminForm/AdminForm";
 import { categoriesApi, type AdminCategory } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
@@ -19,6 +27,7 @@ export default function AdminCategoriesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog } = useConfirm();
 
   function load() {
     categoriesApi.list().then(setRows).catch(() => setRows([]));
@@ -29,6 +38,10 @@ export default function AdminCategoriesPage() {
   // Only a top-level category can be picked as a parent — the storefront
   // renders exactly two levels, and the API rejects deeper nesting.
   const parentOptions = (rows ?? []).filter((row) => !row.parent && row.id !== editingId);
+
+  function set<K extends keyof CategoryForm>(key: K, value: CategoryForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
 
   function startEdit(row: AdminCategory) {
     setEditingId(row.id);
@@ -66,10 +79,16 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this category? Products in it are not deleted.")) return;
+  async function onDelete(row: AdminCategory) {
+    const confirmed = await confirm({
+      title: `Delete ${row.name}?`,
+      message: "Products in it are not deleted.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
-      await categoriesApi.remove(id);
+      await categoriesApi.remove(row.id);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete this category.");
@@ -92,50 +111,44 @@ export default function AdminCategoriesPage() {
         </button>
       </header>
 
-      {showForm && (
-        <div className={styles.formPanel}>
-          <div className={styles.formGrid}>
-            <input
-              className={styles.searchInput}
-              placeholder="Name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <select
-              className={styles.select}
-              value={form.parent}
-              onChange={(e) => setForm((f) => ({ ...f, parent: e.target.value }))}
-            >
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingId ? `Edit ${form.name || "category"}` : "New category"}
+        description="The storefront sidebar shows two levels: top-level categories and their subcategories."
+        footer={
+          <>
+            <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
+              Cancel
+            </button>
+            <button className={styles.primaryBtn} disabled={saving || !form.name.trim()} onClick={onSave}>
+              {saving ? "Saving…" : editingId ? "Save" : "Create"}
+            </button>
+          </>
+        }
+      >
+        <AdminFormGrid>
+          <AdminField label="Name">
+            <AdminInput placeholder="e.g. Modelling" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </AdminField>
+          <AdminField label="Level" hint="A subcategory sits under a top-level category.">
+            <AdminSelect value={form.parent} onChange={(e) => set("parent", e.target.value)}>
               <option value="">Top-level category</option>
               {parentOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   Subcategory of {option.name}
                 </option>
               ))}
-            </select>
-            <input
-              className={styles.searchInput}
-              placeholder="Icon name (optional)"
-              value={form.icon}
-              onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-            />
-            <input
-              className={styles.searchInput}
-              placeholder="Description (optional)"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            />
-          </div>
-          <div className={styles.formActions}>
-            <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
-              {editingId ? "Save" : "Create"}
-            </button>
-            <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+            </AdminSelect>
+          </AdminField>
+          <AdminField label="Icon" hint="A line-icon name from the site's icon set. Optional.">
+            <AdminInput placeholder="e.g. layers" value={form.icon} onChange={(e) => set("icon", e.target.value)} />
+          </AdminField>
+          <AdminField label="Description" hint="Optional.">
+            <AdminInput value={form.description} onChange={(e) => set("description", e.target.value)} />
+          </AdminField>
+        </AdminFormGrid>
+      </Modal>
 
       {error && <p className={styles.error}>{error}</p>}
 
@@ -177,7 +190,7 @@ export default function AdminCategoriesPage() {
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       aria-label="Delete"
-                      onClick={() => onDelete(row.id)}
+                      onClick={() => onDelete(row)}
                     >
                       <Icon name="trash" size={16} />
                     </button>
@@ -190,6 +203,8 @@ export default function AdminCategoriesPage() {
         {rows === null && <p className={styles.state}>Loading categories…</p>}
         {rows?.length === 0 && <p className={styles.state}>No categories yet.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }

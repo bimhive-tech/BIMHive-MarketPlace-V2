@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Icon } from "@/components/Icon/Icon";
 import { PartnerAvatar } from "@/components/PartnerAvatar/PartnerAvatar";
 import { Pill } from "@/components/Pill/Pill";
+import { ResubmitApplicationButton } from "@/features/partner/ResubmitApplicationButton/ResubmitApplicationButton";
 import { getPartnerProfile, updatePartnerProfile, type PartnerProfile } from "@/lib/partnerApi";
 
 import styles from "./page.module.css";
@@ -93,6 +94,7 @@ export default function PartnerProfilePage() {
               ? "Your application is under review — BIMHive staff will approve or reject it soon."
               : profile.rejection_note || "Your application was rejected. No reason was given."}
           </p>
+          {profile.status === "rejected" && <ResubmitApplicationButton />}
         </div>
       )}
 

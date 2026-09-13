@@ -25,17 +25,27 @@ class AdminMembershipPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = MembershipPlan
         fields = [
-            "id", "name", "slug", "rank", "tagline", "description",
-            "monthly_price", "yearly_price", "currency", "seats_per_product",
+            "id", "name", "slug", "rank", "tagline", "description", "features", "enrollment",
+            "monthly_price", "yearly_price", "original_monthly_price", "original_yearly_price",
+            "currency", "seats_per_product",
             "is_active", "is_featured", "sort_order", "product_count", "member_count",
         ]
         read_only_fields = ["slug"]
 
     def validate(self, attrs):
         merged = {**(self.instance.__dict__ if self.instance else {}), **attrs}
-        if merged.get("monthly_price") is None and merged.get("yearly_price") is None:
+        enrollment = merged.get("enrollment") or MembershipPlan.Enrollment.SELF_SERVE
+        # Only a plan people join online needs something to charge — $0 counts,
+        # that's how a plan is free for now. A "contact us" or everyone-has-it
+        # tier has no checkout, so demanding a price there would just force a
+        # made-up number into the form.
+        if (
+            enrollment == MembershipPlan.Enrollment.SELF_SERVE
+            and merged.get("monthly_price") is None
+            and merged.get("yearly_price") is None
+        ):
             raise ValidationError(
-                {"monthly_price": "A plan needs at least one price — monthly, yearly, or both."}
+                {"monthly_price": "A plan joined online needs a price — monthly, yearly, or both (0 = free)."}
             )
         return attrs
 

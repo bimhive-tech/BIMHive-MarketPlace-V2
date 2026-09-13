@@ -62,6 +62,10 @@ export interface PartnerProfile {
 
 export const getPartnerProfile = () => request<PartnerProfile>("/api/partner/profile", "GET");
 
+/** Puts a rejected application back into review (and clears the old note). */
+export const resubmitPartnerApplication = () =>
+  request<PartnerProfile>("/api/partner/application/resubmit", "POST");
+
 export interface PartnerProfileUpdate {
   tagline: string;
   bio: string;

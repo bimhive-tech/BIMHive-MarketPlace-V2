@@ -2,8 +2,18 @@
 
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "@/components/ConfirmDialog/useConfirm";
 import { Icon } from "@/components/Icon/Icon";
+import { Modal } from "@/components/Modal/Modal";
 import { Pill } from "@/components/Pill/Pill";
+import {
+  AdminCheckbox,
+  AdminField,
+  AdminFormGrid,
+  AdminInput,
+  AdminSelect,
+  AdminTextarea,
+} from "@/features/admin/AdminForm/AdminForm";
 import { partnersApi, type AdminPartner } from "@/lib/adminApi";
 
 import styles from "@/features/admin/AdminTable/AdminTable.module.css";
@@ -37,6 +47,8 @@ export default function AdminPartnersPage() {
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { confirm, dialog } = useConfirm();
 
   function load() {
     partnersApi.list().then(setRows).catch(() => setRows([]));
@@ -46,6 +58,10 @@ export default function AdminPartnersPage() {
 
   const visibleRows = rows?.filter((row) => tab === "all" || row.status === tab);
 
+  function set<K extends keyof PartnerFormState>(key: K, value: PartnerFormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
   function startEdit(row: AdminPartner) {
     setEditingId(row.id);
     setForm({
@@ -53,32 +69,47 @@ export default function AdminPartnersPage() {
       website: row.website, is_verified: row.is_verified,
       status: row.status, rejection_note: row.rejection_note,
     });
+    setError("");
     setShowForm(true);
   }
 
   function startNew() {
     setEditingId(null);
     setForm(EMPTY);
+    setError("");
     setShowForm(true);
   }
 
   async function onSave() {
     if (!form.name.trim()) return;
     setSaving(true);
+    setError("");
     try {
       if (editingId) await partnersApi.update(editingId, form);
       else await partnersApi.create(form);
       setShowForm(false);
       load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this partner.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this partner? Products from them are not deleted.")) return;
-    await partnersApi.remove(id);
-    load();
+  async function onDelete(row: AdminPartner) {
+    const confirmed = await confirm({
+      title: `Delete ${row.name}?`,
+      message: "Products from them are not deleted.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await partnersApi.remove(row.id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this partner.");
+    }
   }
 
   return (
@@ -88,7 +119,7 @@ export default function AdminPartnersPage() {
           <h1 className={styles.title}>Partners</h1>
           <p className={styles.sub}>
             Sellers and publishers products are listed under. Seller applications submitted via
-            "Become a Seller" land here as Pending Review.
+            &quot;Become a Seller&quot; land here as Pending Review.
           </p>
         </div>
         <button className={styles.primaryBtn} onClick={startNew}>
@@ -111,88 +142,74 @@ export default function AdminPartnersPage() {
         ))}
       </div>
 
-      {showForm && (
-        <div className={styles.tableWrap}>
-          <div className={styles.formPanel}>
-            <div className={styles.formGrid}>
-              <input
-                className={styles.searchInput}
-                placeholder="Name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-              <input
-                className={styles.searchInput}
-                placeholder="Tagline"
-                value={form.tagline}
-                onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
-              />
-              <input
-                className={styles.searchInput}
-                placeholder="Logo URL"
-                value={form.logo_url}
-                onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
-              />
-              <input
-                className={styles.searchInput}
-                placeholder="Website"
-                value={form.website}
-                onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
-              />
-              <textarea
-                className={styles.textarea}
-                rows={3}
-                placeholder="Bio"
-                value={form.bio}
-                onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
-              />
-            </div>
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={form.is_verified}
-                onChange={(e) => setForm((f) => ({ ...f, is_verified: e.target.checked }))}
-              />
-              Verified
-            </label>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingId ? `Edit ${form.name || "partner"}` : "New partner"}
+        description={
+          editingId
+            ? "Approving or rejecting the seller application is at the bottom."
+            : "A partner you add here is approved straight away."
+        }
+        footer={
+          <>
+            <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
+              Cancel
+            </button>
+            <button className={styles.primaryBtn} disabled={saving || !form.name.trim()} onClick={onSave}>
+              {saving ? "Saving…" : editingId ? "Save" : "Create"}
+            </button>
+          </>
+        }
+      >
+        <AdminFormGrid>
+          <AdminField label="Name">
+            <AdminInput value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </AdminField>
+          <AdminField label="Tagline" hint="Optional.">
+            <AdminInput value={form.tagline} onChange={(e) => set("tagline", e.target.value)} />
+          </AdminField>
+          <AdminField label="Logo URL" hint="Optional.">
+            <AdminInput type="url" value={form.logo_url} onChange={(e) => set("logo_url", e.target.value)} />
+          </AdminField>
+          <AdminField label="Website" hint="Optional.">
+            <AdminInput type="url" value={form.website} onChange={(e) => set("website", e.target.value)} />
+          </AdminField>
+          <AdminField label="Bio" hint="Shown on their public seller page." wide>
+            <AdminTextarea value={form.bio} onChange={(e) => set("bio", e.target.value)} />
+          </AdminField>
+          <AdminCheckbox
+            label="Verified"
+            hint="A badge customers see on their products."
+            checked={form.is_verified}
+            onChange={(v) => set("is_verified", v)}
+          />
 
-            {editingId && (
-              <div className={styles.loginPanel}>
-                <p className={styles.loginPanelTitle}>Seller Application</p>
-                <div className={styles.formGrid}>
-                  <select
-                    className={styles.searchInput}
-                    value={form.status}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as typeof f.status }))}
-                  >
-                    <option value="pending">Pending Review</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
-                {form.status === "rejected" && (
-                  <textarea
-                    className={styles.textarea}
-                    rows={2}
-                    placeholder="Let the applicant know what to fix before reapplying."
-                    value={form.rejection_note}
-                    onChange={(e) => setForm((f) => ({ ...f, rejection_note: e.target.value }))}
-                  />
-                )}
-              </div>
-            )}
+          {editingId && (
+            <AdminField label="Seller application" hint="Approving gives them partner-portal access." wide>
+              <AdminSelect
+                value={form.status}
+                onChange={(e) => set("status", e.target.value as PartnerFormState["status"])}
+              >
+                <option value="pending">Pending Review</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </AdminSelect>
+            </AdminField>
+          )}
+          {editingId && form.status === "rejected" && (
+            <AdminField label="Rejection note" hint="Tell the applicant what to fix before re-applying." wide>
+              <AdminTextarea
+                rows={2}
+                value={form.rejection_note}
+                onChange={(e) => set("rejection_note", e.target.value)}
+              />
+            </AdminField>
+          )}
+        </AdminFormGrid>
+      </Modal>
 
-            <div className={styles.formActions}>
-              <button className={styles.primaryBtn} disabled={saving} onClick={onSave}>
-                {editingId ? "Save" : "Create"}
-              </button>
-              <button className={styles.actionBtn} onClick={() => setShowForm(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -226,7 +243,7 @@ export default function AdminPartnersPage() {
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       aria-label="Delete"
-                      onClick={() => onDelete(row.id)}
+                      onClick={() => onDelete(row)}
                     >
                       <Icon name="trash" size={16} />
                     </button>
@@ -239,6 +256,8 @@ export default function AdminPartnersPage() {
         {rows === null && <p className={styles.state}>Loading partners…</p>}
         {visibleRows?.length === 0 && <p className={styles.state}>No partners in this view.</p>}
       </div>
+
+      {dialog}
     </div>
   );
 }
