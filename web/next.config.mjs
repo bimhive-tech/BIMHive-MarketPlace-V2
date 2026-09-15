@@ -4,6 +4,11 @@
 // (mirrors the single-service production topology). See ARCHITECTURE §3.
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL || "http://127.0.0.1:8000";
 
+// Next aborts a proxied /api request after 30s by default, which cut off media
+// uploads mid-transfer. Chunked uploads keep requests short; this gives a slow
+// connection room to finish one chunk, still under Railway's ~5 minute cap.
+const PROXY_TIMEOUT_MS = 120_000;
+
 // Cover images / gallery media are stored in R2 and referenced by absolute URL;
 // next/image refuses to optimize a remote host it doesn't know about, so every
 // host a media URL could actually use (derived from env, never hardcoded) has
@@ -38,6 +43,7 @@ const nextConfig = {
   // a self-contained server bundle instead of requiring the full node_modules tree.
   output: "standalone",
   images: { remotePatterns },
+  experimental: { proxyTimeout: PROXY_TIMEOUT_MS },
   // DRF router URLs (categories/, tags/, etc.) require a trailing slash. Without
   // this, Next's own trailing-slash redirect fires before the rewrite below can
   // forward the request, stripping the slash and breaking those endpoints.

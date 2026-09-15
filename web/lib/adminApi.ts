@@ -242,9 +242,50 @@ export interface UploadedMedia {
   url: string;
   media_type: "image" | "video";
 }
+interface MultipartUploadStart {
+  upload_id: string;
+  key: string;
+  media_type: UploadedMedia["media_type"];
+  part_size: number;
+}
+
+/** Sends a file to Django in small chunks that become one R2 multipart upload.
+ * No single request lasts long enough to hit the Next.js proxy timeout or
+ * Railway's request cap, so large videos get through. */
+const uploadProductMediaInParts = async (productId: number, file: File, asPartner: boolean): Promise<UploadedMedia> => {
+  const base = `/api/admin/products/${productId}/media-upload`;
+  const query = asPartner ? "?mine=1" : "";
+  const start = await request<MultipartUploadStart>(`${base}/start${query}`, "POST", {
+    filename: file.name,
+    content_type: file.type,
+    size: file.size,
+  });
+  const ref = { upload_id: start.upload_id, key: start.key };
+
+  try {
+    const parts: { part_number: number; etag: string }[] = [];
+    for (let offset = 0, partNumber = 1; offset < file.size; offset += start.part_size, partNumber++) {
+      const form = new FormData();
+      form.append("upload_id", ref.upload_id);
+      form.append("key", ref.key);
+      form.append("part_number", String(partNumber));
+      form.append("chunk", file.slice(offset, offset + start.part_size), file.name);
+      const { etag } = await request<{ etag: string }>(`${base}/part${query}`, "POST", form, true);
+      parts.push({ part_number: partNumber, etag });
+    }
+    const { url } = await request<{ url: string }>(`${base}/complete${query}`, "POST", { ...ref, parts });
+    return { url, media_type: start.media_type };
+  } catch (err) {
+    await request(`${base}/abort${query}`, "POST", ref).catch(() => undefined);
+    throw err;
+  }
+};
+
 /** Server-side upload: browser -> Django -> R2. Used when a direct PUT to R2
- * is blocked (bucket has no CORS rule). */
+ * is blocked (bucket has no CORS rule). Videos go in chunks; images are small
+ * enough for one request. */
 const uploadProductMediaViaServer = (productId: number, file: File, asPartner: boolean) => {
+  if (file.type.startsWith("video/")) return uploadProductMediaInParts(productId, file, asPartner);
   const form = new FormData();
   form.append("file", file);
   return request<UploadedMedia>(

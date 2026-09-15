@@ -98,8 +98,11 @@ of those hops in the way and isn't bound by Railway's request timeout at all.
 
 **If the direct PUT is blocked (no bucket CORS rule), the browser automatically falls back to
 uploading through this app** (`AdminProductMediaUploadView`, `POST .../media-upload`), where Django
-writes the file to R2 itself — that path needs no CORS. It is subject to Railway's ~5 minute request
-ceiling, so very large videos on slow connections may still time out until the CORS rule is in place.
+writes the file to R2 itself — that path needs no CORS. Images go in one request; **videos go in 5 MB
+chunks** (`AdminProductMediaMultipartView`, `POST .../media-upload/{start,part,complete,abort}`), each
+forwarded to R2 as one part of a multipart upload. That keeps every request short: Next.js's rewrite
+proxy aborts proxied requests after `experimental.proxyTimeout` (raised to 120s in `next.config.mjs`,
+default 30s — which is what used to cut off video uploads), and Railway caps requests at ~5 minutes.
 
 **For the fast direct path, the R2 bucket's CORS policy must allow a PUT from this app's own origin(s).**
 `scripts/start.sh` applies it on every boot via `python manage.py configure_r2_cors`, using the same

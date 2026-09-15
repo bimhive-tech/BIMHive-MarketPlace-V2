@@ -10,7 +10,7 @@ from django.db.models import Count, F
 from django.db.models.functions import Coalesce
 from rest_framework import generics, serializers, viewsets
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -658,6 +658,14 @@ class AdminProductMediaUploadUrlView(APIView):
     permission_classes = [_CAN_MANAGE_PRODUCTS]
     required_permission = "products.manage"
 
+    def ensure_product_access(self, request, product_id):
+        product_qs = Product.objects.filter(pk=product_id)
+        partner_id = _effective_partner_id(request)
+        if partner_id is not None:
+            product_qs = product_qs.filter(partner_id=partner_id)
+        if not product_qs.exists():
+            raise ValidationError({"detail": "Product not found."})
+
     def validate_media(self, request, product_id, filename, content_type, size):
         """Shared checks for both upload paths; returns the detected media type."""
         from django.conf import settings
@@ -672,12 +680,7 @@ class AdminProductMediaUploadUrlView(APIView):
                 {"detail": "Media uploads need Cloudflare R2 storage configured on the server first."}
             )
 
-        product_qs = Product.objects.filter(pk=product_id)
-        partner_id = _effective_partner_id(request)
-        if partner_id is not None:
-            product_qs = product_qs.filter(partner_id=partner_id)
-        if not product_qs.exists():
-            raise ValidationError({"detail": "Product not found."})
+        self.ensure_product_access(request, product_id)
 
         if not filename:
             raise ValidationError({"filename": "Required."})
@@ -745,6 +748,111 @@ class AdminProductMediaUploadView(AdminProductMediaUploadUrlView):
         public_storage = storages["public_media"]
         key = public_storage.save(f"product_media/{product_id}/{uploaded.name}", uploaded)
         return Response({"url": public_storage.url(key), "media_type": media_type}, status=201)
+
+
+# R2's minimum size for every multipart part except the last.
+MEDIA_UPLOAD_PART_BYTES = 5 * 1024 * 1024
+MAX_MULTIPART_PARTS = 10000
+
+
+def _public_media_client():
+    from django.core.files.storage import storages
+
+    return storages["public_media"].connection.meta.client
+
+
+class AdminProductMediaMultipartView(AdminProductMediaUploadUrlView):
+    """Server upload in small pieces, for files too big to send in one request.
+
+    Next.js's rewrite proxy aborts any request to Django after its proxyTimeout,
+    and Railway's edge caps requests at ~5 minutes, so a video sent in one
+    request gets cut off. Instead the browser sends 5 MB chunks, each forwarded
+    to R2 as one part of an S3 multipart upload. Needs no bucket CORS.
+
+    Actions: start -> part (repeated) -> complete, or abort on failure.
+    """
+
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def post(self, request, product_id, action):
+        from rest_framework.exceptions import NotFound
+
+        handlers = {"start": self.start, "part": self.part, "complete": self.complete, "abort": self.abort}
+        if action not in handlers:
+            raise NotFound()
+        return handlers[action](request, product_id)
+
+    def start(self, request, product_id):
+        from django.core.files.storage import storages
+
+        filename = (request.data.get("filename") or "").strip()
+        content_type = (request.data.get("content_type") or "").strip()
+        try:
+            size = int(request.data.get("size"))
+        except (TypeError, ValueError):
+            size = None
+        media_type = self.validate_media(request, product_id, filename, content_type, size)
+
+        key = storages["public_media"].get_available_name(f"product_media/{product_id}/{filename}")
+        upload = _public_media_client().create_multipart_upload(
+            Bucket=settings.R2_BUCKET_NAME, Key=key, ContentType=content_type
+        )
+        return Response(
+            {
+                "upload_id": upload["UploadId"],
+                "key": key,
+                "media_type": media_type,
+                "part_size": MEDIA_UPLOAD_PART_BYTES,
+            },
+            status=201,
+        )
+
+    def _upload_ref(self, request, product_id):
+        """The upload's key and id, checked to belong to this product."""
+        self.ensure_product_access(request, product_id)
+        key = request.data.get("key") or ""
+        upload_id = request.data.get("upload_id") or ""
+        if not upload_id or not key.startswith(f"product_media/{product_id}/") or ".." in key:
+            raise ValidationError({"detail": "Invalid upload."})
+        return key, upload_id
+
+    def part(self, request, product_id):
+        key, upload_id = self._upload_ref(request, product_id)
+        chunk = request.FILES.get("chunk")
+        try:
+            part_number = int(request.data.get("part_number"))
+        except (TypeError, ValueError):
+            part_number = 0
+        if not chunk or not 1 <= part_number <= MAX_MULTIPART_PARTS:
+            raise ValidationError({"detail": "Invalid upload part."})
+
+        result = _public_media_client().upload_part(
+            Bucket=settings.R2_BUCKET_NAME, Key=key, UploadId=upload_id, PartNumber=part_number, Body=chunk.read()
+        )
+        return Response({"etag": result["ETag"]})
+
+    def complete(self, request, product_id):
+        from django.core.files.storage import storages
+
+        key, upload_id = self._upload_ref(request, product_id)
+        try:
+            parts = [
+                {"PartNumber": int(p["part_number"]), "ETag": str(p["etag"])} for p in request.data.get("parts") or []
+            ]
+        except (TypeError, KeyError, ValueError):
+            parts = []
+        if not parts:
+            raise ValidationError({"detail": "Invalid upload parts."})
+
+        _public_media_client().complete_multipart_upload(
+            Bucket=settings.R2_BUCKET_NAME, Key=key, UploadId=upload_id, MultipartUpload={"Parts": parts}
+        )
+        return Response({"url": storages["public_media"].url(key)}, status=201)
+
+    def abort(self, request, product_id):
+        key, upload_id = self._upload_ref(request, product_id)
+        _public_media_client().abort_multipart_upload(Bucket=settings.R2_BUCKET_NAME, Key=key, UploadId=upload_id)
+        return Response(status=204)
 
 
 class AdminOptionsView(APIView):
