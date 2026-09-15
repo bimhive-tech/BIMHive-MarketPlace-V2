@@ -36,7 +36,7 @@ export function PublisherCard({ product }: { product: ProductDetail }) {
             )}
             {partner?.is_verified && <Icon name="check-circle" size={16} className={styles.verified} />}
           </p>
-          <p className={styles.pubTagline}>{partner?.tagline ?? "Trusted developer"}</p>
+          {partner?.tagline && <p className={styles.pubTagline}>{partner.tagline}</p>}
         </div>
       </div>
 

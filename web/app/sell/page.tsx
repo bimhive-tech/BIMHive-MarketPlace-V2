@@ -36,8 +36,8 @@ export default function SellPage() {
         <div className={`container ${styles.heroInner}`}>
           <h1 className={styles.title}>Sell on BIMHIVE</h1>
           <p className={styles.subtitle}>
-            Reach thousands of AEC professionals looking for Revit plugins, Dynamo scripts, and
-            BIM tools — submit your products and we'll review them before they go live.
+            Reach AEC professionals looking for Revit plugins, Dynamo scripts, and BIM tools —
+            submit your products and we'll review them before they go live.
           </p>
           {cta && (
             <Button href={cta.href} size="lg">

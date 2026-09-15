@@ -1,5 +1,5 @@
 /* Shared list-page chrome for the admin portal (Licenses, Orders, Customers,
-   Reviews, Categories, Tags, Partners, Collections, Users). Keeps every admin
+   Reviews, Categories, Tags, Partners, Users). Keeps every admin
    table visually consistent without copy-pasting the same rules per page. */
 
 .page {

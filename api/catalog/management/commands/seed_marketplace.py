@@ -16,7 +16,6 @@ from django.utils import timezone
 from catalog.models import (
     Category,
     ChangelogEntry,
-    Collection,
     CompatibilityEntry,
     Documentation,
     DocSection,
@@ -50,13 +49,6 @@ PARTNERS = [
     ("DynamoLab", "Advanced Dynamo packages and nodes", True),
     ("DataBuild", "BIM data and analytics specialists", True),
     ("BIM Solutions", "Enterprise BIM content and libraries", True),
-]
-
-COLLECTIONS = [
-    ("Revit Essentials", "star", "The must-have plugins every Revit user needs."),
-    ("Automation Suite", "workflow", "Automate repetitive modelling and documentation."),
-    ("BIM Management", "library", "Tools for managing models, data, and standards."),
-    ("Data & Analytics", "chart", "Turn your BIM models into actionable insight."),
 ]
 
 # All-Access membership tiers. rank is cumulative — a Pro membership covers
@@ -132,7 +124,7 @@ PROMOTIONS = [
 
 # Each product: name, type, category, partner, price, short, desc, version,
 # released, rating_avg, rating_count, downloads, tags, features, changelog,
-# compatibility, collection names.
+# compatibility.
 PRODUCTS = [
     {
         "name": "BIM OneClick",
@@ -165,7 +157,6 @@ PRODUCTS = [
             ("2.0.0", date(2023, 11, 2), "Redesigned interface\nBatch view creation\nParameter check engine"),
         ],
         "compatibility": [("Revit", "2020–2025"), ("Platform", "Windows"), ("Language", "English")],
-        "collections": ["Revit Essentials", "Automation Suite"],
         "doc": {
             "title": "BIM OneClick Documentation",
             "summary": "Install, configure, and get the most out of BIM OneClick.",
@@ -205,7 +196,6 @@ PRODUCTS = [
             ("1.6.2", date(2024, 5, 10), "Excel import improvements\nRevit 2025 support\nFixed renumber edge cases"),
         ],
         "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows"), ("Language", "English")],
-        "collections": ["Automation Suite"],
         "doc": None,
     },
     {
@@ -236,7 +226,6 @@ PRODUCTS = [
             ("3.0.1", date(2024, 5, 8), "New geometry nodes\nPerformance improvements\nRevit 2025 / Dynamo 3.0 support"),
         ],
         "compatibility": [("Revit", "2022–2025"), ("Dynamo", "2.x–3.0"), ("Platform", "Windows")],
-        "collections": ["Automation Suite", "Data & Analytics"],
         "doc": None,
     },
     {
@@ -267,7 +256,6 @@ PRODUCTS = [
             ("1.2.0", date(2024, 5, 12), "New dashboard widgets\nFaster model sync\nRevit 2025 support"),
         ],
         "compatibility": [("Revit", "2023–2025"), ("Platform", "Windows"), ("Language", "English")],
-        "collections": ["Data & Analytics", "BIM Management"],
         "doc": None,
     },
     {
@@ -295,7 +283,6 @@ PRODUCTS = [
         ],
         "changelog": [("1.4.0", date(2024, 5, 13), "Path-based ordering\nRevit 2025 support")],
         "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows")],
-        "collections": ["Revit Essentials"],
         "doc": None,
     },
     {
@@ -323,7 +310,6 @@ PRODUCTS = [
         ],
         "changelog": [("1.1.0", date(2024, 5, 7), "Folder watch\nRevit 2025 support")],
         "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows")],
-        "collections": ["BIM Management"],
         "doc": None,
     },
     {
@@ -355,7 +341,6 @@ PRODUCTS = [
             ("1.0.0", date.today(), "Initial release\nTwo-way schedule sync\nConflict detection on edited cells"),
         ],
         "compatibility": [("Revit", "2023–2025"), ("Excel", "365 / 2021+"), ("Platform", "Windows")],
-        "collections": ["Data & Analytics"],
         "doc": None,
     },
     {
@@ -387,7 +372,6 @@ PRODUCTS = [
             ("1.0.0", date.today(), "Initial release\n12 starter sheet templates\n4 titleblock variants"),
         ],
         "compatibility": [("Revit", "2022–2025"), ("Platform", "Windows")],
-        "collections": ["Revit Essentials"],
         "doc": None,
     },
 ]
@@ -420,25 +404,17 @@ class Command(BaseCommand):
             )[0]
             for name, tagline, verified in PARTNERS
         }
-        collections = {
-            name: Collection.objects.get_or_create(
-                name=name, defaults={"icon": icon, "description": desc, "is_featured": True, "sort_order": i}
-            )[0]
-            for i, (name, icon, desc) in enumerate(COLLECTIONS)
-        }
         plans = self._seed_plans()
 
         products_by_slug = {}
         for spec in PRODUCTS:
-            products_by_slug[self._slug(spec["name"])] = self._seed_product(
-                spec, categories, partners, collections, plans
-            )
+            products_by_slug[self._slug(spec["name"])] = self._seed_product(spec, categories, partners, plans)
 
         self._seed_promotions(products_by_slug, categories, plans)
 
         self.stdout.write(self.style.SUCCESS(
             f"Seeded 1 category + {len(SUBCATEGORIES)} subcategories, {len(PARTNERS)} partners, "
-            f"{len(COLLECTIONS)} collections, {len(PRODUCTS)} products, {len(plans)} membership plans, "
+            f"{len(PRODUCTS)} products, {len(plans)} membership plans, "
             f"{len(PROMOTIONS)} promotions."
         ))
 
@@ -487,7 +463,7 @@ class Command(BaseCommand):
             if spec["scope"] == Promotion.Scope.PRODUCTS:
                 promo.products.set(products_by_slug[slug] for slug in spec["product_slugs"])
 
-    def _seed_product(self, spec, categories, partners, collections, plans):
+    def _seed_product(self, spec, categories, partners, plans):
         product, _ = Product.objects.update_or_create(
             slug=self._slug(spec["name"]),
             defaults={
@@ -527,9 +503,6 @@ class Command(BaseCommand):
         product.compatibility.all().delete()
         for i, (label, value) in enumerate(spec["compatibility"]):
             CompatibilityEntry.objects.create(product=product, label=label, value=value, sort_order=i)
-
-        for cname in spec["collections"]:
-            collections[cname].products.add(product)
 
         if spec.get("doc"):
             self._seed_doc(product, spec["doc"])

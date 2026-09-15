@@ -24,7 +24,6 @@ export const SITE = {
   description:
     "Explore plugins, automation tools, and digital solutions designed for the AEC industry.",
   url: resolveSiteUrl(),
-  support: { usersWorldwide: "10,000+" },
 } as const;
 
 /** Plain (non-dropdown) top-nav links — Solutions/Resources are mega menus, handled directly in Header.tsx. */
@@ -88,21 +87,13 @@ export const CATEGORY_ICON_BY_SLUG: Record<string, IconName> = {
   "other-tools": "wrench",
 };
 
-/** Trust badges shown under the hero. */
+/** Trust badges shown under the hero. Only claims that are true of the platform
+ * itself — no invented user counts or statistics. */
 export const TRUST_BADGES = [
-  { icon: "users", title: "Trusted by AEC Professionals", subtitle: "10,000+ users worldwide" },
-  { icon: "award", title: "Premium Digital Products", subtitle: "Quality tools you can rely on" },
+  { icon: "check-circle", title: "Reviewed Before Listing", subtitle: "Every product is checked by our team" },
   { icon: "shield", title: "Secure Payments", subtitle: "Safe & encrypted checkout" },
   { icon: "download", title: "Instant Downloads", subtitle: "Get started right away" },
 ] as const;
-
-/** Collection slug → icon, shared between the home page's CollectionsRow teaser and the full /collections index. */
-export const COLLECTION_ICON_BY_SLUG: Record<string, IconName> = {
-  "revit-essentials": "template",
-  "automation-suite": "workflow",
-  "bim-management": "library",
-  "data-analytics": "chart",
-};
 
 /** The /resources hub — shared between the header's Resources mega menu and the
  * full /resources page. href: null renders as a "Soon" state instead of a link;
@@ -121,24 +112,24 @@ export const RESOURCE_LINKS: {
   },
   {
     title: "Knowledge Base",
-    description: "General guides not tied to a single product.",
+    description: "Guides on Revit automation and building your own tools.",
     icon: "help",
-    href: null,
-  },
-  {
-    title: "Blog",
-    description: "News, tips, and product updates.",
-    icon: "layers",
-    href: null,
+    href: "/knowledge",
   },
 ];
+
+/** Slugs of the legal pages, stored as articles (api/knowledge) and edited in /admin. */
+export const LEGAL_ARTICLE_SLUGS = {
+  terms: "terms-of-service",
+  privacy: "privacy-policy",
+} as const;
 
 /** The /sell landing page's "why sell with us" row. */
 export const SELL_BENEFITS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: "users",
-    title: "Reach thousands of AEC professionals",
-    text: "Your tools land in front of BIMHIVE's existing audience of Revit and BIM users.",
+    title: "Reach AEC professionals",
+    text: "List your tools on a marketplace built specifically for Revit and BIM users.",
   },
   {
     icon: "shield",

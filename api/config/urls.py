@@ -40,6 +40,8 @@ urlpatterns = [
     path("api/partner/", include("catalog.partner_urls")),
     # ── All-Access membership (public plans; account + admin mounted above) ──
     path("api/membership/", include("membership.urls")),
+    # ── Knowledge Base guides + legal pages ──
+    path("api/", include("knowledge.urls")),
     # ── Storefront/catalog API ──
     path("api/", include("catalog.urls")),
 ]

@@ -8,7 +8,6 @@ from django.contrib import admin
 from catalog.models import (
     Category,
     ChangelogEntry,
-    Collection,
     CompatibilityEntry,
     Documentation,
     DocSection,
@@ -77,17 +76,6 @@ class DocumentationAdmin(admin.ModelAdmin):
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "sort_order")
     prepopulated_fields = {"slug": ("name",)}
-
-
-@admin.register(Collection)
-class CollectionAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "is_featured", "product_count")
-    prepopulated_fields = {"slug": ("name",)}
-    filter_horizontal = ("products",)
-
-    @admin.display(description="Products")
-    def product_count(self, obj):
-        return obj.products.count()
 
 
 admin.site.register(Tag)

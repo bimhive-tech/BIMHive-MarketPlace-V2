@@ -4,7 +4,6 @@ from rest_framework.routers import DefaultRouter
 
 from catalog.admin_api import (
     AdminCategoryViewSet,
-    AdminCollectionViewSet,
     AdminOptionsView,
     AdminPartnerViewSet,
     AdminProductDetailView,
@@ -30,7 +29,6 @@ router = DefaultRouter(trailing_slash=False)
 router.register("categories", AdminCategoryViewSet, basename="admin-category")
 router.register("tags", AdminTagViewSet, basename="admin-tag")
 router.register("partners", AdminPartnerViewSet, basename="admin-partner")
-router.register("collections", AdminCollectionViewSet, basename="admin-collection")
 router.register("promotions", AdminPromotionViewSet, basename="admin-promotion")
 
 urlpatterns = [

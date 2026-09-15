@@ -42,29 +42,6 @@ class Category(TimeStamped):
         super().save(*args, **kwargs)
 
 
-class Collection(TimeStamped):
-    """A curated bundle of products (e.g. "Revit Essentials")."""
-
-    name = models.CharField(max_length=140, unique=True)
-    slug = models.SlugField(max_length=160, unique=True, blank=True)
-    description = models.TextField(blank=True)
-    icon = models.CharField(max_length=40, blank=True)
-    products = models.ManyToManyField("catalog.Product", related_name="collections", blank=True)
-    is_featured = models.BooleanField(default=False)
-    sort_order = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        ordering = ["sort_order", "name"]
-
-    def __str__(self):
-        return self.name
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name)
-        super().save(*args, **kwargs)
-
-
 class Tag(TimeStamped):
     name = models.CharField(max_length=60, unique=True)
     slug = models.SlugField(max_length=80, unique=True, blank=True)

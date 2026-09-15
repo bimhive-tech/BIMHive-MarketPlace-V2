@@ -25,7 +25,6 @@ ADMIN_PERMISSIONS = [
     ("products.manage", "Products & Content"),
     ("promotions.manage", "Products & Content"),
     ("membership_plans.manage", "Products & Content"),
-    ("collections.manage", "Products & Content"),
     ("categories.manage", "Products & Content"),
     ("tags.manage", "Products & Content"),
     ("partners.manage", "Products & Content"),

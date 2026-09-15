@@ -171,7 +171,7 @@ hidden/gated until the seller application is approved.
 files/**Installer Build** — upload a compiled `.dll` + `.addin` manifest per Revit year plus any
 resource/dependency files, and BIMHive packages them into a real `.exe` installer automatically; see
 "Auto-generated installers" below), `/admin-portal/{orders,customers,reviews,licenses}`,
-`/admin-portal/{categories,tags,partners,collections}` (taxonomy CRUD — Partners includes a
+`/admin-portal/{categories,tags,partners}` (taxonomy CRUD — Partners includes a
 Pending/Approved/Rejected review queue for seller applications; Categories manages the
 root/subcategory tree — see "Categories" below), `/admin-portal/promotions` (time-boxed discount
 campaigns — see "Promotions" below), `/admin-portal/{membership-plans,memberships}` (All-Access
@@ -181,6 +181,23 @@ tiers and individual customer memberships — see "All-Access membership" below)
 Installer Build tab is available to partners on their own products in
 `/partner-portal/products`.
 
+## Knowledge Base and legal pages
+
+Written content that isn't tied to a product lives in the `knowledge` Django app as **Articles**: a
+title, summary and ordered sections, where each section has plain text (blank lines split
+paragraphs) and an optional code sample. `kind` separates **Knowledge Base guides**
+(`/knowledge`, `/knowledge/<slug>`) from **legal pages** (`/terms` and `/privacy`, looked up by the
+slugs in `LEGAL_ARTICLE_SLUGS`, `web/config/site.ts`). All of them render through the shared
+`web/components/ArticleView`. Only published articles are public.
+
+Edit or add articles in Django's admin at `/admin` → Knowledge Base & Legal Pages → Articles. The
+first guide ("Getting Started with Revit Automation") and generic Terms of Service / Privacy Policy
+are seeded by data migrations; the legal text names no company, jurisdiction or contact email yet,
+so review it with a lawyer and fill those in before relying on it.
+
+Collections, the blog link and the refund policy link were removed from the storefront; plans
+(`/membership`) cover what collections used to group.
+
 ## Admin portal access: Admin vs. Staff, granular per-Role permissions
 
 Two tiers, both gated behind `is_staff` reaching `/admin-portal` at all:
@@ -189,8 +206,8 @@ Two tiers, both gated behind `is_staff` reaching `/admin-portal` at all:
   Permissions, and Settings. This is the only tier that can manage other staff/admin accounts.
 - **Staff** (`is_staff=True, is_superuser=False`) — scoped to exactly the granular permissions their
   assigned `Role` grants (`accounts.permissions.ADMIN_PERMISSION_KEYS` — Dashboard, Activity, Orders,
-  Customers, Reviews, Licenses, Memberships, Products, Promotions, Membership Plans, Collections,
-  Categories, Tags, Partners). Users, Roles & Permissions, and Settings are **never** grantable through
+  Customers, Reviews, Licenses, Memberships, Products, Promotions, Membership Plans, Categories, Tags,
+  Partners). Users, Roles & Permissions, and Settings are **never** grantable through
   a Role — that's deliberate: it's what makes it impossible for a Staff account to affect an Admin or
   any other staff account, no matter what a Role is configured to allow.
 
@@ -240,7 +257,7 @@ becomes a bottom sheet under 560px. Fields inside come from
 `web/features/admin/AdminForm/AdminForm.tsx` (`AdminFormGrid` / `AdminField` / `AdminInput` /
 `AdminSelect` / `AdminTextarea` / `AdminCheckbox` / `AdminCheckGroup`) so every admin form labels
 and spaces its controls the same way. Every create/edit editor uses both: Membership Plans,
-Categories, Collections, Partners, Promotions, Roles & Permissions and License Codes.
+Categories, Partners, Promotions, Roles & Permissions and License Codes.
 
 **No browser dialogs anywhere.** `window.confirm()` and `window.prompt()` are replaced app-wide by
 two hooks built on the same `Modal`: `useConfirm()` (`web/components/ConfirmDialog/`), used as
@@ -825,7 +842,8 @@ and edit each product's price in its form. Nothing else changes.
 ## API endpoints
 
 - Storefront: `GET /api/home`, `/api/products/`, `/api/products/<slug>/`, `/api/categories/`,
-  `/api/categories/<slug>/` (root or subcategory), `/api/collections/`, `/api/promotions/banner`
+  `/api/categories/<slug>/` (root or subcategory), `/api/articles?kind=knowledge|legal` and
+  `/api/articles/<slug>` (Knowledge Base guides and legal pages), `/api/promotions/banner`
   (the live countdown-bar promotion, or `{"promotion": null}`), `POST /api/cart/quote` (re-prices a
   localStorage cart's items against today's promotions — no auth needed, nothing it returns isn't
   already public), `GET /api/membership/plans` (the `/membership` pricing page)
@@ -836,7 +854,7 @@ and edit each product's price in its form. Nothing else changes.
 - Admin (staff): `GET /api/admin/{stats,options,system-status}`; `GET|POST /api/admin/products`,
   `GET|PATCH|DELETE /api/admin/products/<id>`, file upload at `/api/admin/products/<id>/files`,
   `GET /api/admin/products/<id>/preview` (storefront render of an unpublished product);
-  CRUD at `/api/admin/{categories,tags,partners,collections,promotions,membership-plans,roles}`;
+  CRUD at `/api/admin/{categories,tags,partners,promotions,membership-plans,roles}`;
   `GET /api/admin/{licenses,orders,users,customers,reviews}` plus their action routes
   (revoke/restore/extend/release a license, set an order's status, update a user's role,
   `POST /api/admin/orders/<id>/seats` to set how many machines a purchase may bind at once — see

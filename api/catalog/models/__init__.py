@@ -9,11 +9,10 @@ from catalog.models.product import (
     ProductMedia,
 )
 from catalog.models.promotion import Promotion
-from catalog.models.taxonomy import Category, Collection, Partner, Tag
+from catalog.models.taxonomy import Category, Partner, Tag
 
 __all__ = [
     "Category",
-    "Collection",
     "Tag",
     "Partner",
     "Promotion",

@@ -11,7 +11,7 @@ const COLUMNS = [
     heading: "Marketplace",
     links: [
       { label: "All Products", href: "/catalog" },
-      { label: "Collections", href: "/collections" },
+      { label: "Pricing", href: "/membership" },
     ],
   },
   {
@@ -19,7 +19,6 @@ const COLUMNS = [
     links: [
       { label: "Documentation", href: "/docs" },
       { label: "Knowledge Base", href: "/knowledge" },
-      { label: "Blog", href: "/blog" },
     ],
   },
   {
@@ -35,7 +34,6 @@ const COLUMNS = [
     links: [
       { label: "Terms of Service", href: "/terms" },
       { label: "Privacy Policy", href: "/privacy" },
-      { label: "Refund Policy", href: "/refunds" },
     ],
   },
 ];

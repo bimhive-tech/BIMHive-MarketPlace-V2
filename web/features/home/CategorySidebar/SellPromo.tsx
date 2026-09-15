@@ -27,7 +27,7 @@ export function SellPromo() {
   return (
     <div className={styles.sellCard}>
       <h3 className={styles.sellTitle}>Sell on BIMHIVE</h3>
-      <p className={styles.sellText}>Reach thousands of AEC professionals.</p>
+      <p className={styles.sellText}>List your tools for AEC professionals.</p>
       <Button href="/sell" variant="secondary" fullWidth>
         Become a Seller
       </Button>

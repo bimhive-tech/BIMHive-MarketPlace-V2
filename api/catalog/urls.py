@@ -4,7 +4,6 @@ from rest_framework.routers import DefaultRouter
 
 from catalog.views import (
     CategoryViewSet,
-    CollectionViewSet,
     DocumentationViewSet,
     PartnerViewSet,
     ProductViewSet,
@@ -22,7 +21,6 @@ from catalog.views import (
 router = DefaultRouter(trailing_slash=False)
 router.register("products", ProductViewSet, basename="product")
 router.register("categories", CategoryViewSet, basename="category")
-router.register("collections", CollectionViewSet, basename="collection")
 router.register("partners", PartnerViewSet, basename="partner")
 router.register("documentation", DocumentationViewSet, basename="documentation")
 

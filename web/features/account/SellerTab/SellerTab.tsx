@@ -20,8 +20,8 @@ export function SellerTab({ user }: { user: User }) {
         </span>
         <h2 className={styles.title}>Become a Seller</h2>
         <p className={styles.text}>
-          Sell your Revit plugins, Dynamo scripts, and BIM tools to thousands of AEC professionals on
-          BIMHIVE. Every submission is reviewed before it goes live.
+          Sell your Revit plugins, Dynamo scripts, and BIM tools to AEC professionals on BIMHIVE.
+          Every submission is reviewed before it goes live.
         </p>
         <Button href="/sell">Get Started</Button>
       </div>

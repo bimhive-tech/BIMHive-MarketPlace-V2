@@ -21,7 +21,6 @@ from activity.services import log_activity
 from catalog.models import (
     Category,
     ChangelogEntry,
-    Collection,
     CompatibilityEntry,
     Documentation,
     DocSection,
@@ -892,7 +891,7 @@ class AdminOptionsView(APIView):
 
 
 # ─────────────────────────────────────────────────────────────
-# Taxonomy CRUD (Categories, Tags, Partners, Collections)
+# Taxonomy CRUD (Categories, Tags, Partners)
 # ─────────────────────────────────────────────────────────────
 class ProductCountMixin:
     """Reads `product_count` off an annotation when the queryset provides one
@@ -1023,30 +1022,6 @@ class AdminPartnerViewSet(viewsets.ModelViewSet):
             if partner.status == Partner.ApplicationStatus.REJECTED:
                 metadata["note"] = partner.rejection_note
             log_activity(self.request.user, verb, target_label=partner.name, metadata=metadata)
-
-
-class CollectionSerializer(ProductCountMixin, serializers.ModelSerializer):
-    product_count = serializers.SerializerMethodField()
-    products = serializers.PrimaryKeyRelatedField(many=True, queryset=Product.objects.all(), required=False)
-
-    class Meta:
-        model = Collection
-        fields = [
-            "id", "name", "slug", "description", "icon", "is_featured", "sort_order",
-            "products", "product_count",
-        ]
-        read_only_fields = ["slug"]
-
-
-class AdminCollectionViewSet(viewsets.ModelViewSet):
-    permission_classes = [HasAdminPermission]
-    required_permission = "collections.manage"
-    serializer_class = CollectionSerializer
-
-    def get_queryset(self):
-        return Collection.objects.annotate(product_count=Count("products", distinct=True)).prefetch_related(
-            "products"
-        )
 
 
 class PromotionSerializer(serializers.ModelSerializer):

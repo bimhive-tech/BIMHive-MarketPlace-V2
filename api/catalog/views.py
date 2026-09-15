@@ -13,7 +13,7 @@ from rest_framework.response import Response
 
 from activity.models import ActivityVerb
 from activity.services import log_activity
-from catalog.models import Category, Collection, Documentation, Partner, Product
+from catalog.models import Category, Documentation, Partner, Product
 from catalog.models.product import ProductStatus, ProductVisibility
 from catalog.pricing import (
     banner_promotion,
@@ -24,7 +24,6 @@ from catalog.pricing import (
 )
 from catalog.serializers import (
     CategorySerializer,
-    CollectionSerializer,
     DocumentationDetailSerializer,
     DocumentationListSerializer,
     PartnerSerializer,
@@ -62,15 +61,9 @@ def _root_categories():
     )
 
 
-def _collections_with_counts(qs=None):
-    return (qs if qs is not None else Collection.objects).annotate(
-        product_count=Count("products", distinct=True)
-    )
-
-
 class ProductPagination(PageNumberPagination):
-    # A big catalog (or a "load everything" caller like a collection/partner
-    # page) can override via ?page_size=, capped so no one request can force
+    # A big catalog (or a "load everything" caller like a partner page) can
+    # override via ?page_size=, capped so no one request can force
     # the DB to hand back the whole table.
     page_size = 24
     page_size_query_param = "page_size"
@@ -98,7 +91,6 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             )
         category = self.request.query_params.get("category")
         product_type = self.request.query_params.get("type")
-        collection = self.request.query_params.get("collection")
         partner = self.request.query_params.get("partner")
         search = self.request.query_params.get("q")
         if category:
@@ -108,8 +100,6 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(Q(category__slug=category) | Q(category__parent__slug=category))
         if product_type:
             qs = qs.filter(type=product_type)
-        if collection:
-            qs = qs.filter(collections__slug=collection)
         if partner:
             qs = qs.filter(partner__slug=partner)
         if search:
@@ -182,12 +172,6 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
         return _root_categories()
 
 
-class CollectionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = _collections_with_counts(Collection.objects.all())
-    serializer_class = CollectionSerializer
-    lookup_field = "slug"
-
-
 class PartnerViewSet(viewsets.ReadOnlyModelViewSet):
     """Public seller profile — only APPROVED partners with at least one live
     product are listed. The status filter is belt-and-suspenders: a pending/
@@ -221,7 +205,7 @@ class DocumentationViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(["GET"])
 def home_api(request):
     """Everything the homepage needs in one call: categories, featured products,
-    collections, and the products the hero rotates through."""
+    and the products the hero rotates through."""
     promotions = live_promotions()
     context = {"promotions": promotions, "viewer_membership": active_membership_for(request.user)}
     featured = list(_published_products().filter(is_featured=True)[:8])
@@ -231,9 +215,6 @@ def home_api(request):
         {
             "categories": CategorySerializer(_root_categories(), many=True).data,
             "featured_products": ProductCardSerializer(featured, many=True, context=context).data,
-            "collections": CollectionSerializer(
-                _collections_with_counts(Collection.objects.filter(is_featured=True))[:8], many=True
-            ).data,
             "spotlight_products": ProductCardSerializer(
                 _spotlight_products(promotions), many=True, context=context
             ).data,

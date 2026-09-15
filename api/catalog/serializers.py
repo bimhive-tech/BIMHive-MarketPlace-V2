@@ -8,7 +8,6 @@ from rest_framework import serializers
 from catalog.models import (
     Category,
     ChangelogEntry,
-    Collection,
     CompatibilityEntry,
     Documentation,
     DocSection,
@@ -66,18 +65,6 @@ class CategorySerializer(SubcategorySerializer):
         return published_product_count(obj) + sum(
             published_product_count(child) for child in obj.children.all()
         )
-
-
-class CollectionSerializer(serializers.ModelSerializer):
-    product_count = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Collection
-        fields = ["id", "name", "slug", "icon", "description", "product_count", "is_featured"]
-
-    def get_product_count(self, obj):
-        count = getattr(obj, "product_count", None)
-        return count if count is not None else obj.products.count()
 
 
 class TagSerializer(serializers.ModelSerializer):

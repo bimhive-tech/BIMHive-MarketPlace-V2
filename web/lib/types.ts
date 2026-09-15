@@ -61,16 +61,6 @@ export interface Category extends Subcategory {
   children: Subcategory[];
 }
 
-export interface Collection {
-  id: number;
-  name: string;
-  slug: string;
-  icon: string;
-  description: string;
-  product_count: number;
-  is_featured: boolean;
-}
-
 export interface Tag {
   id: number;
   name: string;
@@ -327,7 +317,30 @@ export interface ProductDetail extends Omit<ProductCard, "category"> {
 export interface HomeData {
   categories: Category[];
   featured_products: ProductCard[];
-  collections: Collection[];
   /** What the hero rotates through — discounted products first. */
   spotlight_products: ProductCard[];
+}
+
+/** Knowledge Base guides and legal pages share one shape (see api/knowledge). */
+export type ArticleKind = "knowledge" | "legal";
+
+export interface ArticleSection {
+  id: number;
+  title: string;
+  body: string;
+  code: string;
+  code_language: string;
+}
+
+export interface ArticleListItem {
+  id: number;
+  slug: string;
+  kind: ArticleKind;
+  title: string;
+  summary: string;
+  updated_at: string;
+}
+
+export interface ArticleDetail extends ArticleListItem {
+  sections: ArticleSection[];
 }

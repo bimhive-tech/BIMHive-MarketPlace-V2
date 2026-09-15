@@ -1,0 +1,108 @@
+.article {
+  max-width: 760px;
+  animation: article-in var(--dur-slow) var(--ease-out);
+}
+
+.head {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-7);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+  line-height: var(--lh-tight);
+}
+
+.summary {
+  font-size: var(--fs-md);
+  color: var(--ink-600);
+  margin-top: var(--space-3);
+  line-height: var(--lh-normal);
+}
+
+.updated {
+  font-size: var(--fs-xs);
+  color: var(--color-muted);
+  margin-top: var(--space-3);
+}
+
+.section {
+  margin-bottom: var(--space-7);
+}
+
+.sectionTitle {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  color: var(--color-heading);
+  margin-bottom: var(--space-3);
+}
+
+.paragraph {
+  font-size: var(--fs-base);
+  color: var(--ink-700);
+  line-height: var(--lh-normal);
+  white-space: pre-line;
+}
+
+.paragraph + .paragraph {
+  margin-top: var(--space-3);
+}
+
+.codeBlock {
+  margin-top: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-50);
+  overflow: hidden;
+}
+
+.codeLabel {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--gold-700);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--surface-0);
+}
+
+.pre {
+  margin: 0;
+  padding: var(--space-4);
+  overflow-x: auto;
+  font-family: ui-monospace, "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--ink-800);
+}
+
+@keyframes article-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    font-size: var(--fs-lg);
+  }
+  .pre {
+    font-size: var(--fs-xs);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .article {
+    animation: none;
+  }
+}

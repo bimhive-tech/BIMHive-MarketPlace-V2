@@ -3,8 +3,10 @@
  * directly via API_INTERNAL_URL (not the browser proxy). See ARCHITECTURE §3.
  */
 import type {
+  ArticleDetail,
+  ArticleKind,
+  ArticleListItem,
   Category,
-  Collection,
   DocumentationDetail,
   DocumentationListItem,
   HomeData,
@@ -41,11 +43,10 @@ interface GetProductsParams {
   category?: string;
   type?: string;
   q?: string;
-  collection?: string;
   partner?: string;
   page?: number;
   /** Defaults to the backend's page_size (24, see ProductPagination). Pass a
-   * bigger ceiling for a scoped list (collection/partner) that isn't paginated
+   * bigger ceiling for a scoped list (e.g. a partner's) that isn't paginated
    * in its own UI yet, so it doesn't silently truncate. */
   pageSize?: number;
 }
@@ -71,18 +72,6 @@ export async function getProduct(slug: string): Promise<ProductDetail | null> {
   }
 }
 
-export function getCollections() {
-  return getJSON<Collection[]>("/api/collections");
-}
-
-export async function getCollection(slug: string): Promise<Collection | null> {
-  try {
-    return await getJSON<Collection>(`/api/collections/${slug}`);
-  } catch {
-    return null;
-  }
-}
-
 export async function getPartner(slug: string): Promise<Partner | null> {
   try {
     return await getJSON<Partner>(`/api/partners/${slug}`);
@@ -98,6 +87,19 @@ export function getDocumentationList() {
 export async function getDocumentation(slug: string): Promise<DocumentationDetail | null> {
   try {
     return await getJSON<DocumentationDetail>(`/api/documentation/${slug}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Published Knowledge Base guides or legal pages (see api/knowledge). */
+export function getArticles(kind: ArticleKind) {
+  return getJSON<ArticleListItem[]>(`/api/articles?kind=${kind}`);
+}
+
+export async function getArticle(slug: string): Promise<ArticleDetail | null> {
+  try {
+    return await getJSON<ArticleDetail>(`/api/articles/${slug}`);
   } catch {
     return null;
   }

@@ -418,7 +418,7 @@ def test_media_upload_url_fails_fast_without_r2_configured(staff_client, categor
     assert "R2" in resp.json()["detail"]
 
 
-# ── Public search / collection / partner filters ──
+# ── Public search / partner filters ──
 def test_search_matches_name_and_short_description(client, category, partner):
     Product.objects.create(
         name="BIM OneClick", short_description="s", description="d", category=category, partner=partner,
@@ -448,24 +448,6 @@ def test_search_excludes_unpublished_products(client, category, partner):
     )
     resp = client.get("/api/products?q=OneClick")
     assert resp.json()["results"] == []
-
-
-def test_collection_filter_scopes_products(client, category, partner):
-    from catalog.models import Collection
-
-    collection = Collection.objects.create(name="Revit Essentials")
-    in_collection = Product.objects.create(
-        name="In Collection", short_description="s", description="d",
-        category=category, partner=partner, status=ProductStatus.PUBLISHED,
-    )
-    Product.objects.create(
-        name="Not In Collection", short_description="s", description="d",
-        category=category, partner=partner, status=ProductStatus.PUBLISHED,
-    )
-    collection.products.add(in_collection)
-
-    resp = client.get(f"/api/products?collection={collection.slug}")
-    assert [row["name"] for row in resp.json()["results"]] == ["In Collection"]
 
 
 def test_partner_endpoint_only_lists_partners_with_live_products(client, category, partner):

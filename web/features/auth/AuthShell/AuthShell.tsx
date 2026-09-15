@@ -31,7 +31,7 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
         <div className={styles.artCopy}>
           <p className={styles.artTitle}>Digital tools for smarter construction.</p>
           <p className={styles.artText}>
-            Join thousands of AEC professionals building better, faster.
+            Plugins and automation tools built for Revit and BIM professionals.
           </p>
         </div>
       </aside>

@@ -114,6 +114,7 @@ INSTALLED_APPS = [
     "installer",
     "support",
     "membership",
+    "knowledge",
 ]
 
 MIDDLEWARE = [

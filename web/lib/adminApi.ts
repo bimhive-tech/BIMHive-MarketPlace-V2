@@ -320,7 +320,7 @@ export const uploadProductMedia = async (productId: number, file: File, asPartne
   return { url, media_type };
 };
 
-// ── Taxonomy: Categories / Tags / Partners / Collections ──
+// ── Taxonomy: Categories / Tags / Partners ──
 export interface AdminCategory {
   id: number;
   name: string;
@@ -351,17 +351,6 @@ export interface AdminPartner {
   rejection_note: string;
   product_count: number;
   owner_email: string;
-}
-export interface AdminCollection {
-  id: number;
-  name: string;
-  slug: string;
-  description: string;
-  icon: string;
-  is_featured: boolean;
-  sort_order: number;
-  products: number[];
-  product_count: number;
 }
 
 // No trailing slash: the Next.js dev proxy strips it before forwarding to
@@ -455,7 +444,6 @@ export const reinstateMembership = (id: string) =>
   request<AdminMembership>(`/api/admin/memberships/${id}/reinstate`, "POST", {});
 export const tagsApi = crud<AdminTag>("/api/admin/tags");
 export const partnersApi = crud<AdminPartner>("/api/admin/partners");
-export const collectionsApi = crud<AdminCollection>("/api/admin/collections");
 
 // ── Licenses ──
 export interface AdminLicense {
@@ -615,7 +603,6 @@ export const ADMIN_PERMISSIONS: { key: string; label: string; group: string }[] 
   { key: "products.manage", label: "Manage Products", group: "Products & Content" },
   { key: "promotions.manage", label: "Manage Promotions", group: "Products & Content" },
   { key: "membership_plans.manage", label: "Manage Membership Plans", group: "Products & Content" },
-  { key: "collections.manage", label: "Manage Collections", group: "Products & Content" },
   { key: "categories.manage", label: "Manage Categories", group: "Products & Content" },
   { key: "tags.manage", label: "Manage Tags", group: "Products & Content" },
   { key: "partners.manage", label: "Manage Partners", group: "Products & Content" },
