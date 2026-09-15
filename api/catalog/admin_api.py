@@ -658,9 +658,9 @@ class AdminProductMediaUploadUrlView(APIView):
     permission_classes = [_CAN_MANAGE_PRODUCTS]
     required_permission = "products.manage"
 
-    def post(self, request, product_id):
+    def validate_media(self, request, product_id, filename, content_type, size):
+        """Shared checks for both upload paths; returns the detected media type."""
         from django.conf import settings
-        from django.core.files.storage import storages
 
         # ProductMedia.url is a URLField — without R2 configured, storage falls
         # back to a relative /media/ path (see settings.py STORAGES) that would
@@ -679,8 +679,6 @@ class AdminProductMediaUploadUrlView(APIView):
         if not product_qs.exists():
             raise ValidationError({"detail": "Product not found."})
 
-        filename = (request.data.get("filename") or "").strip()
-        content_type = (request.data.get("content_type") or "").strip()
         if not filename:
             raise ValidationError({"filename": "Required."})
 
@@ -693,14 +691,25 @@ class AdminProductMediaUploadUrlView(APIView):
         else:
             raise ValidationError({"content_type": "Only image or video files are supported."})
 
-        try:
-            size = int(request.data.get("size"))
-        except (TypeError, ValueError):
+        if size is None:
             raise ValidationError({"size": "Required."})
         if size > max_bytes:
             raise ValidationError(
                 {"file": f"{media_type.capitalize()} files must be under {max_bytes // (1024 * 1024)} MB."}
             )
+        return media_type
+
+    def post(self, request, product_id):
+        from django.conf import settings
+        from django.core.files.storage import storages
+
+        filename = (request.data.get("filename") or "").strip()
+        content_type = (request.data.get("content_type") or "").strip()
+        try:
+            size = int(request.data.get("size"))
+        except (TypeError, ValueError):
+            size = None
+        media_type = self.validate_media(request, product_id, filename, content_type, size)
 
         public_storage = storages["public_media"]
         key = public_storage.get_available_name(f"product_media/{product_id}/{filename}")
@@ -713,6 +722,29 @@ class AdminProductMediaUploadUrlView(APIView):
         return Response(
             {"upload_url": upload_url, "url": public_storage.url(key), "media_type": media_type}, status=201
         )
+
+
+class AdminProductMediaUploadView(AdminProductMediaUploadUrlView):
+    """Fallback for when the browser can't PUT to R2 directly (no bucket CORS
+    rule): the file comes through this app and Django writes it to R2 itself,
+    which needs no CORS. Subject to Railway's ~5 minute request ceiling, so
+    very large videos on slow connections can still time out on this path."""
+
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, product_id):
+        from django.core.files.storage import storages
+
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            raise ValidationError({"file": "A file is required."})
+        media_type = self.validate_media(
+            request, product_id, uploaded.name, uploaded.content_type or "", uploaded.size
+        )
+
+        public_storage = storages["public_media"]
+        key = public_storage.save(f"product_media/{product_id}/{uploaded.name}", uploaded)
+        return Response({"url": public_storage.url(key), "media_type": media_type}, status=201)
 
 
 class AdminOptionsView(APIView):

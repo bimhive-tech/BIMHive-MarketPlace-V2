@@ -96,8 +96,16 @@ proxy → gunicorn → R2 inside one request silently failed large uploads (a dr
 real error) well before that ceiling on anything but a fast connection. A direct PUT to R2 has none
 of those hops in the way and isn't bound by Railway's request timeout at all.
 
-**This requires the R2 bucket's CORS policy to allow a PUT from this app's own origin(s)** — set it
-once from the bucket's Settings → CORS Policy in the Cloudflare R2 dashboard:
+**If the direct PUT is blocked (no bucket CORS rule), the browser automatically falls back to
+uploading through this app** (`AdminProductMediaUploadView`, `POST .../media-upload`), where Django
+writes the file to R2 itself — that path needs no CORS. It is subject to Railway's ~5 minute request
+ceiling, so very large videos on slow connections may still time out until the CORS rule is in place.
+
+**For the fast direct path, the R2 bucket's CORS policy must allow a PUT from this app's own origin(s).**
+`scripts/start.sh` applies it on every boot via `python manage.py configure_r2_cors`, using the same
+origins as `CSRF_TRUSTED_ORIGINS`. That needs an R2 API token with **Admin Read & Write**; with an
+object-only token the step logs a warning and the site still boots. In that case, set it by hand from
+the bucket's Settings → CORS Policy in the Cloudflare R2 dashboard:
 ```json
 [
   {

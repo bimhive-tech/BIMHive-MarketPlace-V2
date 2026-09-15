@@ -242,6 +242,18 @@ export interface UploadedMedia {
   url: string;
   media_type: "image" | "video";
 }
+/** Server-side upload: browser -> Django -> R2. Used when a direct PUT to R2
+ * is blocked (bucket has no CORS rule). */
+const uploadProductMediaViaServer = (productId: number, file: File, asPartner: boolean) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<UploadedMedia>(
+    `/api/admin/products/${productId}/media-upload${asPartner ? "?mine=1" : ""}`,
+    "POST",
+    form,
+    true,
+  );
+};
 /** Uploads the file bytes straight to R2, not through this app's own server —
  * Django only ever handles a small JSON request for a presigned URL. A large
  * video routed through the full browser -> Railway -> Next.js -> Django ->
@@ -255,7 +267,12 @@ export const uploadProductMedia = async (productId: number, file: File, asPartne
     { filename: file.name, content_type: file.type, size: file.size },
   );
 
-  const putRes = await fetch(upload_url, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  // A CORS rejection from the bucket never produces a response — fetch just
+  // throws. Fall back to uploading through this app, which needs no CORS.
+  const putRes = await fetch(upload_url, { method: "PUT", body: file, headers: { "Content-Type": file.type } }).catch(
+    () => null,
+  );
+  if (!putRes) return uploadProductMediaViaServer(productId, file, asPartner);
   if (!putRes.ok) {
     throw new AdminApiError({ detail: "The upload to storage failed. Please try again." }, putRes.status);
   }

@@ -8,6 +8,11 @@ set -euo pipefail
 cd /app/api
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
+# Browser uploads PUT straight to R2 and need the bucket CORS rule. Non-fatal:
+# an R2 token without bucket-admin rights can't set it, and that alone
+# shouldn't keep the whole site from booting — the warning says what to fix.
+python manage.py configure_r2_cors \
+  || echo "WARNING: could not set R2 CORS; browser uploads will fail until it is set (see README)." >&2
 
 # 300s (not the default 120s): a sync worker handling a product media/file
 # upload has to fully receive the body *and then* write it on to R2 in the
